@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DecisionExplanation",
+  "description": "AI Evaluation Contract v1 — Machine-readable explanation object. Must be generated for every decision. See app.engines.explanation.build_explanation",
+  "type": "object",
+  "required": ["decision","confidence","summary","hard_failures","missing_evidence","risks","supporting_evidence","conflicts","rules_triggered","provenance_chain","tender_id","decision_id"],
+  "properties": {
+    "decision": {"type": "string", "enum": ["BID","REVIEW","NO_BID"]},
+    "confidence": {"type": "string", "enum": ["HIGH","MEDIUM","LOW","OVERRIDE"]},
+    "summary": {"type": "string", "description": "One-line human summary: REVIEW — DO NOT BID YET: N gaps... etc."},
+    "hard_failures": {"type": "array", "items": {"type": "object", "properties": {"requirement_id":{"type":"string"},"requirement":{"type":"string"},"category":{"type":"string"},"status":{"type":"string"},"evidence_ids":{"type":"array","items":{"type":"string"}},"provenance":{"type":"array"},"reason":{"type":"string"}}}},
+    "missing_evidence": {"type": "array", "items": {"type": "object", "properties": {"requirement_id":{"type":"string"},"requirement":{"type":"string"},"category":{"type":"string"},"status":{"type":"string"},"priority":{"type":"string","enum":["CRITICAL","HIGH","MEDIUM","LOW"]},"document_needed":{"type":"string"},"owner":{"type":"string"},"why_needed":{"type":"string"},"evidence_ids":{"type":"array","items":{"type":"string"}},"provenance":{"type":"array"}}}},
+    "risks": {"type": "array", "items": {"type": "object", "properties": {"risk_id":{"type":"string"},"type":{"type":"string"},"severity":{"type":"string"},"description":{"type":"string"},"mitigation":{"type":"string"},"decision_impact":{"type":"string"},"source_requirement":{"type":"string"}}}},
+    "supporting_evidence": {"type": "array", "items": {"type": "object", "properties": {"requirement_id":{"type":"string"},"evidence_id":{"type":"string"},"source_document":{"type":"string"},"page_or_section":{"type":"string"},"fact":{"type":"string"},"confidence":{"type":"string"}}}},
+    "conflicts": {"type": "array", "items": {"type": "object", "properties": {"requirement_id":{"type":"string"},"evidence_ids":{"type":"array","items":{"type":"string"}},"reason":{"type":"string"}}}},
+    "rules_triggered": {"type": "array", "items": {"type": "string"}},
+    "provenance_chain": {"type": "string", "const": "Requirement → Evidence → Source Document → Page/Section → Rule → Decision"},
+    "tender_id": {"type": "string"},
+    "decision_id": {"type": "string"}
+  }
+}

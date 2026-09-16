@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EvidenceMatchResult",
+  "description": "AI Evaluation Contract v1 — Per-requirement matching output from app.engines.status.evaluate_requirement",
+  "type": "object",
+  "required": ["requirement_id","status","evidence_ids","reason","provenance"],
+  "properties": {
+    "requirement_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["PASS","FAIL","MISSING_EVIDENCE","REVIEW","NOT_APPLICABLE"], "description": "MISSING never → FAIL; conflict/expiry/ambiguity → REVIEW"},
+    "evidence_ids": {"type": "array", "items": {"type": "string"}},
+    "reason": {"type": "string", "description": "Human-readable why, from evaluation_logic or conflict/expiry/ambiguity"},
+    "provenance": {"type": "array", "items": {"type": "object", "required": ["evidence_id","source_document","page_or_section","fact","status"], "properties": {"evidence_id":{"type":"string"},"source_document":{"type":"string"},"page_or_section":{"type":"string"},"source_quote":{"type":["string","null"]},"fact":{"type":"string"},"status":{"type":"string"},"extraction_confidence":{"type":"string"},"expired":{"type":"boolean"}}}},
+    "conflicts": {"type": "array", "items": {"type": "object", "properties": {"evidence_ids":{"type":"array","items":{"type":"string"}},"reason":{"type":"string"}}}},
+    "expired": {"type": "boolean"},
+    "applicability_mismatch": {"type": "boolean"}
+  }
+}

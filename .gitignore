@@ -1,0 +1,84 @@
+# TenderMind — secrets, local data, and generated artifacts must never be committed.
+
+# Secrets / credentials
+.env
+.env.*
+*.env
+*API_KEY*
+*SECRET*
+*TOKEN*
+*.pem
+*.key
+credentials*.json
+secrets*.json
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# Logs (may contain secrets)
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+dist/
+.next/
+
+# Model / cache files
+*.bin
+*.gguf
+*.onnx
+*.pt
+*.pth
+.cache/
+ollama/
+models/
+
+# Raw tender packages and confidential evidence — NEVER commit
+# (Sarai source folder and raw PDFs/DOCs/XLSs stay outside the repo;
+# only sanitized fixtures such as evaluation/sarai_gold_dataset.json are tracked)
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+tender_docs/
+uploads/
+evidence/
+confidential/
+
+# Local benchmark artifacts (may embed sensitive source documents)
+evaluation/outputs/
+*_output.json
+offline_84/
+real_outputs/
+real_v2/
+real_v3/
+real_v4/
+ollama_benchmark/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~

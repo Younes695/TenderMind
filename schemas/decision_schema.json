@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Decision",
+  "description": "AI Evaluation Contract v1 — Decision logic output per spec §6. Maps to app.models.Decision",
+  "type": "object",
+  "required": ["tender_id","decision","confidence","hard_fail_count","mandatory_missing_count","top_blockers","top_risks","rules_triggered","supporting_requirements","supporting_evidence","missing_evidence","risks"],
+  "properties": {
+    "tender_id": {"type": "string"},
+    "decision": {"type": "string", "enum": ["BID","REVIEW","NO_BID"], "description": "FAIL → NO_BID, MISSING/REVIEW → REVIEW, all PASS → BID; RISK never → NO_BID"},
+    "confidence": {"type": "string", "enum": ["HIGH","MEDIUM","LOW","OVERRIDE"]},
+    "hard_fail_count": {"type": "number", "description": "Count of mandatory HARD_GATE FAIL"},
+    "mandatory_missing_count": {"type": "number", "description": "Mandatory HARD_GATE missing+review"},
+    "top_blockers": {"type": "array", "items": {"type": "string"}, "description": "Up to 6 blocker requirement texts"},
+    "top_risks": {"type": "array", "items": {"type": "string"}, "description": "Up to 4 risk descriptions, always REVIEW"},
+    "rules_triggered": {"type": "array", "items": {"type": "string", "enum": ["HARD_GATE_FAIL","MANDATORY_GATE_MISSING","MANDATORY_GATE_REVIEW","EXPERIENCE_EVIDENCE_MISSING","COMMERCIAL_RISK_REVIEW","ALL_MANDATORY_PASS","HUMAN_OVERRIDE"]}},
+    "supporting_requirements": {"type": "array", "items": {"type": "string"}},
+    "supporting_evidence": {"type": "array", "items": {"type": "string"}},
+    "missing_evidence": {"type": "array", "items": {"type": "string"}},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "is_override": {"type": "boolean"}
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Requirement",
+  "description": "AI Evaluation Contract v1 — Requirement extraction output. Maps to app.models.Requirement",
+  "type": "object",
+  "required": ["requirement_id","tender_id","category","requirement","mandatory","requirement_type","evidence_required","source_document","page_or_section","applicable_entity","confidence","source_spans"],
+  "properties": {
+    "requirement_id": {"type": "string", "pattern": "^REQ-[A-Z-]+$", "description": "Stable ID A-U, plus AMB for ambiguous test"},
+    "tender_id": {"type": "string", "example": "SA-2018-HV2", "description": "Original No. SA/2018/HV2 stored as SA-2018-HV2"},
+    "category": {"type": "string", "enum": ["LEGAL","COMMERCIAL","TECHNICAL","EXPERIENCE","PERSONNEL","HSE","QA_QC","EQUIPMENT","SUBCONTRACTOR","FINANCIAL","SCHEDULE","SUBMISSION"]},
+    "requirement": {"type": "string", "description": "Full requirement text, Arabic normalized + English where applicable"},
+    "mandatory": {"type": "boolean"},
+    "requirement_type": {"type": "string", "enum": ["HARD_GATE","EXPERIENCE","TECHNICAL","SUBMISSION","PERSONNEL","HSE","QA_QC","EQUIPMENT","SUBCONTRACTOR","FINANCIAL","SCHEDULE","COMMERCIAL"]},
+    "evidence_required": {"type": "array", "items": {"type": "string"}, "description": "Document types from tender clause, not invented"},
+    "evaluation_logic": {"type": "object", "properties": {"PASS":{"type":"string"},"FAIL":{"type":"string"},"MISSING_EVIDENCE":{"type":"string"},"REVIEW":{"type":"string"}}, "required": ["PASS","FAIL","MISSING_EVIDENCE","REVIEW"]},
+    "source_document": {"type": "string", "description": "Tender doc title, e.g., Sarai RFP p.2"},
+    "page_or_section": {"type": "string", "description": "Page/section provenance, e.g., RFP p.2 / Vol1 S1 p.2"},
+    "applicable_entity": {"type": "string", "enum": ["CONSORTIUM","GIZA","HYOSUNG","ANY","AMBIGUOUS"], "description": "Who must satisfy; AMBIGUOUS → REVIEW per spec §19 #6"},
+    "ambiguity_note": {"type": ["string","null"], "description": "If AMBIGUOUS, why"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "source_spans": {"type": "array", "items": {"type": "object", "required": ["page","quote_ar","quote_en"], "properties": {"page": {"type":"integer"}, "bbox": {"type":"array","items":{"type":"number"}}, "quote_ar": {"type":"string"}, "quote_en": {"type":"string"}}}}
+  }
+}

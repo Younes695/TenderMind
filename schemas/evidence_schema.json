@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Evidence",
+  "description": "AI Evaluation Contract v1 — Evidence extraction output. Maps to app.models.Evidence",
+  "type": "object",
+  "required": ["evidence_id","company_id","evidence_type","fact","status","source_document","page_or_section","extraction_confidence","applicable_entity","reusable"],
+  "properties": {
+    "evidence_id": {"type": "string", "pattern": "^E-[A-Za-z0-9-]+$"},
+    "company_id": {"type": "string", "example": "HYOSUNG_GIZA"},
+    "requirement_supported": {"type": ["string","null"], "description": "Which REQ this evidence supports, or null if general"},
+    "evidence_type": {"type": "string", "enum": ["CONSORTIUM_AGREEMENT","CERTIFICATE","PROJECT_REFERENCE","CV","HSE","QA_QC","EQUIPMENT_ORIGIN","OEM_RELATIONSHIP","PERFORMANCE_GUARANTEE_COMMITMENT","TENDER_SECURITY","FINANCIAL","SCHEDULE","OTHER"]},
+    "fact": {"type": "string", "description": "Extracted fact, not invented"},
+    "status": {"type": "string", "enum": ["PASS","FAIL","REVIEW"], "description": "Evidence's own assessment; final REQ status decided by matching engine"},
+    "source_document": {"type": "string", "description": "Must be real file from company workspace, not hallucinated"},
+    "page_or_section": {"type": "string", "description": "Page/section provenance mandatory for PASS/FAIL"},
+    "source_quote": {"type": ["string","null"]},
+    "source_link": {"type": ["string","null"]},
+    "extraction_confidence": {"type": "string", "enum": ["HIGH","MEDIUM","LOW"]},
+    "applicable_entity": {"type": "string", "enum": ["CONSORTIUM","GIZA","HYOSUNG","ANY"], "description": "Who this evidence belongs to"},
+    "valid_from": {"type": ["string","null"], "format": "date-time", "description": "ISO8601 or null"},
+    "valid_until": {"type": ["string","null"], "format": "date-time", "description": "If in past, matching engine must REVIEW not PASS"},
+    "tender_source_id": {"type": ["string","null"], "description": "Tender this evidence came from; if != current and reusable=false, must be filtered"},
+    "reusable": {"type": "boolean", "description": "Company fact reusable across tenders (cert) vs tender-specific (bid security)"},
+    "notes": {"type": ["string","null"]}
+  }
+}
