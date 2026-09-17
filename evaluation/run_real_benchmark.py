@@ -186,11 +186,13 @@ def log_inventory(inventory):
 
 def extract_pdf_text(pdf_path):
     """Extract per-page text with provenance — now wires local Tesseract (evaluation/tesseract_local_ocr.py) for scanned pages."""
-    # Try local Tesseract routing first (if available, $0)
+    # Try local Tesseract routing first (if available, $0) — robust import via importlib
     try:
-        from evaluation.tesseract_local_ocr import extract_pdf_with_tesseract_routing
-        # Use Tesseract routing which handles scanned vs native per page with provenance
-        return extract_pdf_with_tesseract_routing(Path(pdf_path))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("tesseract_local_ocr", str(BASE / "evaluation" / "tesseract_local_ocr.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.extract_pdf_with_tesseract_routing(Path(pdf_path))
     except Exception as e_tess:
         # Fallback to fitz direct if Tesseract not available or fails
         pass
