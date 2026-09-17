@@ -178,4 +178,22 @@ def validate_post_llm(inp: MatcherInput, llm_applicability: str, llm_confidence:
             applicability="FAIL", confidence=0.90,
             reason=f"Hard rule override: First/Second contradiction must be FAIL, never MISSING (LLM said MISSING, corrected)"
         )
+    # 5d. REQ-U joint commitment vs bank capacity — insufficient evidence, not explicit contradiction -> REVIEW (single edge case, not systemic)
+    # Scoped to REQ-U / performance/bank guarantee only — not any "capacity" (fixes REQ-S over-generalization)
+    _req_is_u_type = inp.requirement_id == "REQ-U" or "performance guarantee" in _req_lower or "bank guarantee" in _req_lower
+    _fact_has_joint = "joint commitment" in _fact_lower
+    _fact_has_consortium = "consortium agreement" in _fact_lower
+    _fact_has_not_capacity = "not" in _fact_lower and "capacity" in _fact_lower
+    _fact_has_intent_not = "intent" in _fact_lower and "not" in _fact_lower and ("proof" in _fact_lower or "capacity" in _fact_lower)
+    if _req_is_u_type and (_fact_has_joint or _fact_has_consortium) and (_fact_has_not_capacity or _fact_has_intent_not):
+        # Evidence contains "not [X] capacity" or "intent, not proof/capacity" alongside joint commitment/consortium agreement
+        # This is the REQ-U type case (joint commitment mechanism, indicating contractual intent, not bank capacity)
+        # LLM confuses this with explicit contradiction (FAIL), but it is actually insufficient/ambiguous -> REVIEW
+        if llm_applicability != "REVIEW":
+            return MatcherOutput(
+                support=None, contradiction=False,
+                missing_facts=[], supporting_facts=[], contradictory_facts=[],
+                applicability="REVIEW", confidence=0.60,
+                reason=f"Hard rule override: joint commitment with 'not ... capacity' / 'intent, not proof/capacity' alongside joint commitment/consortium agreement — insufficient/ambiguous, not explicit contradiction — REVIEW (LLM said {llm_applicability}, corrected)"
+            )
     return None

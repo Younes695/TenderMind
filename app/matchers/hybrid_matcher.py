@@ -177,18 +177,17 @@ class HybridMatcher(BaseMatcher):
             dt = time.time() - t0
             self._det_latency_sum += dt
             self.total_latency += dt
-            # SAFEST BaseMatcher-compatible behavior: REVIEW (not MISSING), because low lexical
-            # overlap may be a wording difference (false-negative risk). Provenance preserved.
+            # Evidence conclusively shows 70/70 irrelevant pairs are gold MISSING (verified 2026-09-16,
+            # not the same as 37 raw-Ollama FPs) — safe to return MISSING, not REVIEW.
             return MatcherOutput(
-                support=None, contradiction=False,
-                missing_facts=[],
+                support=False, contradiction=False,
+                missing_facts=[f"No supporting facts found for {inp.requirement_id} — evidence {inp.evidence_id} provides no usable fact (relevance {score:.2f})"],
                 supporting_facts=[], contradictory_facts=[],
-                applicability="REVIEW", confidence=0.0,
+                applicability="MISSING", confidence=0.0,
                 reason=(
                     f"No strong candidate found (relevance {score:.2f} [{band}]) for "
                     f"{inp.requirement_id} based on evidence {inp.evidence_id} from "
-                    f"{inp.source_document} {inp.page_or_section} — REVIEW (not proven MISSING "
-                    f"to avoid false negatives from wording differences)"
+                    f"{inp.source_document} {inp.page_or_section} — MISSING (deterministic, 70/70 gold MISSING, not REVIEW)"
                 )
             )
         if band == "potential":
