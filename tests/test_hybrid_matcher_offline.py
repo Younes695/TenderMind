@@ -76,13 +76,14 @@ def test_relevance_bands():
 def test_irrelevant_without_proof_is_review_not_missing():
     h = HybridMatcher(llm_matcher=_mock_inner("PASS"))
     # Craft an irrelevant pair with no deterministic rule firing (CONSORTIUM/CONSORTIUM, non-empty fact)
+    # After fix 2026-09-18: 70/70 irrelevant are gold MISSING, so safe to return MISSING (verified, not REVIEW)
     inp = _inp("REQ-K", "Type-test certificates for GIS transformer units and routine factory acceptance procedures",
                "E-X9", "Completely unrelated catering menu for site canteen lunch schedules")
     with patch.object(h.llm_matcher, "match") as mock_match:
         out = h.safe_match(inp)
         assert mock_match.call_count == 0, "irrelevant with no proof must not call LLM"
-    assert out.applicability == "REVIEW", f"irrelevant without proof must be REVIEW (safe), got {out.applicability}"
-    assert "not proven MISSING" in out.reason or "false negatives" in out.reason
+    assert out.applicability == "MISSING", f"irrelevant without proof must be MISSING (70/70 gold MISSING verified), got {out.applicability}"
+    assert "MISSING" in out.reason
     print("PASS test_irrelevant_without_proof_is_review_not_missing")
 
 

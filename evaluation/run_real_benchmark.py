@@ -184,18 +184,33 @@ def log_inventory(inventory):
 
 # --- Document Intelligence ---
 
-def extract_pdf_text(pdf_path):
-    """Extract per-page text with provenance — now wires local Tesseract (evaluation/tesseract_local_ocr.py) for scanned pages."""
-    # Try local Tesseract routing first (if available, $0) — robust import via importlib
-    try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("tesseract_local_ocr", str(BASE / "evaluation" / "tesseract_local_ocr.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod.extract_pdf_with_tesseract_routing(Path(pdf_path))
-    except Exception as e_tess:
-        # Fallback to fitz direct if Tesseract not available or fails
-        pass
+def _call_tesseract_routing(pdf_path: Path):
+    """Helper for Tesseract routing — isolated for testability (patchable)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tesseract_local_ocr", str(BASE / "evaluation" / "tesseract_local_ocr.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.extract_pdf_with_tesseract_routing(pdf_path)
+
+def extract_pdf_text(pdf_path, ocr_needed_hint=None):
+    """Extract per-page text with provenance — now wires local Tesseract (evaluation/tesseract_local_ocr.py) for scanned pages.
+    ocr_needed_hint: True -> use Tesseract routing, False -> direct fitz only (no Tesseract), None -> preserve existing behavior (try Tesseract first).
+    """
+    # Hint False: use direct fitz only, do NOT invoke Tesseract, do NOT re-probe via tesseract_local_ocr
+    if ocr_needed_hint is False:
+        # Direct fitz/native extraction — no Tesseract
+        pass  # fall through to fitz block below
+    elif ocr_needed_hint is True:
+        # Use existing tesseract_local_ocr page-level routing
+        try:
+            return _call_tesseract_routing(Path(pdf_path))
+        except Exception as e_tess:
+            pass  # fallback to fitz
+    else:  # None: preserve safe existing behavior (try Tesseract first)
+        try:
+            return _call_tesseract_routing(Path(pdf_path))
+        except Exception as e_tess:
+            pass
     pages = []
     if not HAS_FITZ:
         return [{"page_number": 1, "text": "", "method": "NO_FITZ", "ocr_applied": False, "confidence": 0.0, "error": "fitz not available"}]
@@ -226,6 +241,87 @@ def extract_pdf_text(pdf_path):
         pages.append({"page_number": 1, "text": "", "method": f"fitz_error: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e)})
     return pages
 
+def _find_soffice_executable() -> Path | None:
+    """Resolver for LibreOffice soffice: env var, standard Windows path, PATH lookup — no hard-coded single assumption."""
+    import shutil, os
+    # 1. Env var (project already uses TENDERMIND_ prefix)
+    for env_key in ("TENDERMIND_LIBREOFFICE_PATH", "TENDERMIND_SOFFICE_PATH", "SOFFICE_PATH", "LIBREOFFICE_PATH"):
+        env_val = os.environ.get(env_key)
+        if env_val and Path(env_val).exists() and Path(env_val).is_file():
+            return Path(env_val)
+        if env_val and Path(env_val).exists():
+            # Might be directory containing soffice.exe
+            cand = Path(env_val) / "soffice.exe"
+            if cand.exists():
+                return cand
+    # 2. Standard Windows installation paths
+    for cand in [
+        Path(r"C:\Program Files\LibreOffice\program\soffice.exe"),
+        Path(r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"),
+    ]:
+        if cand.exists():
+            return cand
+    # 3. PATH lookup
+    for name in ("soffice", "soffice.exe", "libreoffice"):
+        found = shutil.which(name)
+        if found and Path(found).exists():
+            return Path(found)
+    return None
+
+
+def _extract_doc_via_libreoffice(doc_path: Path, soffice: Path, timeout: int = 30) -> str | None:
+    """Headless LibreOffice .DOC -> TXT conversion in TEMP dir — safe, no shell interpolation."""
+    import subprocess, tempfile, shutil
+    tmpdir = None
+    try:
+        tmpdir = Path(tempfile.mkdtemp(prefix="tendermind_doc_"))
+        # Use argument array, no shell=True, handles spaces/parentheses/Arabic
+        cmd = [
+            str(soffice),
+            "--headless",
+            "--convert-to", "txt:Text",
+            "--outdir", str(tmpdir),
+            str(doc_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if result.returncode != 0:
+            # Log failure reason for fallback
+            print(f"DOC_EXTRACTOR=libreoffice_failed soffice={soffice} rc={result.returncode} stderr={result.stderr[:300]}")
+            return None
+        # Output file is same basename with .txt
+        out_txt = tmpdir / (doc_path.stem + ".txt")
+        if not out_txt.exists():
+            # LibreOffice may produce with different name (e.g., with spaces)
+            candidates = list(tmpdir.glob("*.txt"))
+            if not candidates:
+                print(f"DOC_EXTRACTOR=libreoffice_no_output tmpdir={tmpdir} doc={doc_path.name}")
+                return None
+            out_txt = candidates[0]
+        text = out_txt.read_text(encoding="utf-8", errors="ignore")
+        if not text or len(text.strip()) < 50:
+            print(f"DOC_EXTRACTOR=libreoffice_empty len={len(text.strip()) if text else 0} doc={doc_path.name}")
+            return None
+        # Check for binary/garbled (should be mostly printable)
+        printable_ratio = sum(1 for c in text if c.isprintable() or c in "\n\r\t") / max(len(text), 1)
+        if printable_ratio < 0.7:
+            print(f"DOC_EXTRACTOR=libreoffice_garbled ratio={printable_ratio:.2f} doc={doc_path.name}")
+            return None
+        print(f"DOC_EXTRACTOR=libreoffice success soffice={soffice} doc={doc_path.name} len={len(text)}")
+        return text
+    except subprocess.TimeoutExpired:
+        print(f"DOC_EXTRACTOR=libreoffice_timeout doc={doc_path.name} timeout={timeout}s")
+        return None
+    except Exception as e:
+        print(f"DOC_EXTRACTOR=libreoffice_exception doc={doc_path.name} error={type(e).__name__}: {e}")
+        return None
+    finally:
+        if tmpdir and tmpdir.exists():
+            try:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            except Exception:
+                pass
+
+
 def extract_docx_text(doc_path):
     pages = []
     try:
@@ -239,17 +335,52 @@ def extract_docx_text(doc_path):
             for table in doc.tables:
                 for row in table.rows:
                     full += "\n" + " | ".join([cell.text for cell in row.cells])
-            pages.append({"page_number": 1, "text": full, "method": "docx_paragraphs", "ocr_applied": False, "extraction_confidence": 0.9 if len(full.strip())>100 else 0.5})
+            pages.append({"page_number": 1, "text": full, "method": "docx_paragraphs", "ocr_applied": False, "extraction_confidence": 0.9 if len(full.strip())>100 else 0.5, "DOC_EXTRACTOR": "docx"})
         elif ext == ".doc":
-            # Try docx will fail for old .doc; report limitation
+            # 1. Try LibreOffice headless first (local, free, handles Word 97-2003 piece table)
+            soffice = _find_soffice_executable()
+            if soffice and soffice.exists():
+                libre_text = _extract_doc_via_libreoffice(Path(doc_path), soffice, timeout=30)
+                if libre_text and len(libre_text.strip()) > 100:
+                    # Verify contains expected evidence terms for Sarai fixture (consortium/Hyosung) if it's that file
+                    # Still return the text — don't filter on content, just ensure it's usable
+                    pages.append({"page_number": 1, "text": libre_text, "method": "libreoffice_headless_txt", "ocr_applied": False, "extraction_confidence": 0.85, "DOC_EXTRACTOR": "libreoffice", "soffice": str(soffice)})
+                    return pages
+                else:
+                    print(f"DOC_EXTRACTOR=libreoffice_fallback_needed doc={Path(doc_path).name} soffice={soffice}")
+            else:
+                print(f"DOC_EXTRACTOR=libreoffice_not_found doc={Path(doc_path).name} — fallback to olefile")
+            # 2. Fallback: try docx on .doc (will fail for old binary, but keep for completeness)
             try:
                 doc = docx.Document(str(doc_path))
                 full = "\n".join([p.text for p in doc.paragraphs])
-                pages.append({"page_number": 1, "text": full, "method": "docx_on_doc", "ocr_applied": False, "extraction_confidence": 0.3})
+                pages.append({"page_number": 1, "text": full, "method": "docx_on_doc", "ocr_applied": False, "extraction_confidence": 0.3, "DOC_EXTRACTOR": "docx_on_doc"})
+                return pages
             except Exception as e:
-                # Fallback: try to read as binary and extract strings (very limited)
-                # For benchmark, report failure
-                pages.append({"page_number": 1, "text": "", "method": f"doc_old_binary_failed: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e), "note": "Old .doc binary requires antiword/OLE parser — not available in this harness; reported as limitation per benchmark rule 9"})
+                pass
+            # 3. Deterministic olefile fallback (very limited, as before) — preserve for regression safety
+            try:
+                import olefile, re
+                if olefile.isOleFile(str(doc_path)):
+                    ole = olefile.OleFileIO(str(doc_path))
+                    data = ole.openstream('WordDocument').read()
+                    text = data.decode('utf-16le', errors='ignore')
+                    cleaned = "".join(c for c in text if c.isprintable() or c in "\n\r\t" or ord(c)>127)
+                    strings = re.findall(r"[\x20-\x7E\xC0-\xFF]{4,}", cleaned)
+                    full = " ".join(strings)
+                    if len(full.strip()) < 100:
+                        raw = open(str(doc_path), 'rb').read()
+                        s2 = re.findall(b"[\x20-\x7E]{4,}", raw)
+                        full2 = " ".join([s.decode('latin1', errors='ignore') for s in s2])
+                        if len(full2) > len(full):
+                            full = full2
+                    if full.strip():
+                        pages.append({"page_number": 1, "text": full, "method": "olefile_worddocument", "ocr_applied": False, "extraction_confidence": 0.6 if len(full.strip())>200 else 0.4, "DOC_EXTRACTOR": "olefile_fallback"})
+                        return pages
+            except Exception as e:
+                print(f"DOC_EXTRACTOR=olefile_failed doc={Path(doc_path).name} error={e}")
+            # Final fallback: report as before
+            pages.append({"page_number": 1, "text": "", "method": f"doc_old_binary_failed: olefile fallback produced no usable text", "ocr_applied": False, "extraction_confidence": 0.0, "DOC_EXTRACTOR": "olefile_fallback_empty", "note": "Old .doc binary requires OLE piece-table parser — LibreOffice not available or produced no text; reported as limitation per benchmark rule 9"})
         else:
             pages.append({"page_number": 1, "text": "", "method": "unknown_doc_ext"})
     except Exception as e:
@@ -300,7 +431,17 @@ def run_document_intelligence(inventory):
         ext = f["extension"]
         pages = []
         if ext == ".pdf":
-            pages = extract_pdf_text(p)
+            # Pass inventory ocr_needed hint to avoid duplicate Tesseract probing (Task 8 fix)
+            # Use exact normalized/resolved path already in inventory (f["full_path"])
+            _ocr_needed_raw = f.get("ocr_needed", "")
+            _low = _ocr_needed_raw.lower()
+            if "yes" in _low:
+                _hint = True
+            elif "no" in _low:
+                _hint = False
+            else:
+                _hint = None
+            pages = extract_pdf_text(p, ocr_needed_hint=_hint)
         elif ext in (".doc", ".docx"):
             pages = extract_docx_text(p)
         elif ext in (".xls", ".xlsx"):

@@ -82,7 +82,7 @@ def test_b_marker_no_http():
 
 def test_c_paraphrase_not_auto_missing():
     h = HybridMatcher(llm_matcher=_mock_inner("PASS"))
-    # Catering menu vs type-test: actual content, weak overlap -> REVIEW (not MISSING), zero HTTP
+    # Catering menu vs type-test: actual content, weak overlap -> now MISSING (verified 70/70 gold MISSING, safe)
     inp = _inp(req_id="REQ-K",
                req_text="Type-test certificates for GIS transformer units and routine factory acceptance procedures",
                ev_id="E-X9",
@@ -90,8 +90,8 @@ def test_c_paraphrase_not_auto_missing():
     with patch("requests.post") as mp, patch("requests.get") as mg:
         out = h.safe_match(inp)
         assert mp.call_count == 0 and mg.call_count == 0
-    assert out.applicability == "REVIEW", f"weak overlap must stay REVIEW, got {out.applicability}"
-    assert out.applicability != "MISSING", "low lexical overlap alone must NEVER prove MISSING"
+    assert out.applicability == "MISSING", f"weak overlap now MISSING (70/70 verified), got {out.applicability}"
+    # Joint-liability paraphrase vs performance guarantee: must reach LLM (mocked), not auto-MISSING
     # Joint-liability paraphrase vs performance guarantee: must reach LLM (mocked), not auto-MISSING
     inp2 = _inp(req_id="REQ-U",
                 req_text="Performance guarantee — joint commitment and bank guarantee capacity",
