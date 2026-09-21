@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TenderAgnosticExtraction",
+  "description": "Generic tender-agnostic extraction schema — supports dynamic tenders, documents, requirements, evidence, provenance, confidence, risks. Sarai gold (REQ-A..U) is regression-only, not canonical.",
+  "type": "object",
+  "required": ["tender_id", "title", "documents", "requirements"],
+  "properties": {
+    "tender_id": {"type": "string", "description": "Dynamic tender ID, e.g., SA-2018-HV2, Mobile-2024-001", "example": "SA-2018-HV2"},
+    "title": {"type": "string", "description": "Tender title"},
+    "client": {"type": ["string", "null"], "description": "Client/Owner, e.g., MNHD, NUCA, EETC"},
+    "location": {"type": ["string", "null"]},
+    "languages": {"type": "array", "items": {"type": "string"}, "description": "Detected languages (free-form, e.g., AR, EN, FR — not limited)"},
+    "documents": {
+      "type": "array",
+      "description": "Dynamic number of documents",
+      "items": {
+        "type": "object",
+        "required": ["filename", "page_count"],
+        "properties": {
+          "filename": {"type": "string"},
+          "page_count": {"type": "integer"},
+          "text_length": {"type": "integer"},
+          "extraction_method": {"type": "string", "description": "Free-form extraction method, e.g., tesseract, libreoffice, fitz, tesseract_5.4.0_ara+eng_psm6_dpi300"},
+          "extraction_status": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "FAILED", "UNSUPPORTED"], "description": "Document extraction status"},
+          "document_type": {"type": ["string", "null"], "enum": ["TECHNICAL", "COMMERCIAL", "BOQ", "LEGAL", "SUBMISSION", "CLARIFICATION", "ADDENDUM", "DRAWING", "OTHER", null], "description": "Generic classification"},
+          "document_status": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "FAILED", "UNSUPPORTED"], "description": "Alias for extraction_status"},
+          "ocr_applied": {"type": "boolean"},
+          "language_detected": {"type": ["string", "null"]},
+          "provenance_status": {"type": ["string", "null"], "enum": ["COMPLETE", "PARTIAL", "MISSING", null]}
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "description": "Dynamic number of requirements — no fixed 21",
+      "items": {
+        "type": "object",
+        "required": ["requirement_id", "summary", "category", "mandatory"],
+        "properties": {
+          "requirement_id": {"type": "string", "pattern": "^REQ-[A-Z0-9-_]+$", "description": "Dynamic ID, e.g., REQ-A or REQ-001"},
+          "summary": {"type": "string", "description": "Human-readable requirement summary"},
+          "category": {"type": "string", "enum": ["LEGAL", "TECHNICAL", "EXPERIENCE", "EQUIPMENT", "FINANCIAL", "SCHEDULE", "COMMERCIAL", "HSE", "QA_QC", "PERSONNEL", "SUBCONTRACTOR", "SUBMISSION"]},
+          "mandatory": {"type": ["boolean", "null"], "description": "Null if unknown — do not guess"},
+          "requirement_type": {"type": "string", "enum": ["HARD_GATE", "EXPERIENCE", "TECHNICAL", "SUBMISSION", "PERSONNEL", "HSE", "QA_QC", "EQUIPMENT", "SUBCONTRACTOR", "FINANCIAL", "SCHEDULE", "COMMERCIAL"]},
+          "applicable_entity": {"type": ["string", "null"], "description": "Arbitrary entity string or null — not limited to Sarai values"},
+          "evidence_required": {"type": "array", "items": {"type": "string"}},
+          "source_document": {"type": ["string", "null"]},
+          "page_number": {"type": ["integer", "null"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "provenance": {
+            "type": ["object", "null"],
+            "properties": {
+              "bbox": {"type": "array", "items": {"type": "number"}},
+              "quote_ar": {"type": "string"},
+              "quote_en": {"type": "string"},
+              "source_spans": {"type": "array", "items": {"type": "object"}}
+            }
+          },
+          "conditional": {"type": "boolean", "description": "True if requirement is conditional/optional"},
+          "extraction_method": {"type": "string", "enum": ["deterministic", "llm", "hybrid"]}
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Dynamic evidence items",
+      "items": {
+        "type": "object",
+        "required": ["evidence_id", "fact"],
+        "properties": {
+          "evidence_id": {"type": "string"},
+          "requirement_id": {"type": ["string", "null"]},
+          "fact": {"type": "string"},
+          "source_document": {"type": ["string", "null"]},
+          "page_number": {"type": ["integer", "null"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "provenance": {"type": ["object", "null"]},
+          "applicable_entity": {"type": ["string", "null"], "description": "Arbitrary entity string"},
+          "valid_until": {"type": ["string", "null"], "format": "date-time"},
+          "reusable": {"type": "boolean"}
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["risk_id", "description"],
+        "properties": {
+          "risk_id": {"type": "string"},
+          "type": {"type": "string", "enum": ["COMMERCIAL", "FINANCIAL", "SCHEDULE", "LEGAL", "TECHNICAL"]},
+          "severity": {"type": ["string", "null"], "enum": ["HIGH", "MEDIUM", "LOW", null], "description": "Nullable — business severity not yet defined"},
+          "description": {"type": "string"},
+          "mitigation": {"type": ["string", "null"]},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "deadlines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"type": "string", "enum": ["submission", "opening", "validity", "completion", "unknown", "unclassified"]},
+          "date": {"type": ["string", "null"]},
+          "source_document": {"type": ["string", "null"]},
+          "page_number": {"type": ["integer", "null"]},
+          "raw_text": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "commercial_terms": {
+      "type": ["object", "null"],
+      "properties": {
+        "price_schedules": {"type": ["string", "null"]},
+        "payment": {"type": ["string", "null"]},
+        "currency": {"type": ["string", "null"]}
+      }
+    },
+    "provenance_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+    "confidence_distribution": {
+      "type": "object",
+      "properties": {
+        "high": {"type": "integer"},
+        "medium": {"type": "integer"},
+        "low": {"type": "integer"}
+      }
+    },
+    "missing_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "extraction_metadata": {
+      "type": "object",
+      "properties": {
+        "tender_id": {"type": "string"},
+        "extraction_timestamp": {"type": "string", "format": "date-time"},
+        "extraction_method": {"type": "string"},
+        "model": {"type": ["string", "null"]},
+        "ocr_applied": {"type": "boolean"}
+      }
+    }
+  }
+}

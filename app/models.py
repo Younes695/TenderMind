@@ -136,3 +136,46 @@ class DecisionAudit(Base):
     new_decision = Column(String)
     reason = Column(Text)
     comments = Column(Text)
+
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"))
+    status = Column(String, default="QUEUED")  # QUEUED, PROCESSING, COMPLETED, PARTIAL, FAILED
+    current_stage = Column(String, default="INVENTORY")
+    progress = Column(Float, default=0)
+    documents_total = Column(Float, default=0)
+    documents_processed = Column(Float, default=0)
+    documents_failed = Column(Float, default=0)
+    documents_unsupported = Column(Float, default=0)
+    error_count = Column(Float, default=0)
+    last_error = Column(Text, nullable=True)
+    result_version = Column(String, default="1.0")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    pipeline_version = Column(String, default="1.0")
+    model = Column(String, nullable=True)
+    prompt_version = Column(String, nullable=True)
+
+class TenderAnalysis(Base):
+    __tablename__ = "tender_analyses"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"))
+    processing_job_id = Column(String, ForeignKey("processing_jobs.id"))
+    analysis_version = Column(String, default="1.0")
+    pipeline_version = Column(String, default="1.0")
+    model = Column(String, nullable=True)
+    prompt_version = Column(String, nullable=True)
+    status = Column(String, default="COMPLETED")  # COMPLETED, PARTIAL, FAILED
+    created_at = Column(DateTime, default=datetime.utcnow)
+    # Canonical analysis JSON — validated against schemas/tender_agnostic_schema.json
+    tender = Column(JSON)  # {id, title, client, location}
+    documents = Column(JSON)  # [{filename, document_type, processing_status, ...}]
+    requirements = Column(JSON)  # [{id, summary, category, mandatory, ... , source_document, page_number, source_chunk_id, source_text}]
+    evidence = Column(JSON)  # [{id, requirement_id, summary, source_document, ...}]
+    deadlines = Column(JSON)
+    commercial = Column(JSON)
+    risks = Column(JSON)
+    derived_features = Column(JSON)
+    processing = Column(JSON)  # {job_id, status, progress, documents_total, etc.}

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Tender, Requirement, Evidence, EvidenceMatch, Risk, MissingEvidence, Decision, DecisionAudit, Company, TenderDocument
+from app.models import Tender, Requirement, Evidence, EvidenceMatch, Risk, MissingEvidence, Decision, DecisionAudit, Company, TenderDocument, ProcessingJob
 from app.engines.status import evaluate_all
 from app.engines.decision import get_or_create_decision
 from app.engines.explanation import build_explanation
@@ -203,3 +203,93 @@ def get_company(company_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Company not found")
     docs = db.query(Evidence).filter(Evidence.company_id == company_id).all()
     return {"company": c, "evidences": docs}
+
+# --- Processing Pipeline (Phase 3A) ---
+from app.processing import create_processing_job, get_processing_job, process_tender, PIPELINE_VERSION, LLM_MODEL
+
+@router.post("/tenders/{tender_id}/process")
+def start_processing(tender_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    try:
+        job = create_processing_job(db, tender_id)
+    except ValueError as e:
+        msg = str(e)
+        if "already exists" in msg:
+            raise HTTPException(409, msg)
+        raise HTTPException(404, msg)
+    # Run in background (in-process, no Redis/Celery per Phase 3A)
+    background_tasks.add_task(process_tender, tender_id, job.id)
+    return {"job_id": job.id, "tender_id": job.tender_id, "status": job.status, "current_stage": job.current_stage}
+
+@router.get("/processing-jobs/{job_id}")
+def get_job_status(job_id: str, db: Session = Depends(get_db)):
+    try:
+        job = get_processing_job(db, job_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    return {
+        "job_id": job.id,
+        "tender_id": job.tender_id,
+        "status": job.status,
+        "current_stage": job.current_stage,
+        "progress": job.progress,
+        "documents_total": job.documents_total,
+        "documents_processed": job.documents_processed,
+        "documents_failed": job.documents_failed,
+        "documents_unsupported": job.documents_unsupported,
+        "error_count": job.error_count,
+        "last_error": job.last_error,
+        "created_at": job.created_at,
+        "started_at": job.started_at,
+        "completed_at": job.completed_at,
+        "pipeline_version": job.pipeline_version,
+        "model": job.model,
+        "prompt_version": job.prompt_version,
+    }
+
+@router.get("/tenders/{tender_id}/analysis")
+def get_analysis(tender_id: str, db: Session = Depends(get_db)):
+    from app.models import TenderAnalysis
+    # Check if processing is complete
+    latest_job = db.query(ProcessingJob).filter(ProcessingJob.tender_id == tender_id).order_by(ProcessingJob.created_at.desc()).first()
+    if not latest_job:
+        raise HTTPException(404, "No processing job found for tender")
+    if latest_job.status in ("QUEUED", "PROCESSING"):
+        return {"status": latest_job.status, "current_stage": latest_job.current_stage, "progress": latest_job.progress, "message": "Processing not complete"}
+    if latest_job.status == "FAILED":
+        return {"status": "FAILED", "last_error": latest_job.last_error, "error_count": latest_job.error_count}
+    # For COMPLETED/PARTIAL, return persisted canonical analysis
+    analysis = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id).order_by(TenderAnalysis.created_at.desc()).first()
+    if not analysis:
+        # Fallback to processing metadata if no persisted analysis (e.g., old jobs)
+        tender = db.query(Tender).filter(Tender.id == tender_id).first()
+        if not tender:
+            raise HTTPException(404, "Tender not found")
+        return {
+            "tender_id": tender_id,
+            "status": latest_job.status,
+            "current_stage": latest_job.current_stage,
+            "progress": latest_job.progress,
+            "documents_total": latest_job.documents_total,
+            "documents_processed": latest_job.documents_processed,
+            "documents_failed": latest_job.documents_failed,
+            "message": "Analysis ready (generic extraction available via evaluation/generic_extraction.py)",
+            "pipeline_version": latest_job.pipeline_version,
+        }
+    # Return canonical analysis — frontend-safe, no raw LLM, no candidate IDs
+    return {
+        "tender": analysis.tender,
+        "documents": analysis.documents,
+        "requirements": analysis.requirements,
+        "evidence": analysis.evidence,
+        "deadlines": analysis.deadlines,
+        "commercial": analysis.commercial,
+        "risks": analysis.risks,
+        "derived_features": analysis.derived_features,
+        "processing": analysis.processing,
+        "analysis_version": analysis.analysis_version,
+        "pipeline_version": analysis.pipeline_version,
+        "model": analysis.model,
+        "prompt_version": analysis.prompt_version,
+        "status": analysis.status,
+        "created_at": analysis.created_at,
+    }
