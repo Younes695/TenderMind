@@ -1,150 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>TenderMind — Test #001 — Sarai 220/22kV GIS</title>
-<style>
-body{font-family:Inter, Segoe UI, sans-serif; margin:0; background:#f6f7f9; color:#1a1a1a}
-header{background:#0f172a; color:#fff; padding:18px 28px; display:flex; justify-content:space-between; align-items:center}
-header h1{margin:0; font-size:18px}
-.badge{padding:4px 10px; border-radius:999px; font-weight:700; font-size:12px}
-.BID{background:#16a34a; color:#fff}
-.REVIEW{background:#eab308; color:#111}
-.NO_BID{background:#dc2626; color:#fff}
-.PASS{color:#16a34a; font-weight:700}
-.FAIL{color:#dc2626; font-weight:700}
-.MISSING_EVIDENCE{color:#d97706; font-weight:700}
-.REVIEW_T{color:#ca8a04; font-weight:700}
-.container{max-width:1200px; margin:24px auto; padding:0 16px}
-.card{background:#fff; border-radius:12px; padding:18px; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px}
-.grid{display:grid; grid-template-columns: 1fr 1fr; gap:16px}
-h2{margin:0 0 12px 0; font-size:16px; border-bottom:1px solid #eee; padding-bottom:8px}
-table{width:100%; border-collapse:collapse; font-size:13px}
-th,td{padding:8px 6px; border-bottom:1px solid #eee; text-align:left; vertical-align:top}
-th{background:#f8fafc}
-small{color:#64748b}
-a{color:#2563eb; text-decoration:none}
-.controls{display:flex; gap:8px}
-button{padding:8px 14px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer}
-button.primary{background:#0f172a; color:#fff; border-color:#0f172a}
-.provenance{background:#fffbeb; border:1px dashed #f59e0b; padding:8px; border-radius:8px; margin-top:6px; font-size:12px}
-.risk{border-left:3px solid #f59e0b; padding-left:8px; margin:6px 0}
-</style>
-</head>
-<body>
-<header>
-<div>
-<h1>TenderMind — Test #001</h1>
-<small>Sarai 220/22kV GIS Substation — SA/2018/HV2 — HYOSUNG / GIZA SYSTEMS CONSORTIUM</small>
-</div>
-<div style="text-align:right">
-<div id="decisionBadge" class="badge REVIEW">LOADING</div>
-<small id="confText"></small>
-</div>
-</header>
-<div class="container">
-<div class="card">
-<div style="display:flex; justify-content:space-between; align-items:center">
-<strong>Workflow</strong>
-<div class="controls">
-<button onclick="recompute()">Recompute Decision</button>
-<button onclick="exportJson()">Export JSON</button>
-<button class="primary" onclick="overridePrompt()">Override Decision</button>
-</div>
-</div>
-<small>Evidence-driven: Tender → Requirements → Evidence → Status → Risks → BID/REVIEW/NO_BID with provenance</small>
-<div id="topBlockers" style="margin-top:10px"></div>
-</div>
-
-<div class="grid">
-<div class="card">
-<h2>Decision</h2>
-<div id="decisionDetail"></div>
-<h2 style="margin-top:16px">Risks (separate from FAIL)</h2>
-<div id="risks"></div>
-<h2 style="margin-top:16px">Missing Evidence (Actionable)</h2>
-<div id="missing"></div>
-</div>
-<div class="card">
-<h2>Source Provenance Chain</h2>
-<small>Requirement → Evidence → Source Document → Page/Section → Rule → Decision</small>
-<div id="audit"></div>
-</div>
-</div>
-
-<div class="card">
-<h2>Requirements (21) — Click evidence to view source</h2>
-<table>
-<thead><tr><th>ID</th><th>Category</th><th>Requirement</th><th>Type</th><th>Status</th><th>Provenance</th></tr></thead>
-<tbody id="reqTable"></tbody>
-</table>
-</div>
-
-<div class="card">
-<h2>Company Evidence (HYOSUNG / GIZA)</h2>
-<table>
-<thead><tr><th>ID</th><th>Requirement</th><th>Fact</th><th>Status</th><th>Source Document</th><th>Page/Section</th></tr></thead>
-<tbody id="evTable"></tbody>
-</table>
-</div>
-</div>
-<script>
-const tenderId = "SA-2018-HV2"; // stored ID (original No. SA/2018/HV2 displayed in header)
-async function load(){
- const [decRes, reqRes, evRes, riskRes, missRes] = await Promise.all([
-  fetch(`/api/tenders/${tenderId}/decision`).then(r=>r.json()),
-  fetch(`/api/tenders/${tenderId}/requirements`).then(r=>r.json()),
-  fetch(`/api/tenders/${tenderId}/evidence`).then(r=>r.json()),
-  fetch(`/api/tenders/${tenderId}/risks`).then(r=>r.json()),
-  fetch(`/api/tenders/${tenderId}/missing-evidence`).then(r=>r.json()),
- ]);
- // decision
- const badge = document.getElementById("decisionBadge");
- badge.textContent = decRes.decision;
- badge.className = "badge " + decRes.decision;
- document.getElementById("confText").textContent = "Confidence: " + decRes.confidence + " | Rules: " + (decRes.rules_triggered||[]).join(", ");
- document.getElementById("decisionDetail").innerHTML = `
-  <div><strong>Decision:</strong> ${decRes.decision} <span class="badge ${decRes.decision}">${decRes.decision}</span> — Confidence <strong>${decRes.confidence}</strong></div>
-  <small>Hard FAILs: ${decRes.hard_fail_count} | Mandatory missing: ${decRes.mandatory_missing_evidence_count}</small>
-  <div style="margin-top:8px"><strong>Top Blockers:</strong><ul>${(decRes.top_blockers||[]).map(b=>`<li>${b}</li>`).join("")}</ul></div>
-  <div><strong>Top Risks:</strong><ul>${(decRes.top_risks||[]).map(b=>`<li>${b}</li>`).join("")}</ul></div>
-  <div class="provenance">Rule chain: ${(decRes.rules_triggered||[]).join(" → ")}<br>Spec §6 hierarchy applied. MISSING_EVIDENCE ≠ FAIL. Risk ≠ NO_BID.</div>
- `;
- document.getElementById("topBlockers").innerHTML = `<small><strong>Blockers:</strong> ${(decRes.top_blockers||[]).join(" • ")} </small>`;
- // risks
- document.getElementById("risks").innerHTML = riskRes.map(r=>`<div class="risk"><strong>${r.id}</strong> [${r.type} / ${r.severity}] ${r.description}<br><small>Impact: ${r.decision_impact} | Mitigation: ${r.mitigation}</small></div>`).join("");
- // missing
- document.getElementById("missing").innerHTML = missRes.map(m=>`<div style="padding:6px; border:1px solid #eee; border-radius:8px; margin:4px 0"><strong>${m.id}</strong> → ${m.requirement_id} <span style="background:#fef3c7; padding:2px 6px; border-radius:999px; font-size:11px">${m.priority}</span><br>${m.document_needed}<br><small>Owner: ${m.owner} | Why: ${m.why_needed} | Status: ${m.status}</small></div>`).join("");
- // requirements
- document.getElementById("reqTable").innerHTML = reqRes.map(r=>{
-   const prov = (r.provenance||[]).map(p=> `<div style="font-size:11px; background:#f1f5f9; padding:4px; border-radius:6px; margin:2px 0">Evidence ${p.evidence_id}: ${p.fact.slice(0,120)}...<br><em>Source:</em> ${p.source_document} — ${p.page_or_section} — Conf: ${p.extraction_confidence}</div>`).join("") || `<small>No evidence — status from absence</small>`;
-   const statusClass = r.status;
-   return `<tr><td><strong>${r.requirement_id}</strong><br><small>${r.source_document}</small></td><td>${r.category}</td><td>${r.requirement}<br><small>${r.page_or_section}</small></td><td>${r.requirement_type}</td><td class="${statusClass}">${r.status}</td><td>${prov}<br><small>${r.reason||""}</small></td></tr>`;
- }).join("");
- // evidence
- document.getElementById("evTable").innerHTML = evRes.map(e=>`<tr><td>${e.id}</td><td>${e.requirement_id||""}</td><td>${e.fact}</td><td class="${e.status}">${e.status}</td><td>${e.source_document}</td><td>${e.page_or_section}</td></tr>`).join("");
- // audit
- document.getElementById("audit").innerHTML = `<small>Decision ID: ${decRes.decision_id}<br>Supporting requirements: ${(decRes.supporting_requirements||[]).join(", ")}<br>Supporting evidence: ${(decRes.supporting_evidence||[]).join(", ")}<br>Missing: ${(decRes.missing_evidence||[]).join(", ")}<br>Risks: ${(decRes.risks||[]).join(", ")}</small>
- <div style="margin-top:8px"><a href="/api/tenders/${tenderId}/export" target="_blank">View full JSON export</a> • <a href="/docs" target="_blank">API Docs</a> • <a href="/api/tenders/${tenderId}/audit" target="_blank">Audit trail</a></div>`;
-}
-async function recompute(){
- await fetch(`/api/tenders/${tenderId}/decision/recompute`, {method:"POST"});
- load();
-}
-async function exportJson(){
- window.open(`/api/tenders/${tenderId}/export`, "_blank");
-}
-async function overridePrompt(){
- const reviewer = prompt("Reviewer name:", "Commercial Director");
- const reason = prompt("Reason for override:", "Risk review completed — proceed with evidence requests");
- const newDec = prompt("New decision (BID/REVIEW/NO_BID):", "REVIEW");
- if(!newDec) return;
- const res = await fetch(`/api/tenders/${tenderId}/decision/override`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({reviewer, new_decision: newDec, reason, comments: "Human override via UI"})});
- const j = await res.json();
- alert(JSON.stringify(j, null, 2));
- load();
-}
-load();
-</script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TenderMind</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Great+Vibes&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
