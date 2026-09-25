@@ -7,6 +7,10 @@ import Dashboard from "./pages/Dashboard";
 import GoNoGo from "./pages/GoNoGo";
 import NewTender from "./pages/NewTender";
 import TenderWorkspace from "./pages/TenderWorkspace";
+import Solutions from "./pages/Solution";
+import Industries from "./pages/Industries";
+import Security from "./pages/Security";
+import Pricing from "./pages/Pricing";
 
 function App() {
   return (
@@ -18,11 +22,11 @@ function App() {
           <Route path="/" element={<Home />} />
 
           <Route path="/product" element={<div>Product</div>} />
-          <Route path="/solutions" element={<div>Solutions</div>} />
-          <Route path="/industries" element={<div>Industries</div>} />
+          <Route path="/solutions" element={<Solutions />} />
+          <Route path="/industries" element={<Industries />} />
           <Route path="/how-it-works" element={<div>How It Works</div>} />
-          <Route path="/security" element={<div>Security</div>} />
-          <Route path="/pricing" element={<div>Pricing</div>} />
+          <Route path="/security" element={<Security/>} />
+          <Route path="/pricing" element={<Pricing/>} />
 
         </Route>
         <Route path="/login" element={<Login/>}/>
