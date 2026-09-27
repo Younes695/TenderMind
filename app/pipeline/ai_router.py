@@ -238,7 +238,7 @@ class EscalatingProvider(ModelProvider):
 
     The escalation result is used only when it is a valid, non-UNKNOWN answer;
     otherwise the primary outcome stands. Nothing is fabricated either way.
-    Enabled by TENDERMIND_ESCALATION_MODEL (off by default).
+    Model: TENDERMIND_ESCALATION_MODEL (default qwen3:4b; "off" disables).
     """
 
     def __init__(self, primary: ModelProvider, escalation_model: str,
@@ -299,20 +299,25 @@ class EscalatingProvider(ModelProvider):
         return m
 
 
+DEFAULT_ESCALATION_MODEL = "qwen3:4b"
+
+
 def default_router(timeout_s: int = 90) -> Router:
     """Production router: only REQUIREMENT_NORMALIZATION wired.
 
-    Optional per-task escalation: TENDERMIND_ESCALATION_MODEL=<ollama model>
-    (e.g. gemma3:12b) re-asks only UNKNOWN/failed candidates. Off by default —
-    on CPU-offloaded hardware the strong model costs 2-4 minutes per call.
+    Per-task escalation: only UNKNOWN/failed candidates are re-asked to
+    TENDERMIND_ESCALATION_MODEL (default qwen3:4b, measured +2/70 with no
+    change to rows the primary settled — docs/STAGE_5G_ESCALATION.md).
+    Set it to "off" to disable. If the model is not installed the call fails
+    fast and the primary outcome stands.
     """
     import os
     provider: ModelProvider = QwenMinimalContractProvider(timeout_s)
-    esc = os.environ.get("TENDERMIND_ESCALATION_MODEL", "").strip()
-    if esc:
+    esc = os.environ.get("TENDERMIND_ESCALATION_MODEL", DEFAULT_ESCALATION_MODEL).strip()
+    if esc and esc.lower() not in ("off", "none", "0", "false"):
         try:
-            esc_timeout = int(os.environ.get("TENDERMIND_ESCALATION_TIMEOUT", 240))
+            esc_timeout = int(os.environ.get("TENDERMIND_ESCALATION_TIMEOUT", 150))
         except ValueError:
-            esc_timeout = 240
+            esc_timeout = 150
         provider = EscalatingProvider(provider, esc, timeout_s=esc_timeout)
     return Router({AITask.REQUIREMENT_NORMALIZATION.value: provider})

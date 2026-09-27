@@ -188,3 +188,70 @@ def test_google_account_cannot_password_login(client, google):
     client.post("/api/auth/logout")
     r = client.post("/api/auth/login", json={"email": email, "password": "anything1"})
     assert r.status_code == 401 and "Google or Microsoft" in r.json()["detail"]
+
+
+def _ms_callback(client, monkeypatch, email, sub):
+    monkeypatch.setenv("MICROSOFT_CLIENT_ID", "ms-app-id")
+    monkeypatch.setenv("MICROSOFT_CLIENT_SECRET", "ms-secret")
+    state, nonce, _q = _start(client, "microsoft", "/dashboard")
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"id_token": _id_token({"aud": "ms-app-id", "exp": time.time() + 300, "nonce": nonce,
+                                            "iss": "https://login.microsoftonline.com/attacker-tenant/v2.0",
+                                            "preferred_username": email, "sub": sub})}
+    monkeypatch.setattr("requests.post", lambda *a, **k: R())
+    return client.get("/api/auth/oauth/microsoft/callback", params={"code": "c", "state": state},
+                      follow_redirects=False)
+
+
+def test_microsoft_cannot_take_over_a_password_account(client, monkeypatch):
+    """Stage 5G: Microsoft's preferred_username is set by any tenant admin, so it
+    must never sign in to an account created another way (nOAuth)."""
+    email = _email()
+    client.post("/api/auth/signup", json={"email": email, "password": "Tender2026"})
+    client.post("/api/auth/logout")
+    r = _ms_callback(client, monkeypatch, email, "attacker-sub")
+    assert r.headers["location"] == "/login?auth_error=account_exists"
+    assert client.get("/api/auth/me").json()["email"] != email
+
+
+def test_provider_identity_is_bound_after_first_sign_in(client, monkeypatch):
+    email = _email()
+    assert _ms_callback(client, monkeypatch, email, "ms-owner").headers["location"] == "/dashboard"
+    client.post("/api/auth/logout")
+    r = _ms_callback(client, monkeypatch, email, "ms-other")
+    assert r.headers["location"] == "/login?auth_error=account_exists"
+    assert _ms_callback(client, monkeypatch, email, "ms-owner").headers["location"] == "/dashboard"
+
+
+def test_login_is_rate_limited(client):
+    from app import auth
+    auth._login_failures.clear()
+    email = _email()
+    client.post("/api/auth/signup", json={"email": email, "password": "Tender2026"})
+    client.post("/api/auth/logout")
+    try:
+        codes = [client.post("/api/auth/login", json={"email": email, "password": "wrong-pass1"}).status_code
+                 for _ in range(11)]
+        assert codes[:10] == [401] * 10 and codes[10] == 429
+        # Even the right password is refused while locked (no oracle).
+        assert client.post("/api/auth/login", json={"email": email, "password": "Tender2026"}).status_code == 429
+    finally:
+        auth._login_failures.clear()
+
+
+def test_password_account_linked_by_google_keeps_working(client, google):
+    install, _ = google
+    email = _email()
+    client.post("/api/auth/signup", json={"email": email, "password": "Tender2026"})
+    client.post("/api/auth/logout")
+    for _ in range(2):  # first sign-in links, second must still be accepted
+        state, nonce, _q = _start(client, "google")
+        install({"aud": "gid.apps.googleusercontent.com", "iss": "https://accounts.google.com",
+                 "exp": time.time() + 300, "nonce": nonce, "email": email, "email_verified": True, "sub": "g-1"})
+        r = client.get("/api/auth/oauth/google/callback", params={"code": "c", "state": state}, follow_redirects=False)
+        assert r.headers["location"] == "/tenders"
+        client.post("/api/auth/logout")
+    assert client.post("/api/auth/login", json={"email": email, "password": "Tender2026"}).status_code == 200

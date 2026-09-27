@@ -23,6 +23,7 @@ class CompanyDocument(Base):
     source_path = Column(String)
     page = Column(String)
     section = Column(String)
+    owner_email = Column(String, nullable=True, index=True)  # app/access.py
 
 class Tender(Base):
     __tablename__ = "tenders"
@@ -31,6 +32,7 @@ class Tender(Base):
     client = Column(String)
     location = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+    owner_email = Column(String, nullable=True, index=True)  # app/access.py
 
 class TenderDocument(Base):
     __tablename__ = "tender_documents"

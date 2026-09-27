@@ -30,7 +30,7 @@ tender, used as holdout.
 |---|---|---|---|---|
 | qwen2.5:3b minimal-1 (4B baseline) | 11 = 0.688 | 20 = 0.606 | 11 = 0.524 | ~5s |
 | gemma3:12b minimal-1 (4B baseline) | 14 = 0.875 | 23 = 0.697 | — | ~32s |
-| **qwen2.5:3b minimal-2** | **15 = 0.938** | **28 = 0.848** | **18 = 0.857** | ~5s |
+| **qwen2.5:3b minimal-2** | **15 = 0.938** | **27 = 0.818** (stored run; an earlier run scored 28) | **18 = 0.857** | ~5s |
 | phi4-mini minimal-2 (partial) | 15 = 0.938 | 11/15 = 0.733 | — | ~9s |
 
 Remaining qwen minimal-2 errors (9/70) include several debatable gold labels
@@ -72,4 +72,4 @@ Same files as the Stage 4G pilot; real server, flag on, qwen2.5:3b, minimal-2,
 ## Rollout
 Default model stays qwen2.5:3b. Recommended production env:
 `TENDERMIND_TWO_STAGE_LLM=1`, `TENDERMIND_WORKERS_ENABLED=1`,
-`TENDERMIND_MAX_AI_WORKERS=2`. Leave `TENDERMIND_ESCALATION_MODEL` unset.
+`TENDERMIND_MAX_AI_WORKERS=2`. Escalation default changed in Stage 5G (qwen3:4b) — see STAGE_5G_ESCALATION.md.

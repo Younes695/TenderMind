@@ -34,6 +34,7 @@ export const AUTH_ERRORS = {
   email_not_verified: "Your Google email address is not verified.",
   no_email: "The provider did not share an email address.",
   signup_disabled: "New accounts are not accepted on this server.",
+  account_exists: "An account with this email already exists. Sign in the way you created it (email and password, or the original provider).",
 };
 
 const PROVIDERS = [

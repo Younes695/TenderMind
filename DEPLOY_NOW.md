@@ -1,3 +1,26 @@
+# ✅ الحالة بعد Stage 5G (28 سبتمبر 2026)
+
+## التشغيل بـ Docker (الطريقة الموصى بيها)
+```bash
+cp .env.example .env      # حط TENDERMIND_SESSION_SECRET (32 حرف على الأقل)
+docker compose up -d --build
+```
+بيشغّل التطبيق + Ollama وبينزّل qwen2.5:3b و qwen3:4b أول مرة (~4.5 GB). التطبيق على `127.0.0.1:8001` —
+حط قدامه reverse proxy بـ HTTPS (Caddy / nginx). البيانات في volume اسمه `tendermind-data`.
+⚠️ ملفات Docker اتكتبت واتعملها `docker compose config` بس **ماتبنتش** على جهاز التطوير لأن Docker Desktop بايظ عليه — أول بناء على السيرفر هو أول تجربة حقيقية.
+
+## اللي اتصلح (التفاصيل في `docs/STAGE_5G_PRODUCTION_HARDENING.md`)
+- 🔴 أي حساب جديد كان بيشوف ويمسح مناقصات وملفات كل الحسابات التانية → دلوقتي كل حساب شايف بياناته بس.
+- 🔴 ثغرة دخول على حساب أي حد عن طريق Microsoft sign-in → اتقفلت.
+- 🔴 تسطيب نضيف من `requirements.txt` كان بيقع وقت التشغيل (5 مكتبات ناقصة) → اتضافت.
+- ثغرات معروفة في Pillow و Starlette و python-dotenv → اتحدّثت، `pip-audit` و `npm audit` صفر.
+- حماية من تخمين الباسورد، security headers، `/docs` مقفولة في البرودكشن، `/health` بيفحص قاعدة البيانات.
+
+## الـ AI (التفاصيل في `docs/STAGE_5G_ESCALATION.md`)
+تصنيف المتطلبات على 70 بند: **60/70 (0.857) → 62/70 (0.886)** بإن البنود اللي qwen2.5:3b مش متأكد منها بتتسأل تاني لـ qwen3:4b.
+
+---
+
 # ⚡ أسرع طريقة تشغيل (3 أوامر)
 ```bash
 pip install -r requirements.txt && apt-get install -y tesseract-ocr tesseract-ocr-ara
@@ -81,7 +104,7 @@ export TENDERMIND_COOKIE_SECURE=true          # لو السيرفر شغال ع�
   طلعت من 69% → 94% (primary)، 61% → 85% (secondary)، 52% → 86% (Sarai holdout).
 - الـ workers المتوازية كانت مكتوبة بس مش متوصلة — اتوصلت.
 - باگ كان بيوقّع أي تشغيل AI في مرحلة الحفظ لما مكتبة `jsonschema` تكون متسطبة (confidence = null) — اتصلح واتضافت `jsonschema` لـ requirements.
-- التصعيد لموديل أقوى (`TENDERMIND_ESCALATION_MODEL`) موجود بس مقفول افتراضيًا — على جهاز 4GB VRAM بياخد 2-4 دقايق للنداء.
+- البنود اللي qwen2.5:3b يرجعها UNKNOWN بتتسأل تاني لـ qwen3:4b افتراضيًا (`TENDERMIND_ESCALATION_MODEL`, و `off` يقفله). لازم `ollama pull qwen3:4b` على السيرفر.
 
 إعدادات البروداكشن المقترحة:
 ```bash

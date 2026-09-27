@@ -24,7 +24,7 @@ if [ -z "${TENDERMIND_AUTH_EMAIL:-}" ] && [ -n "${TENDERMIND_AUTH_PASSWORD:-}" ]
 ok "auth secrets configured"
 
 # 2. Python deps
-python3 -c "import fastapi, sqlalchemy, fitz, pytesseract, PIL, xlrd" 2>/dev/null \
+python3 -c "import fastapi, sqlalchemy, fitz, pytesseract, PIL, xlrd, itsdangerous, requests, docx, olefile, openpyxl, jsonschema" 2>/dev/null \
   || fail "Python deps missing — run: pip install -r requirements.txt"
 ok "python dependencies"
 

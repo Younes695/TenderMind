@@ -1,6 +1,8 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
 from app.auth import require_auth
+from app.access import (enforce_tender_access, owner_filter, owner_for_new_rows, owns,
+                        tender_owner_or_404, is_admin, DEMO_COMPANY_ID)
 from sqlalchemy.orm import Session
 from app.database import get_db, get_storage_root
 from app.models import Tender, Requirement, Evidence, EvidenceMatch, Risk, MissingEvidence, Decision, DecisionAudit, Company, CompanyDocument, TenderDocument, TenderAnalysis, ProcessingJob
@@ -13,14 +15,19 @@ from typing import List, Optional
 import re
 from pathlib import Path
 
-router = APIRouter(dependencies=[Depends(require_auth)])
+router = APIRouter(dependencies=[Depends(require_auth), Depends(enforce_tender_access)])
 
 @router.get("/tenders")
-def list_tenders(db: Session = Depends(get_db)):
-    return db.query(Tender).all()
+def list_tenders(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.access import DEMO_TENDER_ID
+    q = db.query(Tender)
+    flt = owner_filter(Tender.owner_email, user)
+    if flt is not None:
+        q = q.filter(flt | (Tender.id == DEMO_TENDER_ID))
+    return q.all()
 
 @router.post("/tenders")
-def create_tender(payload: dict, db: Session = Depends(get_db)):
+def create_tender(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     # Validate required fields per existing model conventions
     raw_id = payload.get("id") or payload.get("tender_id")
     title = payload.get("title")
@@ -60,6 +67,7 @@ def create_tender(payload: dict, db: Session = Depends(get_db)):
         title=title_str,
         client=payload.get("client"),
         location=payload.get("location"),
+        owner_email=owner_for_new_rows(user),
     )
     db.add(tender)
     db.commit()
@@ -604,7 +612,11 @@ def get_explanation(tender_id: str, db: Session = Depends(get_db)):
     return exp
 
 @router.get("/company/{company_id}")
-def get_company(company_id: str, db: Session = Depends(get_db)):
+def get_company(company_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    # Evaluation evidence of every account shares the working company id, so
+    # only the curated demo company is readable outside dev / the env admin.
+    if company_id != DEMO_COMPANY_ID and not (user.get("auth_disabled") or is_admin(user)):
+        raise HTTPException(status_code=404, detail="Company not found")
     c = db.query(Company).filter(Company.id == company_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -618,15 +630,18 @@ _COMPANY_EXTS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt", ".md", ".csv"
 
 
 @router.get("/company-documents")
-def list_company_documents(db: Session = Depends(get_db)):
+def list_company_documents(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     from app.engines.tender_bridge import COMPANY_ID
-    docs = db.query(CompanyDocument).filter(CompanyDocument.company_id == COMPANY_ID).all()
+    q = db.query(CompanyDocument).filter(CompanyDocument.company_id == COMPANY_ID)
+    flt = owner_filter(CompanyDocument.owner_email, user)
+    docs = (q.filter(flt) if flt is not None else q).all()
     return {"documents": [{"id": d.id, "title": d.title, "document_type": d.document_type} for d in docs],
             "count": len(docs)}
 
 
 @router.post("/company-documents")
-def upload_company_documents(files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+def upload_company_documents(files: List[UploadFile] = File(...), db: Session = Depends(get_db),
+                             user: dict = Depends(require_auth)):
     from app.engines.tender_bridge import COMPANY_ID, ensure_company
     ensure_company(db)
     root = (get_storage_root() / "_company").resolve()
@@ -644,16 +659,17 @@ def upload_company_documents(files: List[UploadFile] = File(...), db: Session = 
         dest = root / f"{doc_id}{ext}"
         _stream_to_disk(f, dest, name)
         db.add(CompanyDocument(id=doc_id, company_id=COMPANY_ID, document_type=ext.lstrip(".").upper(),
-                               title=name, source_path=str(dest), page="", section=""))
+                               title=name, source_path=str(dest), page="", section="",
+                               owner_email=owner_for_new_rows(user)))
         created.append({"id": doc_id, "title": name, "document_type": ext.lstrip(".").upper()})
     db.commit()
     return {"documents": created, "count": len(created)}
 
 
 @router.delete("/company-documents/{doc_id}")
-def delete_company_document(doc_id: str, db: Session = Depends(get_db)):
+def delete_company_document(doc_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     d = db.query(CompanyDocument).filter(CompanyDocument.id == doc_id).first()
-    if not d:
+    if not d or not owns(d.owner_email, user):
         raise HTTPException(status_code=404, detail="Not found")
     try:
         p = Path(d.source_path or "")
@@ -761,11 +777,15 @@ def _coverage_payload(job) -> dict:
 
 
 @router.get("/processing-jobs/{job_id}")
-def get_job_status(job_id: str, db: Session = Depends(get_db)):
+def get_job_status(job_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     try:
         job = get_processing_job(db, job_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    try:
+        tender_owner_or_404(db, job.tender_id, user)
+    except HTTPException:
+        raise HTTPException(status_code=404, detail=f"Processing job {job_id} not found")
     from app.models import StageEvent
     history = db.query(StageEvent).filter(StageEvent.job_id == job_id).order_by(StageEvent.created_at).all()
     return {

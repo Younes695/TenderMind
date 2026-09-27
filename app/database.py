@@ -66,6 +66,13 @@ def init_db():
             if "original_filename" not in cols:
                 conn.execute(text("ALTER TABLE tender_documents ADD COLUMN original_filename VARCHAR"))
                 conn.commit()
+            # Stage 5G: per-account ownership (app/access.py). Existing rows stay
+            # NULL = owned by the env admin only.
+            for table in ("tenders", "company_documents"):
+                tcols = [row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
+                if "owner_email" not in tcols:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_email VARCHAR"))
+                    conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
         pass
