@@ -128,6 +128,48 @@ Category definitions (classify by PRIMARY PURPOSE, not keywords):
 Classify by PRIMARY PURPOSE, not keywords. Similar 220kV projects is EXPERIENCE even though it contains 220kV/GIS.
 """
 
+# --- Prompt Variant C (Stage 3E controlled experiment, minimal PRIMARY PURPOSE clarification) ---
+# Variant B is preserved unchanged above. Variant C appends ONLY concise semantic guidance.
+# No tender-specific examples, no new categories, no gold answers, UNKNOWN != FALSE preserved.
+PROMPT_VERSION_B = "Variant B"
+PROMPT_VERSION_C = "Variant C"
+PROMPT_VERSION_D = "Variant D"
+
+LLM_PRIMARY_PURPOSE_CLARIFICATION = """Primary-purpose guidance (semantic, not keyword matching):
+- Classify by the main business/contractual purpose of the requirement.
+- Experience requirements (bidder history, past projects, reference projects) -> EXPERIENCE.
+- Financial capacity, turnover, audited statements, bank guarantee capacity -> FINANCIAL.
+- Power of attorney, legal authorization, registration, consortium agreement -> LEGAL.
+- Personnel qualifications, staff CVs, key staff, project manager -> PERSONNEL.
+- Payment, price, bid security, commercial terms -> COMMERCIAL.
+- Delivery, completion, submission, opening, validity dates -> SCHEDULE.
+- Equipment, specification, performance, testing, drawings -> TECHNICAL."""
+
+LLM_SYSTEM_PROMPT_VARIANT_C = LLM_SYSTEM_PROMPT + "\n\n" + LLM_PRIMARY_PURPOSE_CLARIFICATION
+
+# --- Prompt Variant D (Stage 3F controlled experiment, structural only) ---
+# Variant B preserved unchanged. Variant D adds ONLY one structural instruction.
+# No category examples, definitions, priorities, tender terms, gold answers, or recall maximization.
+LLM_STRUCTURAL_INSTRUCTION = """Extract all distinct requirements present in the supplied chunk; do not stop after identifying only one requirement."""
+
+LLM_SYSTEM_PROMPT_VARIANT_D = LLM_SYSTEM_PROMPT + "\n\n" + LLM_STRUCTURAL_INSTRUCTION
+
+
+def get_system_prompt(variant: str = "B") -> str:
+    """Return the system prompt for a variant. Default is Variant B (production)."""
+    if variant == "C":
+        return LLM_SYSTEM_PROMPT_VARIANT_C
+    if variant == "D":
+        return LLM_SYSTEM_PROMPT_VARIANT_D
+    return LLM_SYSTEM_PROMPT
+
+
+def prompt_hash(prompt: str) -> str:
+    """Short stable hash for prompt version tracking (evaluation artifacts)."""
+    import hashlib
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16]
+
+
 def build_llm_prompt(chunk: Dict[str, Any]) -> str:
     return f"""Extract requirements and evidence from this tender chunk.
 
@@ -174,15 +216,16 @@ If no requirements, return {{"requirements": [], "evidence": []}}.
 """
 
 # --- LLM Call ---
-def call_ollama_for_chunk(chunk: Dict[str, Any], model: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def call_ollama_for_chunk(chunk: Dict[str, Any], model: Optional[str] = None, system_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
     import requests, json as js
     base = get_ollama_base_url()
     mdl = model or get_ollama_model()
     prompt = build_llm_prompt(chunk)
+    sys_prompt = system_prompt or LLM_SYSTEM_PROMPT
     payload = {
         "model": mdl,
         "messages": [
-            {"role": "system", "content": LLM_SYSTEM_PROMPT},
+            {"role": "system", "content": sys_prompt},
             {"role": "user", "content": prompt}
         ],
         "stream": False,
@@ -309,6 +352,13 @@ def deduplicate_requirements(reqs: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     return result
 
 # --- Canonical ID Assignment ---
+def _chunk_prefix(cid: Optional[str]) -> Optional[str]:
+    """Extract chunk-XXXX prefix from candidate IDs like chunk-0001-item-01 or chunk-0001-ev-01."""
+    if not cid or not isinstance(cid, str):
+        return None
+    m = re.match(r"(chunk-\d+)", cid)
+    return m.group(1) if m else None
+
 def assign_canonical_ids(requirements: List[Dict[str, Any]], evidence: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Assign canonical REQ-* IDs after deduplication — deterministic, stable ordering — evidence follows requirement map, never list position"""
     # Sort by source_document, page_number, then summary for stability
@@ -324,8 +374,20 @@ def assign_canonical_ids(requirements: List[Dict[str, Any]], evidence: List[Dict
         # Ensure extraction_method is llm
         req["extraction_method"] = "llm"
     # Update evidence to reference canonical IDs — invariant: same candidate maps to same canonical
+    # Defense-in-depth (Stage 3C): evidence chunk must match requirement chunk, else reject.
     for ev in evidence:
+        if "_rejected" in ev:
+            continue
         old_req_id = ev.get("requirement_candidate_id") or ev.get("requirement_id")
+        ev_cid = ev.get("candidate_id") or ev.get("evidence_id")
+        # Chunk-prefix consistency: evidence and its requirement must come from same chunk.
+        if old_req_id and ev_cid:
+            req_prefix = _chunk_prefix(old_req_id)
+            ev_prefix = _chunk_prefix(ev_cid)
+            if req_prefix and ev_prefix and req_prefix != ev_prefix:
+                ev["_rejected"] = f"cross-chunk evidence {ev_cid} -> {old_req_id}"
+                ev["requirement_id"] = None
+                continue
         if old_req_id in canonical_map:
             ev["requirement_id"] = canonical_map[old_req_id]
             ev["_candidate_requirement_id"] = old_req_id
@@ -359,7 +421,9 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
         parsed, status = parse_llm_json(result["raw"])
         if not parsed:
             continue
-        # Requirements
+        # Requirements — strict per-chunk IDs, no silent drift (Stage 3C)
+        seen_req_ids: set = set()
+        orig_to_corrected: dict = {}
         for idx_r, req in enumerate(parsed.get("requirements", [])):
             # Handle candidate_id — must be chunk-aware, not allow collision across chunks
             # If LLM provided candidate_id, ensure it matches chunk prefix, otherwise correct it
@@ -371,6 +435,7 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
                 req["_original_candidate_id"] = provided_cid
                 req["candidate_id"] = corrected
                 req["requirement_id"] = corrected
+                orig_to_corrected[provided_cid] = corrected
             elif "candidate_id" in req and "requirement_id" not in req:
                 req["requirement_id"] = req["candidate_id"]
             elif "candidate_id" not in req and "requirement_id" not in req:
@@ -378,6 +443,17 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
                 gen_id = f"{chunk['chunk_id']}-item-{idx_r+1:02d}"
                 req["candidate_id"] = gen_id
                 req["requirement_id"] = gen_id
+            # Duplicate candidate IDs within the same chunk must not collide silently
+            if req.get("candidate_id") in seen_req_ids:
+                dup_orig = req.get("candidate_id")
+                corrected = f"{chunk['chunk_id']}-item-{idx_r+1:02d}-d{len(seen_req_ids)+1:02d}"
+                req["_original_candidate_id"] = req.get("_original_candidate_id", dup_orig)
+                req["_duplicate_candidate_id"] = dup_orig
+                req["candidate_id"] = corrected
+                req["requirement_id"] = corrected
+            seen_req_ids.add(req.get("candidate_id"))
+            if provided_cid and provided_cid.startswith(expected_prefix):
+                orig_to_corrected.setdefault(provided_cid, req.get("candidate_id"))
             req["extraction_method"] = "llm"
             ok, msg = validate_requirement(req, chunk)
             if not ok:
@@ -392,7 +468,16 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
                 req["page_number"] = chunk["page_number"]
             # Ensure provenance not downgraded for low confidence
             all_reqs.append(req)
-        # Evidence — must reference correct candidate, chunk-aware
+        # Evidence — must reference correct candidate, chunk-aware (Stage 3C fix: strict source-local)
+        # Track candidate IDs created in this chunk for strict validation
+        chunk_req_ids = {r.get("candidate_id") for r in parsed.get("requirements", []) if r.get("candidate_id")}
+        # Include original IDs that were corrected above so same-chunk hallucinated linkage can be remapped
+        chunk_req_ids |= set(orig_to_corrected.keys())
+        chunk_req_ids |= set(orig_to_corrected.values())
+        # Expected generated IDs for this chunk
+        expected_ids = {f"{chunk['chunk_id']}-item-{i+1:02d}" for i in range(len(parsed.get("requirements", [])))}
+        chunk_req_ids |= expected_ids
+        seen_ev_ids: set = set()
         for idx_e, ev in enumerate(parsed.get("evidence", [])):
             if "candidate_id" in ev and "evidence_id" not in ev:
                 # Ensure evidence candidate_id is chunk-aware
@@ -403,15 +488,37 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
                     ev["evidence_id"] = ev["candidate_id"]
                 else:
                     ev["evidence_id"] = ev["candidate_id"]
-            # Handle requirement linkage — must be chunk-aware
+            elif "evidence_id" not in ev and "candidate_id" not in ev:
+                # Missing candidate ID — generate one, but will still need requirement linkage
+                gen_eid = f"{chunk['chunk_id']}-ev-{idx_e+1:02d}"
+                ev["candidate_id"] = gen_eid
+                ev["evidence_id"] = gen_eid
+            if ev.get("candidate_id") in seen_ev_ids or ev.get("evidence_id") in seen_ev_ids:
+                dup = ev.get("candidate_id")
+                ev["_duplicate_candidate_id"] = dup
+                ev["candidate_id"] = f"{chunk['chunk_id']}-ev-{idx_e+1:02d}-d{len(seen_ev_ids)+1:02d}"
+                ev["evidence_id"] = ev["candidate_id"]
+            seen_ev_ids.add(ev.get("candidate_id"))
+            seen_ev_ids.add(ev.get("evidence_id"))
+            # Handle requirement linkage — must be chunk-aware and exist
             req_cand = ev.get("requirement_candidate_id")
-            if req_cand and not req_cand.startswith(chunk["chunk_id"]):
-                # Evidence references candidate from different chunk — likely hallucination, keep but will be validated as unknown
-                # Preserve original for debugging
+            if not req_cand:
+                # Missing linkage — evidence must reference a requirement; reject if cannot be safely resolved
+                ev["_rejected"] = "missing requirement_candidate_id"
+                continue
+            # Remap same-chunk hallucinated original ID to its corrected ID when possible
+            if req_cand in orig_to_corrected:
                 ev["_original_requirement_candidate_id"] = req_cand
-                # Try to find if there's a requirement in this chunk with similar summary that this evidence should link to
-                # For now, keep as is and let assign_canonical_ids handle rejection if unknown
-                pass
+                req_cand = orig_to_corrected[req_cand]
+                ev["requirement_candidate_id"] = req_cand
+            if not req_cand.startswith(chunk["chunk_id"]):
+                # Cross-chunk hallucination: evidence references requirement from another chunk — must be rejected, not silently attached to REQ-001
+                ev["_original_requirement_candidate_id"] = ev.get("_original_requirement_candidate_id", req_cand)
+                ev["_rejected"] = f"cross-chunk hallucination {req_cand} not in {chunk['chunk_id']}"
+                continue
+            if req_cand not in chunk_req_ids:
+                ev["_rejected"] = f"unknown candidate {req_cand} not in chunk {chunk['chunk_id']}"
+                continue
             # Validate
             ok_e, msg_e = validate_evidence(ev, chunk)
             if not ok_e:
@@ -421,6 +528,10 @@ def llm_extract_requirements_for_tender(tender_path: Path, tender_id: Optional[s
                 ev["source_document"] = chunk["source_document"]
             if not ev.get("page_number"):
                 ev["page_number"] = chunk["page_number"]
+            # Ensure evidence remains tied to source chunk (provenance)
+            if ev.get("source_document") != chunk["source_document"]:
+                ev["_rejected"] = "source_document mismatch after validation"
+                continue
             all_evs.append(ev)
     # Deduplicate requirements (conservative)
     deduped_reqs = deduplicate_requirements(all_reqs)

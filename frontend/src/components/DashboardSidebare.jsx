@@ -1,4 +1,5 @@
-import { Link, NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -14,7 +15,9 @@ import {
   LifeBuoy,
   Settings,
   X,
+  LogOut,
 } from "lucide-react";
+import apiClient from "../api/client";
 
 import logo from "../assets/logo.jpg";
 
@@ -52,7 +55,6 @@ const mainNav = [
     to: "/approvals",
     label: "Approvals",
     icon: Stamp,
-    badge: 4,
   },
   {
     to: "/documents",
@@ -143,13 +145,15 @@ function NavItem({
 
 // ================= Sidebar Content (logo kept as-is) =================
 
-function SidebarContent({ user, onNavigate, onClose }) {
-  const initials = user.name
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function initialsFor(email) {
+  const local = String(email || "").split("@")[0];
+  const parts = local.split(/[._\-\s]+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : local.slice(0, 2);
+  return (letters || "?").toUpperCase();
+}
+
+function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
+  const initials = initialsFor(user.email);
 
   return (
     <div className="flex h-full flex-col bg-[#0F1D38] px-4 py-5 text-white">
@@ -236,19 +240,29 @@ function SidebarContent({ user, onNavigate, onClose }) {
         </span>
 
 
-        {/* User Info */}
+        {/* User Info — the signed-in account (GET /api/auth/me) */}
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
 
-          <p className="truncate text-[15px] font-bold text-white">
-            {user.name}
+          <p data-testid="sidebar-user-email" className="truncate text-[14px] font-bold text-white" title={user.email || ""}>
+            {user.email || "Loading…"}
           </p>
 
-          <p className="truncate text-[13px] text-[#a9b8d4]">
-            {user.role}
+          <p className="truncate text-[12px] text-[#a9b8d4]">
+            Signed in
           </p>
 
         </div>
+
+        <button
+          type="button"
+          onClick={onSignOut}
+          aria-label="Sign out"
+          title="Sign out"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#c5d0e6] hover:bg-white/10 hover:text-white"
+        >
+          <LogOut size={18} />
+        </button>
 
       </div>
     </div>
@@ -259,22 +273,34 @@ function SidebarContent({ user, onNavigate, onClose }) {
 // ================= Sidebar =================
 
 function DashboardSidebar({
-  user = {
-    name: "Khalid Alotaibi",
-    role: "Tender Manager",
-  },
   open = false,
   onClose,
 }) {
+  const navigate = useNavigate();
+  const [user, setUser] = useState({ email: "" });
+
+  useEffect(() => {
+    let alive = true;
+    apiClient.getCurrentUser()
+      .then((me) => { if (alive) setUser({ email: me?.email || "" }); })
+      .catch(() => { if (alive) setUser({ email: "" }); });
+    return () => { alive = false; };
+  }, []);
+
   const handleNavigate = () => {
     onClose?.();
+  };
+
+  const handleSignOut = async () => {
+    try { await apiClient.logout(); } catch { /* session already gone */ }
+    navigate("/login", { replace: true });
   };
 
   return (
     <>
       {/* Desktop */}
       <aside className="hidden h-screen w-[280px] shrink-0 lg:block">
-        <SidebarContent user={user} onNavigate={undefined} onClose={undefined} />
+        <SidebarContent user={user} onNavigate={undefined} onClose={undefined} onSignOut={handleSignOut} />
       </aside>
 
       {/* Mobile drawer */}
@@ -285,7 +311,7 @@ function DashboardSidebar({
             onClick={onClose}
           />
           <aside className="absolute left-0 top-0 h-full w-[300px] max-w-[85vw] shadow-2xl">
-            <SidebarContent user={user} onNavigate={handleNavigate} onClose={onClose} />
+            <SidebarContent user={user} onNavigate={handleNavigate} onClose={onClose} onSignOut={handleSignOut} />
           </aside>
         </div>
       )}

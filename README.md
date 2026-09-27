@@ -64,11 +64,15 @@ Evidences: E-001 (R PASS), E-002 (B PASS), E-003 (J PASS), E-004 (U REVIEW). All
 ## Run
 
 ```powershell
-cd "C:\Users\EgyTech\Documents\Default Project\TenderMind"
+cd TenderMind
 pip install -r requirements.txt
-python -c "from app.seed import seed; seed()"
+cd frontend; npm install; npm run build; cd ..
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
+
+The Sarai demo tender is seeded automatically on first start. For frontend
+development run `npm run dev` in `frontend/` (proxies `/api` to port 8001).
+For production see `DEPLOY_NOW.md` and `run_prod.sh`.
 
 - UI: http://127.0.0.1:8001
 - API docs: http://127.0.0.1:8001/docs

@@ -219,8 +219,8 @@ def test_unknown_deadline_type():
     """Unknown deadline type should be valid"""
     from evaluation.generic_extraction import validate_against_schema, extract_deadlines_deterministic
     from pathlib import Path
-    # Test extraction produces unknown type
-    dates = extract_deadlines_deterministic("Meeting on 16 of August, 2018")
+    # Test extraction produces unknown type — requires deadline context (Stage 3A hardening)
+    dates = extract_deadlines_deterministic("Deadline meeting on 16 of August, 2018")
     assert len(dates) > 0
     assert dates[0]["type"] == "unknown"
     # Validate via schema

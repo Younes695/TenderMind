@@ -12,9 +12,30 @@ def seed():
     init_db()
     db = SessionLocal()
     try:
-        # Clear existing Test001 data
-        for m in [EvidenceMatch, Risk, Evidence, Requirement, TenderDocument, Tender, Company]:
-            db.query(m).delete()
+        # Stage 1B safety: non-destructive seeding — only seed Sarai if not already present
+        # Do NOT delete unrelated tenders/documents uploaded via API
+        existing_tender = db.query(Tender).filter(Tender.id == "SA-2018-HV2").first()
+        if existing_tender:
+            # Already seeded — idempotent, do not delete
+            return
+        # Clear only Sarai-specific data if partial (preserve non-Sarai tenders)
+        # Remove any stale Sarai rows if they exist without the tender (edge)
+        for m, filt in [
+            (EvidenceMatch, EvidenceMatch.requirement_id.like("REQ-%")),
+            (Risk, Risk.tender_id == "SA-2018-HV2"),
+            (Evidence, Evidence.id.like("E-00%")),
+            (Requirement, Requirement.tender_id == "SA-2018-HV2"),
+            (TenderDocument, TenderDocument.tender_id == "SA-2018-HV2"),
+        ]:
+            try:
+                db.query(m).filter(filt).delete()
+            except Exception:
+                pass
+        # Company is global; only recreate if missing
+        if not db.query(Company).filter(Company.id == "HYOSUNG_GIZA").first():
+            pass  # will create below
+        else:
+            db.query(Company).filter(Company.id == "HYOSUNG_GIZA").delete()
         db.commit()
 
         # Company

@@ -153,6 +153,9 @@ def file_inventory():
         elif ext == ".xlsx":
             method = "XLSX → openpyxl sheet extraction"
             ocr_needed = "NO"
+        elif ext in (".txt", ".log", ".csv"):
+            method = "TXT → direct text read (utf-8, preserves Arabic/English)"
+            ocr_needed = "NO"
         else:
             method = f"Unknown {ext}"
             ocr_needed = "UNKNOWN"
@@ -190,7 +193,13 @@ def _call_tesseract_routing(pdf_path: Path):
     spec = importlib.util.spec_from_file_location("tesseract_local_ocr", str(BASE / "evaluation" / "tesseract_local_ocr.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.extract_pdf_with_tesseract_routing(pdf_path)
+    pages = mod.extract_pdf_with_tesseract_routing(pdf_path)
+    # Tesseract routing labels pages "source_page_number"; every consumer reads
+    # "page_number". Without this, all provenance collapsed to page 1.
+    for i, pg in enumerate(pages or []):
+        if isinstance(pg, dict) and not pg.get("page_number"):
+            pg["page_number"] = pg.get("source_page_number") or (i + 1)
+    return pages
 
 def extract_pdf_text(pdf_path, ocr_needed_hint=None):
     """Extract per-page text with provenance — now wires local Tesseract (evaluation/tesseract_local_ocr.py) for scanned pages.
@@ -446,6 +455,12 @@ def run_document_intelligence(inventory):
             pages = extract_docx_text(p)
         elif ext in (".xls", ".xlsx"):
             pages = extract_xls_text(p)
+        elif ext in (".txt", ".log", ".csv"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="ignore")
+                pages = [{"page_number": 1, "text": text, "method": "txt", "ocr_applied": False, "extraction_confidence": 0.9 if len(text.strip()) > 50 else 0.5}]
+            except Exception as e:
+                pages = [{"page_number": 1, "text": "", "method": f"txt_error: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e)}]
         else:
             pages = [{"page_number": 1, "text": "", "method": "unsupported"}]
         results[f["filename"]] = {

@@ -15,6 +15,8 @@ import re
 import time
 from typing import Optional, List
 
+import requests
+
 from .base import BaseMatcher, MatcherInput, MatcherOutput
 
 DEFAULT_MODEL = "qwen3:4b"
@@ -168,6 +170,9 @@ class OllamaMatcher(BaseMatcher):
             "format": "json",
             "options": {"temperature": 0}
         }
+        if str(self.model).startswith("qwen3"):
+            # qwen3 thinks by default: minutes per call and broken single-JSON output.
+            payload["think"] = False
         try:
             resp = requests.post(
                 f"{self.endpoint}/api/chat",

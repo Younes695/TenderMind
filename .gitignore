@@ -82,3 +82,12 @@ Thumbs.db
 .idea/
 *.swp
 *~
+
+# Stage 5B real-tender run summaries quote tender text — keep local
+evaluation/stage5b/*_summary.json
+
+# Evaluation run data quotes real tender documents — keep local, never push
+# (scripts and READMEs in the same folders are tracked).
+evaluation/stage*/**/*.json
+evaluation/stage*/**/*.jsonl
+evaluation/stage*/**/*.txt

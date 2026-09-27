@@ -1,9 +1,11 @@
 """
-Processing Pipeline — TenderMind — Phase 3A
+Processing Pipeline — TenderMind — Phase 3A + Stage 1B
 - Orchestrates: inventory → extraction → classification → deterministic → semantic → validation → persistence
 - Async via BackgroundTasks (in-process, no Redis/Celery)
 - Failure isolation per document: COMPLETE/PARTIAL/FAILED/UNSUPPORTED
 - Never makes BID/NO_BID decision (analysis only)
+- Stage 1B: Uses persisted TenderDocument.source_path via get_storage_root() single source of truth.
+-          No Sarai fallback for real uploaded tenders.
 """
 import uuid
 import datetime
@@ -11,7 +13,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from app.models import ProcessingJob, Tender
-from app.database import SessionLocal
+from app.database import SessionLocal, get_storage_root
 
 PIPELINE_VERSION = "1.0"
 LLM_MODEL = "qwen2.5:3b"
@@ -62,6 +64,60 @@ def update_job_progress(db: Session, job: ProcessingJob, stage: str, progress: f
             setattr(job, k, v)
     db.commit()
 
+
+def record_stage(db: Session, job_id: str, stage: str, status: str = "COMPLETED",
+                 counts: dict | None = None, error: str | None = None):
+    """Stage 4G — persist a stage-transition event (refresh/reconnect recovery).
+
+    Best-effort: never breaks processing on logging failure.
+    """
+    try:
+        from app.models import StageEvent
+        db.add(StageEvent(
+            id=f"STG-{uuid.uuid4().hex[:8].upper()}",
+            job_id=job_id, stage=stage, status=status,
+            counts=counts or {}, error=(error[:500] if error else None),
+            created_at=datetime.datetime.utcnow()))
+        db.commit()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+def _resolve_tender_dir(tender_id: str):
+    """Single source of truth for tender storage directory."""
+    storage_root = get_storage_root()
+    return storage_root / tender_id
+
+def _is_sarai_tender(tender_id: str) -> bool:
+    return tender_id == "SA-2018-HV2"
+
+def _derive_terminal_status(
+    documents_total: int,
+    documents_processed: int,
+    documents_failed: int,
+    documents_unsupported: int,
+) -> str:
+    total = int(documents_total or 0)
+    processed = int(documents_processed or 0)
+    failed = int(documents_failed or 0)
+    unsupported = int(documents_unsupported or 0)
+
+    if total == 0:
+        return "COMPLETED"
+
+    if processed == total and failed == 0 and unsupported == 0:
+        return "COMPLETED"
+
+    if failed > 0 and processed == 0 and unsupported == 0:
+        return "FAILED"
+
+    if processed > 0 or unsupported > 0:
+        return "PARTIAL"
+
+    return "FAILED"
+
 def process_tender(tender_id: str, job_id: str):
     """Orchestration function — runs in BackgroundTasks"""
     db = SessionLocal()
@@ -75,35 +131,156 @@ def process_tender(tender_id: str, job_id: str):
         job.progress = 5
         db.commit()
 
-        # Stage 1: Inventory
+        # Stage 1: Inventory — real, from persisted TenderDocuments or filesystem
+        # Production flow for new tenders: MUST use TenderDocument.source_path or storage_root/tender_id
+        # Sarai fallback isolated: only for SA-2018-HV2 when no real uploads exist (regression/evaluation only)
+        job_inventory = []
         try:
-            import evaluation.run_real_benchmark as rb
-            from pathlib import Path
-            # For generic, use tender_path from TenderDocument or default
-            # For now, use the tender's document directory if exists, else use a temp
-            # In Phase 3A, we use the existing Sarai path for demo, but generic should use tender_id to find files
-            # For now, just simulate inventory
-            job.current_stage = "INVENTORY"
-            job.progress = 10
-            job.documents_total = 0
-            db.commit()
+            from app.models import TenderDocument
+            import os
+            storage_root = get_storage_root()
+            tender_docs = []
+            try:
+                tender_docs = db.query(TenderDocument).filter(TenderDocument.tender_id == tender_id).all()
+            except Exception:
+                tender_docs = []
+
+            # Prefer DB source_path if any doc has it (Stage 1B path)
+            docs_with_path = []
+            if tender_docs:
+                for doc in tender_docs:
+                    sp = getattr(doc, "source_path", None)
+                    if sp and str(sp).strip():
+                        p = Path(str(sp))
+                        if p.exists() and p.is_file():
+                            docs_with_path.append(doc)
+                        else:
+                            # Try reconstructing from storage_root if absolute path missing (migration compat)
+                            # Title holds filename, storage_root/tender_id/filename should exist
+                            reconstructed = storage_root / tender_id / (doc.title or "")
+                            if reconstructed.exists() and reconstructed.is_file():
+                                docs_with_path.append(doc)
+                                # Use reconstructed for inventory, keep original doc for count
+                            else:
+                                # File missing — still count but mark as not found? For now skip missing
+                                pass
+                            # Even if missing, we still count it as doc but without file it will be FAILED later
+                            # To keep honest, only add if file exists
+
+            if docs_with_path:
+                inventory = []
+                for doc in docs_with_path:
+                    try:
+                        sp = getattr(doc, "source_path", None)
+                        if sp and Path(str(sp)).exists():
+                            p = Path(str(sp))
+                        else:
+                            p = storage_root / tender_id / (doc.title or "")
+                        if p.exists() and p.is_file():
+                            inventory.append({"filename": p.name, "full_path": str(p), "extension": p.suffix.lower(), "size_bytes": p.stat().st_size})
+                        else:
+                            # Keep entry but mark missing — will be counted as FAILED in extraction
+                            inventory.append({"filename": doc.title or p.name, "full_path": str(p), "extension": p.suffix.lower() if p.suffix else ".unknown", "size_bytes": 0, "missing": True})
+                    except Exception:
+                        continue
+                job.documents_total = len(tender_docs)
+                job_inventory = inventory
+                job.current_stage = "INVENTORY"
+                job.progress = 10
+                db.commit()
+            else:
+                # No DB source_path docs — scan filesystem tender_dir
+                tender_dir = storage_root / tender_id
+                # Isolated Sarai fallback: only if this is the Sarai tender AND no real files
+                # Portable: only via TENDER_SARAI_PATH env, no hardcoded developer path
+                if not tender_dir.exists() and _is_sarai_tender(tender_id):
+                    sarai_env = os.environ.get("TENDER_SARAI_PATH")
+                    if sarai_env and Path(sarai_env).exists():
+                        tender_dir = Path(sarai_env)
+                    else:
+                        # No Sarai files and no env — keep empty inventory (will produce empty analysis)
+                        # Hardcoded C:\Users\EgyTech\... removed for portability — set TENDER_SARAI_PATH for evaluation
+                        tender_dir = storage_root / tender_id
+                if tender_dir.exists():
+                    files = list(tender_dir.rglob("*"))
+                    files = [p for p in files if p.is_file()]
+                    inventory = [{"filename": str(p.relative_to(tender_dir)), "full_path": str(p), "extension": p.suffix.lower(), "size_bytes": p.stat().st_size} for p in files]
+                    job.documents_total = len(files)
+                    job_inventory = inventory
+                else:
+                    job_inventory = []
+                    job.documents_total = len(tender_docs) if tender_docs else 0
+                job.current_stage = "INVENTORY"
+                job.progress = 10
+                db.commit()
         except Exception as e:
             job.last_error = str(e)[:500]
             job.error_count = (job.error_count or 0) + 1
+            job_inventory = []
             db.commit()
+        record_stage(db, job.id, "INVENTORY", "COMPLETED" if job_inventory else "PARTIAL",
+                     {"entries": len(job_inventory or [])},
+                     error=None if job_inventory else "empty inventory")
 
-        # Stage 2: Extraction (per document, with failure isolation)
+        # Stage 2: Extraction (per document, with failure isolation) — real
         job.current_stage = "EXTRACTION"
         job.progress = 20
         db.commit()
-        # Simulate document processing with isolation
-        documents_total = 0
+        documents_total = len(job_inventory) if job_inventory is not None else 0
+        job.documents_total = documents_total
         documents_processed = 0
         documents_failed = 0
         documents_unsupported = 0
-        # For demo, just set to 0 and continue
-        # Real extraction would iterate over inventory and call extract_pdf_text, extract_docx_text, etc., with try/except per document
-        # and record per-document status COMPLETE/PARTIAL/FAILED/UNSUPPORTED
+        doc_results = {}
+        for f in job_inventory if job_inventory else []:
+            # Handle missing file marker
+            if f.get("missing"):
+                documents_failed += 1
+                doc_results[f["filename"]] = {"pages": [], "page_count": 0, "total_text_chars": 0, "status": "FAILED", "error": "File not found on storage"}
+                continue
+            try:
+                p = Path(f["full_path"])
+                if not p.exists():
+                    documents_failed += 1
+                    doc_results[f["filename"]] = {"pages": [], "page_count": 0, "total_text_chars": 0, "status": "FAILED", "error": "File not found"}
+                    continue
+                hint = None
+                if "ocr_needed" in f:
+                    low = f["ocr_needed"].lower()
+                    if "yes" in low:
+                        hint = True
+                    elif "no" in low:
+                        hint = False
+                # Stage 5E: one dispatcher for every type (PDF, Office, text,
+                # images via OCR, ZIP/RAR/7z archives, CAD, .bak by content).
+                # Archives yield one entry per inner file.
+                from app.pipeline.file_extractors import extract_any
+                from evaluation.run_real_benchmark import extract_pdf_text
+
+                def _pdf(path, h):
+                    return extract_pdf_text(path, ocr_needed_hint=h)
+
+                for _name, _res in extract_any(p, f["filename"], _pdf, pdf_hint=hint):
+                    _st = _res["status"]
+                    if _st == "UNSUPPORTED":
+                        documents_unsupported += 1
+                    elif _st == "FAILED":
+                        documents_failed += 1
+                    else:
+                        documents_processed += 1
+                    doc_results[_name] = _res
+            except Exception as e:
+                documents_failed += 1
+                doc_results[f["filename"]] = {"pages": [], "page_count": 0, "total_text_chars": 0, "status": "FAILED", "error": str(e)[:200]}
+        documents_total = len(doc_results)  # archives expand into their inner files
+        job.documents_total = documents_total
+        job.documents_processed = documents_processed
+        job.documents_failed = documents_failed
+        job.documents_unsupported = documents_unsupported
+        db.commit()
+        record_stage(db, job.id, "EXTRACTION", "COMPLETED" if documents_failed == 0 else "PARTIAL",
+                     {"total": documents_total, "processed": documents_processed,
+                      "failed": documents_failed, "unsupported": documents_unsupported})
 
         # Stage 3: Classification
         job.current_stage = "CLASSIFICATION"
@@ -118,7 +295,6 @@ def process_tender(tender_id: str, job_id: str):
         # Stage 5: Semantic extraction (LLM)
         job.current_stage = "SEMANTIC"
         job.progress = 80
-        # Check Ollama available, but don't fail if not
         try:
             from evaluation.llm_generic_extraction import check_ollama_available
             ok, msg = check_ollama_available()
@@ -133,58 +309,146 @@ def process_tender(tender_id: str, job_id: str):
         job.progress = 90
         db.commit()
 
-        # Stage 7: Persistence — build and validate canonical analysis
+        # Stage 7: Persistence — build and validate canonical analysis (real, not simulated)
         job.current_stage = "PERSISTENCE"
         job.progress = 95
         try:
             from evaluation.generic_extraction import build_generic_extraction
-            from pathlib import Path
-            # For demo, use a generic tender path based on tender_id
-            # In real, this would be derived from TenderDocument files
-            # For Sarai, use the known path; for others, use temp
-            tender = db.query(Tender).filter(Tender.id == tender_id).first()
-            # Try to find tender files via TenderDocument or default to Sarai for demo
-            tender_path = Path(f"C:\\Users\\EgyTech\\Desktop\\{tender_id}")
+            import os
+            storage_root = get_storage_root()
+            # For new tenders, tender_path is always storage_root / tender_id
+            tender_path = storage_root / tender_id
+            # Only allow Sarai fallback if this is Sarai and tender_path doesn't exist (portable, env-only)
+            if not tender_path.exists() and _is_sarai_tender(tender_id):
+                sarai_env = os.environ.get("TENDER_SARAI_PATH")
+                if sarai_env and Path(sarai_env).exists():
+                    tender_path = Path(sarai_env)
+                else:
+                    # No hardcoded developer path — set TENDER_SARAI_PATH for evaluation
+                    tender_path = storage_root / tender_id
             if not tender_path.exists():
-                # Fallback to Sarai for demo
-                tender_path = Path(r"C:\Users\EgyTech\Desktop\01- Sarai 220kV Substation")
+                # Create empty dir so build_generic_extraction doesn't fail on missing path
+                # but will produce minimal analysis (0 docs) — honest empty
+                tender_path = storage_root / tender_id
                 if not tender_path.exists():
-                    tender_path = Path.cwd()
-            # Build generic extraction (deterministic, no LLM for persistence)
+                    try:
+                        tender_path.mkdir(parents=True, exist_ok=True)
+                    except:
+                        tender_path = Path.cwd()
+            tender = db.query(Tender).filter(Tender.id == tender_id).first()
             analysis_data = build_generic_extraction(tender_path, tender_id=tender_id, use_llm=False)
-            # Validate against schema
             from evaluation.generic_extraction import validate_against_schema
-            from pathlib import Path as P2
-            schema_path = P2(__file__).resolve().parents[1] / "schemas" / "tender_agnostic_schema.json"
+            schema_path = Path(__file__).resolve().parents[1] / "schemas" / "tender_agnostic_schema.json"
             ok, msg = validate_against_schema(analysis_data, schema_path)
             if not ok:
                 raise ValueError(f"Schema validation failed: {msg}")
-            # Check canonical IDs unique
+            # Stage 4A seam (flag-gated): when TENDERMIND_TWO_STAGE_LLM=1, build
+            # requirements/evidence through the hardened two-stage runner over
+            # the already-extracted doc_results. Flag off: untouched legacy data.
+            # Stage 4F: the flag path runs the full intelligence runner (lanes
+            # A-E: structured-first, commercial/schedule, gaps, ambiguity,
+            # reconciliation MVP, risk, synthesis). New sections merge into
+            # derived_features additively (no schema/migration change).
+            pipeline_version = PIPELINE_VERSION
+            model_name = LLM_MODEL
+            prompt_version = PROMPT_VERSION
+            from app.pipeline.config import is_two_stage_enabled
+            if not is_two_stage_enabled():
+                # AI flag off: no model is called, so don't label the run with one.
+                model_name = "none (deterministic)"
+                prompt_version = "none"
+                job.model = model_name
+                job.prompt_version = prompt_version
+            if is_two_stage_enabled():
+                from app.pipeline import two_stage_runner as _tsr
+                from app.pipeline import intelligence_runner as _ir
+                from app.pipeline.jobs import pipeline_version_metadata as _pvm
+                from app.pipeline.contracts import DocumentArtifact as _Doc
+                _sources, _extras = _tsr.adapt_doc_results(doc_results)
+                _docs = [_Doc(filename=e.get("filename", ""), full_path="", extension="",
+                              status=str(e.get("extraction_status", "COMPLETE")),
+                              page_count=int(e.get("page_count", 0) or 0),
+                              total_text_chars=int(e.get("text_length", 0) or 0),
+                              error=e.get("error")) for e in _extras.get("documents", [])]
+                _tables = []
+                try:
+                    from app.pipeline.structured_data import read_structured
+                    for _fn in sorted(doc_results.keys()):
+                        if str(_fn).lower().endswith(".xlsx"):
+                            _p = tender_path / str(_fn).split("#")[0]
+                            if _p.is_file():
+                                _tables.extend(read_structured(_p))
+                except Exception:
+                    _tables = []
+                _extras.update({
+                    "deadlines": analysis_data.get("deadlines", []),
+                    "commercial": analysis_data.get("commercial_terms"),
+                    "risks": analysis_data.get("risks", []),
+                    "derived_features": analysis_data.get("derived_features", {}),
+                })
+                # Workers were never passed here before, so TENDERMIND_WORKERS_ENABLED
+                # had no effect and every AI call ran sequentially.
+                from app.pipeline.capability_tiers import load_worker_config as _lwc
+                _intel, _telem = _ir.run_intelligence(
+                    tender_id, _sources, documents=_docs, tables=_tables,
+                    job_id=job.id, deterministic_extras=_extras,
+                    workers=_lwc())
+                analysis_data = dict(analysis_data)
+                analysis_data["requirements"] = _intel["requirements"]
+                analysis_data["evidence"] = _intel["evidence"]
+                analysis_data["documents"] = _extras["documents"]
+                _df = dict(analysis_data.get("derived_features", {}) or {})
+                for _k in ("commercial_facts", "schedule_facts", "clarifications", "addenda",
+                           "gaps", "ambiguities", "ambiguities_raw", "ambiguity_report",
+                           "conflicts", "duplicate_groups",
+                           "amendment_links", "lifecycle", "risk_signals", "synthesis",
+                           "structured_coverage"):
+                    _df[_k] = _intel[_k]
+                _df["telemetry"] = _telem.to_dict()
+                analysis_data["derived_features"] = _df
+                _meta = _pvm()
+                pipeline_version = _meta["pipeline_version"]
+                from app.pipeline.ai_router import active_model_name, active_prompt_version
+                model_name = active_model_name()
+                prompt_version = active_prompt_version()
+                job.model = model_name
+                job.prompt_version = prompt_version
+                # Re-validate the final two-stage payload (patched schema permits
+                # the documented UNKNOWN quarantine category; all other gates
+                # identical). Never persist an invalid analysis.
+                from evaluation.generic_extraction import validate_against_schema as _vas
+                _schema2 = Path(__file__).resolve().parents[1] / "schemas" / "tender_agnostic_schema_2stage.json"
+                _ok2, _msg2 = _vas(analysis_data, _schema2)
+                if not _ok2:
+                    raise ValueError(f"Two-stage schema validation failed: {_msg2}")
+                job.current_stage = "FINALIZING"
+                db.commit()
             req_ids = [r["requirement_id"] for r in analysis_data["requirements"]]
             if len(req_ids) != len(set(req_ids)):
                 raise ValueError("Duplicate requirement IDs")
-            # Check evidence linkage
             for ev in analysis_data["evidence"]:
                 if ev.get("requirement_id") and ev["requirement_id"] not in req_ids:
-                    # Orphan evidence — reject
                     raise ValueError(f"Orphan evidence {ev.get('evidence_id')} references unknown {ev.get('requirement_id')}")
-            # Check provenance
             for req in analysis_data["requirements"]:
                 if not req.get("source_document"):
-                    # Allow missing with low confidence, but log
                     pass
-            # Persist to TenderAnalysis
             from app.models import TenderAnalysis
             import uuid
+            terminal_status = _derive_terminal_status(
+                documents_total,
+                documents_processed,
+                documents_failed,
+                documents_unsupported,
+            )
             analysis = TenderAnalysis(
                 id=f"ANALYSIS-{uuid.uuid4().hex[:8].upper()}",
                 tender_id=tender_id,
                 processing_job_id=job.id,
                 analysis_version="1.0",
-                pipeline_version=PIPELINE_VERSION,
-                model=LLM_MODEL,
-                prompt_version=PROMPT_VERSION,
-                status="COMPLETED",
+                pipeline_version=pipeline_version,
+                model=model_name,
+                prompt_version=prompt_version,
+                status=terminal_status,
                 tender={"id": tender.id, "title": tender.title} if tender else {"id": tender_id},
                 documents=analysis_data["documents"],
                 requirements=analysis_data["requirements"],
@@ -195,48 +459,94 @@ def process_tender(tender_id: str, job_id: str):
                 derived_features=analysis_data.get("derived_features", {}),
                 processing={
                     "job_id": job.id,
-                    "status": job.status,
+                    "status": terminal_status,
                     "progress": job.progress,
                     "documents_total": job.documents_total,
                     "documents_processed": job.documents_processed,
-                    "pipeline_version": PIPELINE_VERSION,
-                    "model": LLM_MODEL,
-                    "prompt_version": PROMPT_VERSION,
+                    "pipeline_version": pipeline_version,
+                    "model": model_name,
+                    "prompt_version": prompt_version,
+                    "documents_failed": job.documents_failed,
+                    "documents_unsupported": job.documents_unsupported,
                 }
             )
+            try:
+                from app.pipeline.jobs import resolve_coverage
+                analysis.processing = {**(analysis.processing or {}),
+                                       **resolve_coverage(job.documents_total, job.documents_processed,
+                                                          job.documents_failed, job.documents_unsupported)}
+                db.commit()
+            except Exception:
+                pass
             db.add(analysis)
             db.commit()
             print(f"PERSISTENCE: Saved analysis {analysis.id} for tender {tender_id} with {len(analysis_data['requirements'])} requirements")
+            record_stage(db, job.id, "PERSISTENCE", "COMPLETED",
+                         {"requirements": len(analysis_data["requirements"]),
+                          "evidence": len(analysis_data.get("evidence", []))})
+            # Stage 5C: feed the decision engine (requirements start MISSING_EVIDENCE
+            # until company documents are matched). Never fails the job.
+            try:
+                from app.engines.tender_bridge import sync_requirements
+                from app.engines.decision import get_or_create_decision
+                _sync = sync_requirements(db, tender_id)
+                if _sync["synced"]:
+                    get_or_create_decision(db, tender_id)
+                record_stage(db, job.id, "DECISION_SYNC", "COMPLETED", _sync)
+            except Exception as _e:
+                db.rollback()
+                record_stage(db, job.id, "DECISION_SYNC", "FAILED", {}, error=str(_e)[:300])
         except Exception as e:
             print(f"PERSISTENCE failed: {e}")
+            import traceback
+            traceback.print_exc()
             job.last_error = f"PERSISTENCE failed: {str(e)[:300]}"
             job.error_count = (job.error_count or 0) + 1
-            # Don't fail the whole job, mark as PARTIAL
             db.commit()
+            record_stage(db, job.id, "PERSISTENCE", "FAILED", {}, error=str(e))
         db.commit()
 
         # Final status
-        # Determine COMPLETED vs PARTIAL vs FAILED
-        # For Phase 3A, assume COMPLETED if no failures, PARTIAL if some documents failed but analysis exists
         if documents_failed == 0 and documents_unsupported == 0:
             job.status = "COMPLETED"
         elif documents_failed > 0 and documents_processed > 0:
             job.status = "PARTIAL"
-        elif documents_failed > 0 and documents_processed == 0:
-            job.status = "FAILED"
+        elif documents_failed > 0 and documents_processed == 0 and documents_unsupported == 0:
+            # If we had documents but all failed, FAILED; if no documents, COMPLETED with empty analysis is more honest
+            if documents_total > 0:
+                job.status = "FAILED"
+            else:
+                job.status = "COMPLETED"
+        elif documents_unsupported > 0 and documents_processed == 0:
+            # Only unsupported docs -> PARTIAL (upload succeeded, processing honestly unsupported)
+            job.status = "PARTIAL"
         else:
-            # If no documents, but we have a tender, consider COMPLETED with empty analysis
             job.status = "COMPLETED"
         job.current_stage = "COMPLETED"
         job.progress = 100
         job.completed_at = datetime.datetime.utcnow()
-        # If there were failures, keep PARTIAL
-        if documents_failed > 0:
+        if documents_failed > 0 and job.status == "COMPLETED":
             job.status = "PARTIAL"
+        # Stage 4G honesty rule: COMPLETED requires a persisted analysis.
+        # Persistence failure with real documents => FAILED (never fake COMPLETE).
+        try:
+            from app.models import TenderAnalysis as _TA
+            _persisted = db.query(_TA).filter(_TA.processing_job_id == job.id).first()
+            if _persisted is None and (documents_total or 0) > 0:
+                job.status = "FAILED"
+                if not job.last_error or "PERSISTENCE" not in job.last_error:
+                    job.last_error = (job.last_error + " | " if job.last_error else "") + \
+                        "PERSISTENCE produced no retrievable analysis"
+                job.error_count = (job.error_count or 0) + 1
+        except Exception:
+            pass
         db.commit()
+        record_stage(db, job.id, "COMPLETED", job.status,
+                     {"processed": documents_processed, "failed": documents_failed,
+                      "unsupported": documents_unsupported},
+                     error=job.last_error if job.status != "COMPLETED" else None)
 
     except Exception as e:
-        # Pipeline cannot produce meaningful result
         try:
             job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
             if job:

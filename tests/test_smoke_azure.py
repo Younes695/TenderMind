@@ -12,8 +12,12 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def test_main_smoke_azure_invokes_production_path():
+    import pytest
     from evaluation import run_real_benchmark_v4 as v4
     import fitz
+    # Needs the real Sarai tender files (evaluation data, not shipped in the repo).
+    if not (Path(v4.ROOT) / "Sarai RFP.pdf").exists():
+        pytest.skip(f"Sarai tender evaluation data not present at {v4.ROOT}")
     # Mock credentials for both smoke check and routing
     with patch("evaluation.run_real_benchmark_v4.check_azure_credentials", return_value=("https://tendermind-docintel.cognitiveservices.azure.com/", "dummy_key_32_chars_1234567890abcd")):
         with patch("evaluation.run_real_benchmark_v4._get_azure_creds", return_value=("https://tendermind-docintel.cognitiveservices.azure.com/", "dummy_key_32_chars_1234567890abcd", "mock")):

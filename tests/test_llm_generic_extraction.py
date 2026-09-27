@@ -228,7 +228,7 @@ def test_fixture_does_not_trigger_ocr():
     # Fixture should not trigger OCR
     from pathlib import Path
     import json
-    fixture_path = Path(r"C:\Users\EgyTech\Desktop\TenderMind\evaluation\fixtures\mobile_llm_sample.json")
+    fixture_path = Path(__file__).resolve().parents[1] / "evaluation" / "fixtures" / "mobile_llm_sample.json"
     assert fixture_path.exists()
     with open(fixture_path, encoding="utf-8") as f:
         chunks = json.load(f)

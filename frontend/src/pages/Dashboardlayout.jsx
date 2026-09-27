@@ -1,25 +1,41 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useParams } from "react-router-dom";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebare";
 
 function Dashboardlayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { pathname } = useLocation();
+  const params = useParams();
 
   const isGoNoGo = pathname.startsWith("/go-no-go");
   const isTenderWorkspace = pathname.startsWith("/tenders/");
+  const tenderId = params.tender_id || params.tenderId || null;
+
+  const SECTION_TITLES = {
+    "/tenders": "Tenders",
+    "/company-knowledge": "Company Knowledge",
+    "/work-packages": "Work Packages",
+    "/qa": "Q&A",
+    "/approvals": "Approvals",
+    "/documents": "Documents",
+    "/subcontractors": "Subcontractors",
+    "/analytics": "Analytics",
+    "/notifications": "Notifications",
+    "/help": "Help",
+    "/settings": "Settings",
+  };
 
   const headerTitle = isGoNoGo
-    ? "Go / No-Go — RUH-2026-184"
-    : isTenderWorkspace
-      ? "RUH-2026-184"
-      : "Dashboard";
+    ? tenderId ? `Go / No-Go — ${tenderId}` : "Go / No-Go"
+    : isTenderWorkspace && tenderId
+      ? tenderId
+      : SECTION_TITLES[pathname] || "Dashboard";
 
   const headerSubtitle = isGoNoGo
     ? "AI recommendation with evidence · human decision required"
     : isTenderWorkspace
-      ? "Riyadh Smart Infrastructure · Tender Workspace"
+      ? tenderId ? `${tenderId} · Tender Workspace` : undefined
       : undefined;
 
   return (

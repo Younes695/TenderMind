@@ -1,12 +1,20 @@
 """
 Local Tesseract OCR — TenderMind — $0, offline, no Azure/OpenAI
 - Validated on 2026-09-16 with 1354 pages (946 OCR, avg_conf 0.786, 807 Arabic, 0 failures)
-- Uses C:\Program Files\Tesseract-OCR\tesseract.exe, pytesseract 0.3.13, lang="ara+eng", --psm 6 --oem 1, dpi 300 (fallback 200/150 for >120M px drawings)
+- pytesseract 0.3.13, lang="ara+eng", --psm 6 --oem 1, dpi 300 (fallback 200/150 for >120M px drawings)
+- Tesseract binary resolved cross-platform: env var override, then PATH lookup, then common
+  Windows/Linux/macOS install locations. Was hardcoded to a Windows-only path, which meant
+  every OCR-routed page (any scanned page, or any page under ~100 chars of native text —
+  see is_scanned_or_garbled) silently failed on Linux with TesseractNotFoundError and
+  returned empty text, i.e. build_generic_extraction() could return 0 requirements for a
+  perfectly valid tender document with no visible error anywhere in the pipeline.
 - Reuses is_scanned_or_garbled() from evaluation/azure_doc_intel.py:228
 - Preserves provenance: source_filename, source_page_number, text, confidence, ocr_applied, method
 - No paid APIs, localhost only
 """
 import io
+import os
+import shutil
 import time
 import warnings
 from pathlib import Path
@@ -19,8 +27,37 @@ from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 warnings.filterwarnings("ignore")
 
-# Explicit tesseract path — do NOT require PATH
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+def _resolve_tesseract_cmd() -> str:
+    """Cross-platform tesseract binary resolution — mirrors the pattern already used
+    for LibreOffice in evaluation/run_real_benchmark.py:_find_soffice_executable.
+    1. Explicit env var override (works on any OS/container image).
+    2. PATH lookup via shutil.which (covers Linux/macOS `apt/brew install tesseract-ocr`).
+    3. Common fixed install locations (Windows dev boxes, Homebrew default).
+    4. Fall back to the bare command name — lets pytesseract raise its own clear
+       TesseractNotFoundError instead of silently pointing at a path that can't exist
+       on this OS.
+    """
+    for env_key in ("TENDERMIND_TESSERACT_PATH", "TESSERACT_PATH", "TESSERACT_CMD"):
+        env_val = os.environ.get(env_key)
+        if env_val and Path(env_val).is_file():
+            return env_val
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    for cand in (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        "/usr/bin/tesseract",
+        "/usr/local/bin/tesseract",
+        "/opt/homebrew/bin/tesseract",
+    ):
+        if Path(cand).is_file():
+            return cand
+    return "tesseract"
+
+
+pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract_cmd()
 
 TESS_LANG = "ara+eng"
 TESS_CONFIG = "--psm 6 --oem 1"

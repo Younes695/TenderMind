@@ -9,6 +9,22 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import datetime
 
+# Generic deterministic signals — shared by production extraction and evaluation selectors.
+# Must remain generic procurement terminology, no tender-specific sentences.
+GENERIC_PATTERNS = [
+    (r"experience|reference.*project|past performance", "EXPERIENCE", "Experience/qualification"),
+    (r"schedule|programme|delivery|completion.*date|duration", "SCHEDULE", "Schedule/delivery"),
+    (r"220kV|GIS|transformer|MVA|22kV|11kV|66kV|voltage", "TECHNICAL", "Technical equipment"),
+    (r"tender security|bid bond|EGP|price.*schedule|BOQ|bill of quantities", "COMMERCIAL", "Commercial/bid security"),
+    (r"consortium|joint.*venture|joint.*liability", "LEGAL", "Consortium/JV"),
+    (r"financial|turnover|working capital|audited", "FINANCIAL", "Financial capacity"),
+    (r"HSE|health.*safety|environment", "HSE", "HSE"),
+    (r"QA/QC|quality.*assurance", "QA_QC", "QA/QC"),
+    (r"subcontractor", "SUBCONTRACTOR", "Subcontractor"),
+    (r"penalty|liquidated damages|termination|delay", "COMMERCIAL", "Penalty/termination"),
+    (r"personnel|key personnel|project manager|qualified staff|technical staff|experienced personnel", "PERSONNEL", "Personnel"),
+]
+
 # --- Module 1: Ingestion ---
 def ingest_tender(tender_path: Path, tender_id: Optional[str] = None) -> Dict[str, Any]:
     """Dynamic tender ingestion — never hardcode SA-2018-HV2"""
@@ -84,14 +100,81 @@ def extract_mva_values(text: str) -> List[str]:
     return sorted(found)
 
 def extract_deadlines_deterministic(text: str) -> List[Dict[str, Any]]:
-    """Obvious dates when safely detected — deterministic, no semantic inference"""
+    """Obvious dates when safely detected — deterministic, context-sensitive (Stage 3A hardening)"""
     dates = []
-    # Simple ISO-like or "16 of August, 2018"
-    for m in re.finditer(r"(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{1,2}\s+of\s+\w+,\s*\d{4})", text):
-        dates.append({"type": "unknown", "date": m.group(0), "source_snippet": text[max(0,m.start()-30):m.end()+30]})
+    # Require deadline context within 50 chars before/after the date token
+    context_terms = r"deadline|submission|bid submission|tender submission|closing date|due date|delivery date|completion date|clarification deadline|tender opening|validity|opening date|bid validity|offer validity"
+    # Use word boundaries to avoid matching voltage substrings like 20/22/22 inside 220/22/22
+    for m in re.finditer(r"\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{1,2}\s+of\s+\w+,\s*\d{4})\b", text):
+        raw = m.group(1)
+        snippet = text[max(0, m.start()-50):m.end()+50]
+        if not re.search(context_terms, snippet, re.IGNORECASE):
+            continue
+        # Validate month/day for slash/dash dates (avoid 20/22/22 where month=22)
+        if "/" in raw or "-" in raw:
+            # Normalize separators
+            parts = re.split(r"[\/\-]", raw)
+            if len(parts) >= 2:
+                try:
+                    day = int(parts[0])
+                    month = int(parts[1])
+                    if not (1 <= day <= 31 and 1 <= month <= 12):
+                        continue
+                except:
+                    continue
+        dates.append({"type": "unknown", "date": raw, "source_snippet": snippet.strip()[:120]})
         if len(dates) >= 3:
             break
     return dates
+
+def extract_commercial_terms_deterministic(text: str) -> Optional[Dict[str, Any]]:
+    """Minimal deterministic commercial extraction — only when explicitly present, no inference"""
+    # Search for each field independently, return None if none found (per schema, commercial_terms can be null)
+    found = {}
+    # Currency: look for explicit currency codes near commercial terms
+    # Use word boundaries, generic currencies
+    curr_match = re.search(r"\b(EGP|USD|EUR|SAR|GBP|L\.E|LE)\b", text, re.IGNORECASE)
+    if curr_match:
+        # Verify currency is near commercial context (within 100 chars of tender security/price/payment or alone is okay for currency)
+        # For minimal, accept any explicit currency code found (conservative: require commercial context for non-EGP?)
+        # Keep simple: if currency found, populate
+        found["currency"] = curr_match.group(1).upper().replace(".", "").strip()
+        # Normalize L.E/LE to EGP
+        if found["currency"] in ("L", "LE", "L.E"):
+            found["currency"] = "EGP"
+        if found["currency"] == "L E":
+            found["currency"] = "EGP"
+    # Payment terms: look for payment.*term|advance.*payment|payment.*schedule etc.
+    pay_match = re.search(r"(payment[^.\n]{0,60}term|advance[^.\n]{0,40}payment|payment[^.\n]{0,40}schedule|\d+\s*%[^.\n]{0,30}advance|\d+\s*%[^.\n]{0,30}delivery|\d+\s*%[^.\n]{0,30}retention)", text, re.IGNORECASE)
+    if pay_match:
+        snippet = pay_match.group(0).strip()[:120].replace("\n", " ")
+        found["payment"] = snippet
+    # Tender security / bid bond: look for explicit phrase and nearby value
+    sec_match = re.search(r"(tender security|bid bond|bid security)[^.\n]{0,80}(\d[\d,\.]*\s*(EGP|USD|EUR|SAR|L\.E)?)", text, re.IGNORECASE)
+    if sec_match:
+        snippet = sec_match.group(0).strip()[:150].replace("\n", " ")
+        # Use price_schedules field for tender security per schema (best fit), keep payment for payment terms
+        found["price_schedules"] = snippet
+    # Validity period: look for validity.*\d+ days|valid for \d+ days
+    valid_match = re.search(r"(validity[^.\n]{0,40}\d+\s*days|valid for \d+\s*days|bid validity[^.\n]{0,40}\d+\s*days|offer validity[^.\n]{0,40}\d+\s*days|tender validity[^.\n]{0,40}\d+\s*days)", text, re.IGNORECASE)
+    if valid_match:
+        snippet = valid_match.group(0).strip()[:120].replace("\n", " ")
+        # If price_schedules already used for tender security, append validity there or use payment
+        if "price_schedules" not in found:
+            found["price_schedules"] = snippet
+        elif "payment" not in found:
+            found["payment"] = snippet
+        else:
+            # Both occupied, append to price_schedules
+            found["price_schedules"] = (found["price_schedules"] + " | " + snippet)[:200]
+    if not found:
+        return None
+    # Ensure at least one of the schema fields is populated; return with null for missing per schema
+    return {
+        "price_schedules": found.get("price_schedules"),
+        "payment": found.get("payment"),
+        "currency": found.get("currency"),
+    }
 
 # --- Module 4: Generic Requirement Extraction (dynamic IDs) ---
 def extract_requirements_generic(doc_results: Dict[str, Any], tender_id: str) -> List[Dict[str, Any]]:
@@ -102,18 +185,9 @@ def extract_requirements_generic(doc_results: Dict[str, Any], tender_id: str) ->
             combined += "\n" + (pg.get("text","") or "")
     low = combined.lower()
     # Generic patterns — common across tenders, not Sarai-specific — candidates, not authoritative
-    generic_patterns = [
-        (r"experience|reference.*project|past performance", "EXPERIENCE", "Experience/qualification"),
-        (r"schedule|programme|delivery|completion.*date|duration", "SCHEDULE", "Schedule/delivery"),
-        (r"220kV|GIS|transformer|MVA|22kV|11kV|66kV|voltage", "TECHNICAL", "Technical equipment"),
-        (r"tender security|bid bond|EGP|price.*schedule|BOQ|bill of quantities", "COMMERCIAL", "Commercial/bid security"),
-        (r"consortium|joint.*venture|joint.*liability", "LEGAL", "Consortium/JV"),
-        (r"financial capacity|turnover|working capital|audited", "FINANCIAL", "Financial capacity"),
-        (r"HSE|health.*safety|environment", "HSE", "HSE"),
-        (r"QA/QC|quality.*assurance", "QA_QC", "QA/QC"),
-        (r"subcontractor", "SUBCONTRACTOR", "Subcontractor"),
-        (r"penalty|liquidated damages|termination|delay", "COMMERCIAL", "Penalty/termination"),
-    ]
+    # Stage 3A: FINANCIAL broadened to "financial" (was "financial capacity" too narrow), PERSONNEL added
+    # GENERIC_PATTERNS is module-level for reuse by evaluation selectors (Stage 3C) — same list, no behavior change.
+    generic_patterns = GENERIC_PATTERNS
     candidates = []
     req_counter = 1
     for pattern, category, summary in generic_patterns:
@@ -163,6 +237,14 @@ def extract_evidence_generic(doc_results: Dict[str, Any]) -> List[Dict[str, Any]
     return []
 
 # --- Module 6: Schema Validation ---
+def _doc_status(v: Dict[str, Any]) -> str:
+    """Keep UNSUPPORTED distinct from FAILED (a .dwg is not an extraction error)."""
+    if str(v.get("status", "")).upper() == "UNSUPPORTED":
+        return "UNSUPPORTED"
+    chars = v.get("total_text_chars", 0)
+    return "COMPLETE" if chars > 100 else "PARTIAL" if chars > 0 else "FAILED"
+
+
 def validate_against_schema(data: Dict[str, Any], schema_path: Path) -> tuple[bool, str]:
     """Real JSON Schema validation — uses jsonschema if available, otherwise robust fallback"""
     try:
@@ -307,9 +389,9 @@ def build_generic_extraction(tender_path: Path, tender_id: Optional[str] = None,
                 "page_count": v.get("page_count", 0),
                 "text_length": v.get("total_text_chars", 0),
                 "extraction_method": v["pages"][0].get("method", "unknown") if v.get("pages") else "unknown",
-                "extraction_status": "COMPLETE" if v.get("total_text_chars", 0) > 100 else "PARTIAL" if v.get("total_text_chars", 0) > 0 else "FAILED",
+                "extraction_status": _doc_status(v),
                 "document_type": classification.get(k),
-                "document_status": "COMPLETE" if v.get("total_text_chars", 0) > 100 else "PARTIAL" if v.get("total_text_chars", 0) > 0 else "FAILED",
+                "document_status": _doc_status(v),
                 "ocr_applied": any(p.get("ocr_applied") for p in v.get("pages", [])),
                 "provenance_status": "COMPLETE" if any(p.get("page_number") for p in v.get("pages", [])) else "MISSING",
             } for k, v in doc_results.items()
@@ -318,7 +400,7 @@ def build_generic_extraction(tender_path: Path, tender_id: Optional[str] = None,
         "evidence": evidence,
         "risks": [],  # Not analyzed in Phase 1 — empty, not 0 as if analyzed
         "deadlines": deadlines,
-        "commercial_terms": None,  # Unknown in Phase 1
+        "commercial_terms": extract_commercial_terms_deterministic(combined_text),
         "provenance_coverage": derived["provenance_coverage"],
         "confidence_distribution": derived["confidence_distribution"],
         "missing_rate": 1 - derived["provenance_coverage"],

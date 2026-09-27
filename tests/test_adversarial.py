@@ -308,7 +308,7 @@ def test_12_human_override():
         tender_id="SA-2018-HV2",
         decision="BID",
         confidence="OVERRIDE",
-        timestamp=dt.datetime.utcnow(),
+        timestamp=max(dt.datetime.utcnow(), dec.timestamp + dt.timedelta(milliseconds=1)),  # strictly after: Windows clock ticks can tie
         rules_triggered=["HUMAN_OVERRIDE"],
         supporting_requirements=dec.supporting_requirements,
         supporting_evidence=dec.supporting_evidence,

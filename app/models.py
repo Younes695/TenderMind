@@ -36,11 +36,16 @@ class TenderDocument(Base):
     __tablename__ = "tender_documents"
     id = Column(String, primary_key=True)
     tender_id = Column(String, ForeignKey("tenders.id"))
-    title = Column(String)
+    title = Column(String)  # original filename / human title, never full path
     doc_type = Column(String)
     page = Column(String)
     section = Column(String)
     language = Column(String, default="EN")
+    # Canonical persisted file reference — absolute or storage-root-relative path
+    # Added in Stage 1B; title remains human-readable filename.
+    source_path = Column(String, nullable=True)
+    file_size = Column(Float, nullable=True)
+    original_filename = Column(String, nullable=True)
 
 class Requirement(Base):
     __tablename__ = "requirements"
@@ -179,3 +184,37 @@ class TenderAnalysis(Base):
     risks = Column(JSON)
     derived_features = Column(JSON)
     processing = Column(JSON)  # {job_id, status, progress, documents_total, etc.}
+
+class StageEvent(Base):
+    """Stage 4G — persisted per-stage job history (auto-created; no migration).
+
+    One row per stage transition: recoverable progress after refresh/reconnect,
+    per-stage timestamps, failure reasons, truthful counts. `progress` on the
+    job remains a coarse stage marker; this table is the source of truth.
+    """
+    __tablename__ = "stage_events"
+    id = Column(String, primary_key=True)
+    job_id = Column(String, ForeignKey("processing_jobs.id"))
+    stage = Column(String)
+    status = Column(String, default="COMPLETED")  # STARTED | COMPLETED | PARTIAL | FAILED
+    counts = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class User(Base):
+    """Stage 5F — accounts: email + password, or Google / Microsoft sign-in.
+
+    password_hash is null for accounts created through an identity provider;
+    such a user can add a password later. Emails are stored lower-case and are
+    the login identity (one account per email across providers).
+    """
+    __tablename__ = "users"
+    id = Column(String, primary_key=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=True)
+    password_hash = Column(String, nullable=True)
+    provider = Column(String, default="password")  # password | google | microsoft
+    provider_subject = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
