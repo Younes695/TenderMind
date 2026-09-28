@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import logo from "../assets/logo.jpg";
+import { useT, usePrefs } from "../i18n";
 
 function Header() {
+  const t = useT();
+  const { lang, setLang } = usePrefs();
   return (
     <header className="w-full border-b border-white/10 bg-[#102542]">
       <div className="mx-auto flex h-[58px] max-w-[1190px] items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -25,59 +28,67 @@ function Header() {
             to="/product"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            Product
+            {t("Product")}
           </Link>
 
           <Link
             to="/solutions"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            Solutions
+            {t("Solutions")}
           </Link>
 
           <Link
             to="/industries"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            Industries
+            {t("Industries")}
           </Link>
 
           <Link
             to="/how-it-works"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            How It Works
+            {t("How It Works")}
           </Link>
 
           <Link
             to="/security"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            Security
+            {t("Security")}
           </Link>
 
           <Link
             to="/pricing"
             className="text-sm font-semibold text-white transition-colors hover:text-[#C8A96B]"
           >
-            Pricing
+            {t("Pricing")}
           </Link>
         </nav>
 
         {/* Desktop Actions */}
         <div className="hidden items-center gap-5 lg:flex">
+          <button
+            type="button"
+            onClick={() => setLang(lang === "en" ? "ar" : "en")}
+            className="text-sm font-medium text-[#D7B15F] transition-colors hover:text-white"
+          >
+            {lang === "en" ? "العربية" : "English"}
+          </button>
+
           <Link
             to="/login"
             className="text-sm font-medium text-[#D7B15F] transition-colors hover:text-white"
           >
-            Log in
+            {t("Log in")}
           </Link>
 
           <Link
             to="/demo"
             className="rounded-md bg-[#D7B15F] px-4 py-2 text-xs font-semibold text-[#102542] transition-colors hover:bg-[#F7D387]"
           >
-            Book a Demo
+            {t("Book a Demo")}
           </Link>
         </div>
 
@@ -85,7 +96,7 @@ function Header() {
         <button
           type="button"
           className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 text-white transition-colors hover:bg-white/10 lg:hidden"
-          aria-label="Open menu"
+          aria-label={t("Open menu")}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

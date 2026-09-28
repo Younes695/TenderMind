@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Info, FileText, AlertTriangle, Clock, Building2, Users } from "lucide-react";
 import apiClient from "../api/client";
+import { useT } from "../i18n";
 
 function DecisionSupportCard({ tender, analysis, job }) {
+  const t = useT();
   const reqs = analysis?.requirements || [];
   const mandatory = reqs.filter((r) => r.mandatory === true).length;
   const missingMandatory = reqs.filter((r) => r.mandatory == null).length;
@@ -25,26 +27,27 @@ function DecisionSupportCard({ tender, analysis, job }) {
         <span className={`rounded-lg border px-2.5 py-1 text-[12px] font-bold ${status === "COMPLETED" ? "bg-[#e5f2eb] text-[#2E7D5B] border-[#bcd8c6]" : status === "PARTIAL" ? "bg-[#fdf4de] text-[#a98238] border-[#e6d3a3]" : status === "FAILED" ? "bg-[#fdf0f0] text-[#a33a3a] border-[#f5c6c6]" : "bg-[#f3f3f3] text-[#667085]"}`}>{status}</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[13px]">
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Requirements</p><p className="mt-1 font-bold text-[#101828]">{reqs.length || "Not available"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Mandatory</p><p className="mt-1 font-bold text-[#101828]">{mandatory || "Not available"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Ambiguous (mandatory null)</p><p className="mt-1 font-bold text-[#101828]">{missingMandatory || "Not identified"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Unsupported docs</p><p className="mt-1 font-bold text-[#101828]">{unsupported || "Not identified"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Deadlines</p><p className="mt-1 font-bold text-[#101828]">{deadlines || "Not identified"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Commercial</p><p className="mt-1 font-bold text-[#101828]">{hasCommercial ? "Available" : "Not available"}</p></div>
-        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Evidence</p><p className="mt-1 font-bold text-[#101828]">{evidenceCount || "Not identified"}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Requirements</p><p className="mt-1 font-bold text-[#101828]">{reqs.length || t("Not available")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Mandatory</p><p className="mt-1 font-bold text-[#101828]">{mandatory || t("Not available")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Ambiguous (mandatory null)</p><p className="mt-1 font-bold text-[#101828]">{missingMandatory || t("Not identified")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Unsupported docs</p><p className="mt-1 font-bold text-[#101828]">{unsupported || t("Not identified")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Deadlines</p><p className="mt-1 font-bold text-[#101828]">{deadlines || t("Not identified")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Commercial</p><p className="mt-1 font-bold text-[#101828]">{hasCommercial ? t("Available") : t("Not available")}</p></div>
+        <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Evidence</p><p className="mt-1 font-bold text-[#101828]">{evidenceCount || t("Not identified")}</p></div>
         <div className="rounded-xl bg-[#faf9f6] p-3"><p className="font-bold text-[#667085] text-[11px]">Processing</p><p className="mt-1 font-bold text-[#101828]">{status}</p></div>
       </div>
-      {isPartial && <p className="mt-3 rounded-xl bg-[#fdf4de] border border-[#e6d3a3] p-2 text-[12px] text-[#a98238]">Analysis incomplete (PARTIAL) — review required.</p>}
-      {isFailed && <p className="mt-3 rounded-xl bg-[#fdf0f0] border border-[#f5c6c6] p-2 text-[12px] text-[#a33a3a]">Processing failed — review error.</p>}
+      {isPartial && <p className="mt-3 rounded-xl bg-[#fdf4de] border border-[#e6d3a3] p-2 text-[12px] text-[#a98238]">Analysis incomplete (PARTIAL) - review required.</p>}
+      {isFailed && <p className="mt-3 rounded-xl bg-[#fdf0f0] border border-[#f5c6c6] p-2 text-[12px] text-[#a33a3a]">Processing failed - review error.</p>}
       <div className="mt-3 flex gap-2">
-        <Link to={`/tenders/${encodeURIComponent(tender.id)}`} className="rounded-xl bg-[#162A4C] px-4 py-2 text-[13px] font-bold text-white">Open Workspace</Link>
-        <span className="rounded-xl border border-[#e8e4dc] bg-[#faf9f6] px-3 py-2 text-[12px] text-[#667085]">Decision requires management review.</span>
+        <Link to={`/tenders/${encodeURIComponent(tender.id)}`} className="rounded-xl bg-[#162A4C] px-4 py-2 text-[13px] font-bold text-white">{t("Open Workspace")}</Link>
+        <span className="rounded-xl border border-[#e8e4dc] bg-[#faf9f6] px-3 py-2 text-[12px] text-[#667085]">{t("Decision requires management review.")}</span>
       </div>
     </div>
   );
 }
 
 function GoNoGo() {
+  const t = useT();
   const [tenders, setTenders] = useState(null);
   const [analyses, setAnalyses] = useState({});
   const [error, setError] = useState(null);
@@ -94,12 +97,12 @@ function GoNoGo() {
         </section>
 
         <section className="rounded-2xl border border-[#e5e1d9] bg-white p-5 sm:p-6">
-          <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#101828]"><Users size={18} /> Tender Decision Support</h2>
-          <p className="mt-1 text-[13px] text-[#667085]">Each card shows backend-provided signals only. Missing fields are “Not available”, not invented.</p>
+          <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#101828]"><Users size={18} /> {t("Tender Decision Support")}</h2>
+          <p className="mt-1 text-[13px] text-[#667085]">{t('Each card shows backend-provided signals only. Missing fields are "Not available", not invented.')}</p>
           {tenders === null ? (
-            <p className="mt-4 text-[14px] text-[#667085]">Loading...</p>
+            <p className="mt-4 text-[14px] text-[#667085]">{t("Loading...")}</p>
           ) : tenders.length === 0 ? (
-            <div data-testid="empty-state" className="mt-4 rounded-xl border border-[#e8e4dc] bg-[#faf9f6] p-6 text-center text-[15px] text-[#667085]">No tenders yet — create a tender to see decision support.</div>
+            <div data-testid="empty-state" className="mt-4 rounded-xl border border-[#e8e4dc] bg-[#faf9f6] p-6 text-center text-[15px] text-[#667085]">{t("No tenders yet — create a tender to see decision support.")}</div>
           ) : (
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               {tenders.map((t) => (
@@ -108,16 +111,16 @@ function GoNoGo() {
             </div>
           )}
           <div className="mt-6 flex flex-wrap gap-2">
-            <Link to="/dashboard" className="rounded-xl bg-[#162A4C] px-5 py-2.5 text-[14px] font-bold text-white">Dashboard</Link>
-            <Link to="/tenders/new" className="rounded-xl border border-[#e2e6ee] px-5 py-2.5 text-[14px] font-bold text-[#162A4C]">New Tender</Link>
+            <Link to="/dashboard" className="rounded-xl bg-[#162A4C] px-5 py-2.5 text-[14px] font-bold text-white">{t("Dashboard")}</Link>
+            <Link to="/tenders/new" className="rounded-xl border border-[#e2e6ee] px-5 py-2.5 text-[14px] font-bold text-[#162A4C]">{t("New Tender")}</Link>
           </div>
         </section>
 
         <section className="rounded-2xl border border-[#e5e1d9] bg-white p-5 sm:p-6">
-          <h3 className="text-[14px] font-bold text-[#101828]">Evidence-first guidance</h3>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#667085]">For each requirement, open the tender workspace to see: summary → category → confidence → source document → page → source text → linked evidence. If evidence is unavailable, you will see “No evidence available” — no synthetic evidence is created.</p>
+          <h3 className="text-[14px] font-bold text-[#101828]">{t("Evidence-first guidance")}</h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#667085]">{t('For each requirement, open the tender workspace to see: summary → category → confidence → source document → page → source text → linked evidence. If evidence is unavailable, you will see "No evidence available" — no synthetic evidence is created.')}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {["Requirement → source document → page → source text → evidence", "Provenance visible, not hidden", "Human decision required"].map((s) => (
+            {[t("Requirement → source document → page → source text → evidence"), t("Provenance visible, not hidden"), t("Human decision required")].map((s) => (
               <span key={s} className="rounded-full bg-[#faf9f6] border px-3 py-1 text-[12px] text-[#667085]">{s}</span>
             ))}
           </div>

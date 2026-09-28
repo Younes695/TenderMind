@@ -40,9 +40,18 @@ def _ensure_seed():
         if not db.query(Tender).filter(Tender.id == "SA-2018-HV2").first():
             from app.seed import seed
             seed()
-        _fail_interrupted_jobs(db)
     finally:
         db.close()
+    # Stage 5H: a job cut off by a restart continues by itself (files and AI
+    # answers already done come back from checkpoints), and a watchdog resumes
+    # any job whose worker dies without recording a result.
+    from app.processing import resume_interrupted, start_watchdog
+    resume_interrupted(reason="the server stopped")
+    if _os.environ.get("TENDERMIND_WATCHDOG", "1").strip() != "0":
+        start_watchdog()
+    if _os.environ.get("TENDERMIND_NEWS_ENABLED", "1").strip() != "0":
+        from app.news import start_refresher
+        start_refresher()
 
 
 def _fail_interrupted_jobs(db) -> int:

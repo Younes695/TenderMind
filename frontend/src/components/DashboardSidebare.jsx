@@ -14,10 +14,12 @@ import {
   Bell,
   LifeBuoy,
   Settings,
+  Newspaper,
   X,
   LogOut,
 } from "lucide-react";
 import apiClient from "../api/client";
+import { useT } from "../i18n";
 
 import logo from "../assets/logo.jpg";
 
@@ -50,6 +52,11 @@ const mainNav = [
     to: "/qa",
     label: "Q&A",
     icon: MessageSquare,
+  },
+  {
+    to: "/news",
+    label: "News",
+    icon: Newspaper,
   },
   {
     to: "/approvals",
@@ -110,6 +117,7 @@ function NavItem({
   end,
   onNavigate,
 }) {
+  const t = useT();
   return (
     <NavLink
       to={to}
@@ -130,7 +138,7 @@ function NavItem({
       />
 
       <span className="min-w-0 flex-1 truncate">
-        {label}
+        {t(label)}
       </span>
 
       {badge ? (
@@ -153,11 +161,12 @@ function initialsFor(email) {
 }
 
 function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
+  const t = useT();
   const initials = initialsFor(user.email);
 
   return (
     <div className="flex h-full flex-col bg-[#0F1D38] px-4 py-5 text-white">
-      {/* ================= Logo — unchanged ================= */}
+      {/* ================= Logo - unchanged ================= */}
 
       <div className="mb-7 flex items-center justify-between px-2">
         <Link
@@ -183,7 +192,7 @@ function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close menu"
+            aria-label={t("Close menu")}
             className="flex h-10 w-10 items-center justify-center rounded-lg text-[#c5d0e6] hover:bg-white/10 hover:text-white lg:hidden"
           >
             <X size={20} />
@@ -240,7 +249,7 @@ function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
         </span>
 
 
-        {/* User Info — the signed-in account (GET /api/auth/me) */}
+        {/* User Info - the signed-in account (GET /api/auth/me) */}
 
         <div className="min-w-0 flex-1">
 
@@ -249,7 +258,7 @@ function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
           </p>
 
           <p className="truncate text-[12px] text-[#a9b8d4]">
-            Signed in
+            {t("Signed in")}
           </p>
 
         </div>
@@ -257,8 +266,8 @@ function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
         <button
           type="button"
           onClick={onSignOut}
-          aria-label="Sign out"
-          title="Sign out"
+          aria-label={t("Sign out")}
+          title={t("Sign out")}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#c5d0e6] hover:bg-white/10 hover:text-white"
         >
           <LogOut size={18} />

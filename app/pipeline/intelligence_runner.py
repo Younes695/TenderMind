@@ -80,6 +80,7 @@ def run_intelligence(
     workers: Optional[WorkerConfig] = None,
     deterministic_extras: Optional[Dict[str, Any]] = None,
     structured_threshold: float = 0.6,
+    ai_cache: Optional[Any] = None,
 ) -> Tuple[Dict[str, Any], JobTelemetry]:
     """Full lane flow. Returns (extended_analysis_dict, telemetry)."""
     t0 = time.time()
@@ -127,11 +128,62 @@ def run_intelligence(
 
     # Bounded AI calls (sequential default; threads only when explicitly enabled).
     pairs, latencies = [], []
+    from app.pipeline.progress import report as _report
+    total_ai = len(ai_queue2)
+    calls = []
+    # Stage 5H: answers saved by an earlier, interrupted run are reused; only the
+    # rest go to the model, and every new success is saved as it arrives.
+    todo = []
+    for c in ai_queue2:
+        hit = ai_cache.get(c.source_text) if ai_cache is not None else None
+        if hit is not None:
+            from app.pipeline.contracts import LLMNormalizationResult
+            calls.append((c, (LLMNormalizationResult(**hit), "ok", 0.0, None)))
+        else:
+            todo.append(c)
+    telem.ai_cache_hits = len(calls)
+    if calls:
+        _report("ai", len(calls), total_ai)
+
+    provider = router.route(AITask.REQUIREMENT_NORMALIZATION) if hasattr(router, "route") else None
+    batch_escalation = hasattr(provider, "primary_only") and hasattr(provider, "escalate")
+    pending = []  # (index in calls, candidate, primary outcome) awaiting the second model
+
+    def _progress(frac):
+        _report("ai", int(1000 * min(frac, 1.0)), 1000)
+
+    def _keep(call):
+        cand, (res, status, _lat, _raw) = call
+        if batch_escalation and provider.needs_escalation(res, status):
+            pending.append((len(calls), cand, (res, status, _lat, _raw)))
+        elif ai_cache is not None and status == "ok" and res is not None:
+            ai_cache.put(cand.source_text, res)
+        calls.append(call)
+        # first pass = 85% of the AI bar when a second pass may follow
+        _progress((len(calls)) / max(total_ai, 1) * (0.85 if batch_escalation else 1.0))
+
+    first = (lambda c: (c, provider.primary_only(c))) if batch_escalation else (lambda c: _ai_call(router, c))
+    # Results are consumed on this thread so the job's progress listener sees them.
     if workers.enabled and workers.max_workers > 1:
         with ThreadPoolExecutor(max_workers=workers.max_workers) as ex:
-            calls = list(ex.map(lambda c: _ai_call(router, c), ai_queue2))
+            for call in ex.map(first, todo):
+                _keep(call)
     else:
-        calls = [_ai_call(router, c) for c in ai_queue2]
+        for c in todo:
+            _keep(first(c))
+    # Second pass: only the unsettled candidates, one model load.
+    for n, (idx, cand, outcome) in enumerate(pending, 1):
+        try:
+            final = provider.escalate(cand, *outcome)
+        except Exception:
+            final = outcome
+        calls[idx] = (cand, final)
+        res, status = final[0], final[1]
+        if ai_cache is not None and status == "ok" and res is not None:
+            ai_cache.put(cand.source_text, res)
+        _progress(0.85 + 0.15 * n / len(pending))
+    _progress(1.0)
+
     for cand, (result, status, lat, _raw) in calls:
         latencies.append(lat)
         telem.model_call_count += 1

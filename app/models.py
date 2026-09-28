@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, JSON, ForeignKey
+from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 import uuid
@@ -220,3 +220,95 @@ class User(Base):
     provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+
+
+class TenderIssue(Base):
+    """Stage 5H — things a person must look at, per tender.
+
+    category "missing": review required (missing / unreadable / unsupported files,
+    referenced documents not in the package, mandatory requirements with no
+    company evidence) — surfaced as notifications.
+    category "question": the Q&A list (ambiguous clauses, unreadable scanned
+    pages, requirements the AI could not classify) with an answer field.
+    dedupe_key keeps rebuilds idempotent and never reopens a resolved item.
+    """
+    __tablename__ = "tender_issues"
+    __table_args__ = (UniqueConstraint("tender_id", "dedupe_key", name="uq_issue_tender_key"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    category = Column(String, nullable=False)  # missing | question
+    kind = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    source_document = Column(String, nullable=True)
+    page = Column(String, nullable=True)
+    priority = Column(String, default="MEDIUM")  # HIGH | MEDIUM | LOW
+    status = Column(String, default="OPEN", index=True)  # OPEN | RESOLVED
+    answer = Column(Text, nullable=True)
+    resolved_by = Column(String, nullable=True)
+    dedupe_key = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+
+class NewsItem(Base):
+    """Stage 5H — tender notices from official sources (no personal contact data)."""
+    __tablename__ = "news_items"
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uq_news_source_ext"),)
+    id = Column(String, primary_key=True)
+    source = Column(String, nullable=False)
+    external_id = Column(String, nullable=False)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    country = Column(String, nullable=True, index=True)
+    notice_type = Column(String, nullable=True)
+    organization = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    published_at = Column(DateTime, nullable=True, index=True)
+    deadline_at = Column(DateTime, nullable=True)
+    relevant = Column(Boolean, default=False, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Rfq(Base):
+    """Stage 5I — a request for quotation for one work package of a tender."""
+    __tablename__ = "rfqs"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    reference = Column(String, nullable=False)       # e.g. RFQ-MECH-04
+    package_name = Column(String, nullable=False)    # e.g. Mechanical Work Package
+    discipline = Column(String, nullable=True)       # e.g. HVAC
+    scope = Column(Text, nullable=True)              # keywords / scope used to pick requirements
+    invited_count = Column(Float, nullable=True)
+    closes_at = Column(DateTime, nullable=True)
+    currency = Column(String, default="SAR")
+    status = Column(String, default="OPEN")          # OPEN | CLOSED | AWARDED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Quotation(Base):
+    """One subcontractor's answer to an RFQ. Technical fit is entered by the engineer."""
+    __tablename__ = "quotations"
+    id = Column(String, primary_key=True)
+    rfq_id = Column(String, ForeignKey("rfqs.id"), index=True, nullable=False)
+    contractor = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    duration_weeks = Column(Float, nullable=False)
+    technical_fit = Column(Float, nullable=False)    # 0-100 %
+    payment_terms_days = Column(Float, nullable=False)
+    notes = Column(Text, nullable=True)
+    selected = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """Stage 5I — problems / suggestions sent from inside the product."""
+    __tablename__ = "feedback"
+    id = Column(String, primary_key=True)
+    user_email = Column(String, index=True, nullable=True)
+    kind = Column(String, default="problem")         # problem | suggestion | upgrade
+    message = Column(Text, nullable=False)
+    page = Column(String, nullable=True)
+    plan = Column(String, nullable=True)
+    status = Column(String, default="NEW")           # NEW | IN_PROGRESS | DONE
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -7,6 +7,7 @@ Processing Pipeline — TenderMind — Phase 3A + Stage 1B
 - Stage 1B: Uses persisted TenderDocument.source_path via get_storage_root() single source of truth.
 -          No Sarai fallback for real uploaded tenders.
 """
+import threading
 import uuid
 import datetime
 from pathlib import Path
@@ -118,7 +119,102 @@ def _derive_terminal_status(
 
     return "FAILED"
 
+ACTIVE_JOBS: set = set()
+_ACTIVE_LOCK = threading.Lock()
+LOW_OCR_CONFIDENCE = 0.55
+
+
+def page_quality(doc_results: dict) -> list:
+    """OCR'd pages that are probably unreadable (low confidence or almost no text)."""
+    out = []
+    for name, res in (doc_results or {}).items():
+        for pg in (res or {}).get("pages") or []:
+            if not pg.get("ocr_applied"):
+                continue
+            conf = pg.get("confidence")
+            chars = len((pg.get("text") or "").strip())
+            if (conf is not None and conf < LOW_OCR_CONFIDENCE) or chars < 30:
+                out.append({"document": name, "page": pg.get("page_number") or pg.get("source_page_number"),
+                            "confidence": round(conf, 2) if isinstance(conf, (int, float)) else None,
+                            "chars": chars})
+    return out
+
+
 def process_tender(tender_id: str, job_id: str):
+    with _ACTIVE_LOCK:
+        ACTIVE_JOBS.add(job_id)
+    try:
+        _process_tender(tender_id, job_id)
+    finally:
+        with _ACTIVE_LOCK:
+            ACTIVE_JOBS.discard(job_id)
+        try:
+            from app.issues import sync_issues_safe
+            sync_issues_safe(tender_id)
+        except Exception:
+            pass
+
+
+def resume_interrupted(grace_seconds: int = 0, reason: str = "the server stopped") -> list:
+    """Jobs marked QUEUED/PROCESSING with no live worker in this process are
+    resumed as a new job (extraction and AI answers come back from checkpoints).
+    A tender is auto-resumed at most 3 times in 6 hours, so a file that crashes
+    the worker every time cannot loop forever."""
+    import os
+    from app.database import SessionLocal as _SL
+    auto = os.environ.get("TENDERMIND_AUTO_RESUME", "1").strip() != "0"
+    now = datetime.datetime.utcnow()
+    started = []
+    s = _SL()
+    try:
+        stuck = s.query(ProcessingJob).filter(ProcessingJob.status.in_(["QUEUED", "PROCESSING"])).all()
+        for job in stuck:
+            with _ACTIVE_LOCK:
+                alive = job.id in ACTIVE_JOBS
+            born = job.started_at or job.created_at or now
+            if alive or (now - born).total_seconds() < grace_seconds:
+                continue
+            recent = s.query(ProcessingJob).filter(
+                ProcessingJob.tender_id == job.tender_id,
+                ProcessingJob.created_at >= now - datetime.timedelta(hours=6),
+                ProcessingJob.last_error.like("%resumed automatically%")).count()
+            job.status = "FAILED"
+            job.completed_at = now
+            if auto and recent < 3:
+                s.commit()
+                new = create_processing_job(s, job.tender_id)
+                job.last_error = f"Interrupted ({reason}) — resumed automatically as {new.id}"
+                s.commit()
+                threading.Thread(target=process_tender, args=(job.tender_id, new.id),
+                                 name=f"resume-{new.id}", daemon=True).start()
+                started.append(new.id)
+            else:
+                job.last_error = (f"Interrupted ({reason}). Start processing again."
+                                  if not auto else
+                                  f"Interrupted ({reason}) repeatedly — not resumed again automatically. "
+                                  "Check the files, then start processing again.")
+                s.commit()
+    except Exception:
+        s.rollback()
+    finally:
+        s.close()
+    return started
+
+
+def start_watchdog(interval_s: int = 60, grace_s: int = 180) -> None:
+    """Resumes jobs whose worker thread died without recording a result."""
+    def _loop():
+        import time as _t
+        while True:
+            _t.sleep(interval_s)
+            try:
+                resume_interrupted(grace_seconds=grace_s, reason="its worker stopped unexpectedly")
+            except Exception:
+                pass
+    threading.Thread(target=_loop, name="job-watchdog", daemon=True).start()
+
+
+def _process_tender(tender_id: str, job_id: str):
     """Orchestration function — runs in BackgroundTasks"""
     db = SessionLocal()
     try:
@@ -224,7 +320,7 @@ def process_tender(tender_id: str, job_id: str):
 
         # Stage 2: Extraction (per document, with failure isolation) — real
         job.current_stage = "EXTRACTION"
-        job.progress = 20
+        job.progress = 10
         db.commit()
         documents_total = len(job_inventory) if job_inventory is not None else 0
         job.documents_total = documents_total
@@ -232,7 +328,49 @@ def process_tender(tender_id: str, job_id: str):
         documents_failed = 0
         documents_unsupported = 0
         doc_results = {}
-        for f in job_inventory if job_inventory else []:
+        # Live progress (Stage 5G): 10-40% follows pages extracted (OCR included),
+        # documents_processed follows finished files. Page totals come from the
+        # PDF page counts (cheap); every other file counts as one page.
+        from app.pipeline.progress import listen as _listen
+
+        def _page_estimate(item):
+            try:
+                if str(item.get("full_path", "")).lower().endswith(".pdf"):
+                    import fitz as _fitz
+                    with _fitz.open(item["full_path"]) as _d:
+                        return max(1, len(_d))
+            except Exception:
+                pass
+            return 1
+
+        _estimates = [_page_estimate(f) for f in (job_inventory or [])]
+        _all_pages = max(1, sum(_estimates))
+        _pages_before = 0
+        _last_commit = [0.0]
+
+        def _set_progress(pct, force=False):
+            """Best effort: a progress write that hits a busy database is skipped,
+            never allowed to end the job (it did, on the Turaif run)."""
+            import time as _time
+            if force or _time.time() - _last_commit[0] >= 2:
+                try:
+                    job.progress = round(min(pct, 99.0), 1)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                _last_commit[0] = _time.time()
+
+        def _on_extract(phase, done, total):
+            if phase == "pages":
+                _set_progress(10 + 30 * (_pages_before + min(done, total)) / _all_pages)
+
+        for _idx, f in enumerate(job_inventory if job_inventory else []):
+            if _idx:
+                _pages_before += _estimates[_idx - 1]
+                job.documents_processed = documents_processed
+                job.documents_failed = documents_failed
+                job.documents_unsupported = documents_unsupported
+                _set_progress(10 + 30 * _pages_before / _all_pages, force=True)
             # Handle missing file marker
             if f.get("missing"):
                 documents_failed += 1
@@ -260,7 +398,15 @@ def process_tender(tender_id: str, job_id: str):
                 def _pdf(path, h):
                     return extract_pdf_text(path, ocr_needed_hint=h)
 
-                for _name, _res in extract_any(p, f["filename"], _pdf, pdf_hint=hint):
+                # Stage 5H: reuse this file's extraction from an earlier run (retry /
+                # resume after a crash) instead of reading and OCR-ing it again.
+                from app.pipeline.checkpoint import load_extraction, save_extraction
+                _entries = load_extraction(tender_id, p, f["filename"])
+                if _entries is None:
+                    with _listen(_on_extract):
+                        _entries = extract_any(p, f["filename"], _pdf, pdf_hint=hint)
+                    save_extraction(tender_id, p, f["filename"], _entries)
+                for _name, _res in _entries:
                     _st = _res["status"]
                     if _st == "UNSUPPORTED":
                         documents_unsupported += 1
@@ -282,19 +428,21 @@ def process_tender(tender_id: str, job_id: str):
                      {"total": documents_total, "processed": documents_processed,
                       "failed": documents_failed, "unsupported": documents_unsupported})
 
+        # Stages 3-6 are quick bookkeeping; the AI itself runs later
+        # (AI_ANALYSIS, 45-93%), so these must not claim 60-90%.
         # Stage 3: Classification
         job.current_stage = "CLASSIFICATION"
-        job.progress = 40
+        job.progress = 41
         db.commit()
 
         # Stage 4: Deterministic extraction (voltage, MVA, dates)
         job.current_stage = "DETERMINISTIC"
-        job.progress = 60
+        job.progress = 42
         db.commit()
 
         # Stage 5: Semantic extraction (LLM)
         job.current_stage = "SEMANTIC"
-        job.progress = 80
+        job.progress = 43
         try:
             from evaluation.llm_generic_extraction import check_ollama_available
             ok, msg = check_ollama_available()
@@ -306,12 +454,12 @@ def process_tender(tender_id: str, job_id: str):
 
         # Stage 6: Validation
         job.current_stage = "VALIDATION"
-        job.progress = 90
+        job.progress = 44
         db.commit()
 
         # Stage 7: Persistence — build and validate canonical analysis (real, not simulated)
         job.current_stage = "PERSISTENCE"
-        job.progress = 95
+        job.progress = 45
         try:
             from evaluation.generic_extraction import build_generic_extraction
             import os
@@ -336,7 +484,10 @@ def process_tender(tender_id: str, job_id: str):
                     except:
                         tender_path = Path.cwd()
             tender = db.query(Tender).filter(Tender.id == tender_id).first()
-            analysis_data = build_generic_extraction(tender_path, tender_id=tender_id, use_llm=False)
+            # Reuse the text extracted above (it used to be extracted — and OCR'd — twice).
+            _reuse = doc_results if tender_path == storage_root / tender_id else None
+            analysis_data = build_generic_extraction(tender_path, tender_id=tender_id, use_llm=False,
+                                                     doc_results=_reuse)
             from evaluation.generic_extraction import validate_against_schema
             schema_path = Path(__file__).resolve().parents[1] / "schemas" / "tender_agnostic_schema.json"
             ok, msg = validate_against_schema(analysis_data, schema_path)
@@ -389,10 +540,22 @@ def process_tender(tender_id: str, job_id: str):
                 # Workers were never passed here before, so TENDERMIND_WORKERS_ENABLED
                 # had no effect and every AI call ran sequentially.
                 from app.pipeline.capability_tiers import load_worker_config as _lwc
-                _intel, _telem = _ir.run_intelligence(
-                    tender_id, _sources, documents=_docs, tables=_tables,
-                    job_id=job.id, deterministic_extras=_extras,
-                    workers=_lwc())
+                job.current_stage = "AI_ANALYSIS"
+                _set_progress(45, force=True)
+
+                def _on_ai(phase, done, total):
+                    if phase == "ai" and total:
+                        _set_progress(45 + 48 * done / total)
+
+                from app.pipeline.checkpoint import AiCache
+                from app.pipeline.ai_router import active_model_name as _amn, active_prompt_version as _apv
+                with _listen(_on_ai):
+                    _intel, _telem = _ir.run_intelligence(
+                        tender_id, _sources, documents=_docs, tables=_tables,
+                        job_id=job.id, deterministic_extras=_extras,
+                        workers=_lwc(), ai_cache=AiCache(tender_id, _amn(), _apv()))
+                job.current_stage = "PERSISTENCE"
+                _set_progress(95, force=True)
                 analysis_data = dict(analysis_data)
                 analysis_data["requirements"] = _intel["requirements"]
                 analysis_data["evidence"] = _intel["evidence"]
@@ -423,6 +586,13 @@ def process_tender(tender_id: str, job_id: str):
                     raise ValueError(f"Two-stage schema validation failed: {_msg2}")
                 job.current_stage = "FINALIZING"
                 db.commit()
+            # Stage 5H: unreadable scanned pages feed the Q&A list.
+            try:
+                _df2 = dict(analysis_data.get("derived_features") or {})
+                _df2["page_quality"] = page_quality(doc_results)
+                analysis_data["derived_features"] = _df2
+            except Exception:
+                pass
             req_ids = [r["requirement_id"] for r in analysis_data["requirements"]]
             if len(req_ids) != len(set(req_ids)):
                 raise ValueError("Duplicate requirement IDs")
@@ -547,15 +717,30 @@ def process_tender(tender_id: str, job_id: str):
                      error=job.last_error if job.status != "COMPLETED" else None)
 
     except Exception as e:
+        # The job's session may be the thing that failed (e.g. a locked database
+        # left it needing rollback). Record FAILED on a fresh session so a job
+        # never stays "PROCESSING" after its thread is gone.
         try:
-            job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
-            if job:
-                job.status = "FAILED"
-                job.last_error = str(e)[:500]
-                job.error_count = (job.error_count or 0) + 1
-                job.completed_at = datetime.datetime.utcnow()
-                db.commit()
-        except:
+            db.rollback()
+        except Exception:
             pass
+        _mark_failed(job_id, e)
     finally:
         db.close()
+
+
+def _mark_failed(job_id: str, err: Exception) -> None:
+    from app.database import SessionLocal as _SL
+    s = _SL()
+    try:
+        job = s.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
+        if job:
+            job.status = "FAILED"
+            job.last_error = f"{type(err).__name__}: {err}"[:500]
+            job.error_count = (job.error_count or 0) + 1
+            job.completed_at = datetime.datetime.utcnow()
+            s.commit()
+    except Exception:
+        s.rollback()
+    finally:
+        s.close()

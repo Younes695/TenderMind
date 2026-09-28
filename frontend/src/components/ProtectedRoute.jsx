@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import apiClient from "../api/client";
+import { useT } from "../i18n";
 
 export default function ProtectedRoute() {
+  const t = useT();
   const [status, setStatus] = useState("checking");
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function ProtectedRoute() {
   if (status === "checking") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-slate-500">Checking session...</p>
+        <p className="text-sm text-slate-500">{t("Checking session...")}</p>
       </div>
     );
   }

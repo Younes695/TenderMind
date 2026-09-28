@@ -16,18 +16,19 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import TendersList from "./pages/TendersList";
 import CompanyKnowledge from "./pages/CompanyKnowledge";
 import ComingSoon from "./pages/ComingSoon";
+import Notifications from "./pages/Notifications";
+import QA from "./pages/QA";
+import News from "./pages/News";
+import Subcontractors from "./pages/Subcontractors";
+import Settings from "./pages/Settings";
 
 // Sidebar sections that are planned but not built yet.
 const PLANNED_SECTIONS = [
   ["/work-packages", "Work Packages", "Split a tender into packages of work with owners and due dates."],
-  ["/qa", "Q&A", "Track clarification questions sent to the client and their answers."],
   ["/approvals", "Approvals", "Route the bid decision through management approval with an audit trail."],
   ["/documents", "Documents", "One library of every tender document across all tenders."],
-  ["/subcontractors", "Subcontractors", "Manage subcontractor RFQs and their quotes per work package."],
   ["/analytics", "Analytics", "Win rate, bid pipeline and effort per tender over time."],
-  ["/notifications", "Notifications", "Deadlines, finished processing jobs and approval requests in one place."],
   ["/help", "Help", "Guides for uploading tenders, company evidence and reading the bid decision."],
-  ["/settings", "Settings", "Account, team members, subscription plan and upload limits."],
 ];
 
 function App() {
@@ -51,7 +52,7 @@ function App() {
         <Route path="/signup" element={<Signup/>}/>
 
         {/* Everything below requires a valid session (checked via GET /api/auth/me).
-            Previously these routes were reachable with no login at all — ProtectedRoute
+            Previously these routes were reachable with no login at all - ProtectedRoute
             existed in the codebase but was never wired into the router. */}
         <Route element={<ProtectedRoute/>}>
           <Route path="/tenders/new" element={<NewTender/>}/>
@@ -61,6 +62,11 @@ function App() {
             <Route path="/tenders" element={<TendersList/>}/>
             <Route path="/tenders/:tender_id" element={<TenderWorkspace/>}/>
             <Route path="/company-knowledge" element={<CompanyKnowledge/>}/>
+            <Route path="/notifications" element={<Notifications/>}/>
+            <Route path="/qa" element={<QA/>}/>
+            <Route path="/news" element={<News/>}/>
+            <Route path="/subcontractors" element={<Subcontractors/>}/>
+            <Route path="/settings" element={<Settings/>}/>
             {PLANNED_SECTIONS.map(([path, title, description]) => (
               <Route key={path} path={path} element={<ComingSoon title={title} description={description}/>}/>
             ))}

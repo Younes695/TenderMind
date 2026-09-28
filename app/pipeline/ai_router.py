@@ -269,11 +269,25 @@ class EscalatingProvider(ModelProvider):
     def health_check(self):
         return self._primary.health_check()
 
+    # Stage 5H: batch mode. On a small GPU the two models cannot stay loaded
+    # together, so escalating candidate-by-candidate swapped models on almost
+    # every call (Turaif: ~5 calls/min instead of ~24). The runner now calls
+    # primary_only() for every candidate, then escalate() for the unsettled ones
+    # in one batch — one model swap per job.
+    def primary_only(self, candidate: RequirementCandidate):
+        return self._primary.normalize_requirement(candidate)
+
+    @staticmethod
+    def needs_escalation(result, status) -> bool:
+        return status != "ok" or result is None or result.category == "UNKNOWN"
+
     def normalize_requirement(self, candidate: RequirementCandidate):
         result, status, lat, raw = self._primary.normalize_requirement(candidate)
-        needs = status != "ok" or result is None or result.category == "UNKNOWN"
-        if not needs:
+        if not self.needs_escalation(result, status):
             return result, status, lat, raw
+        return self.escalate(candidate, result, status, lat, raw)
+
+    def escalate(self, candidate: RequirementCandidate, result, status, lat, raw):
         self.escalations += 1
         t0 = time.time()
         try:

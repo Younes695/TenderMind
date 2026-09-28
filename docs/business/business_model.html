@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>TenderMind — نموذج العمل وخطة التشغيل</title>
+<style>
+  :root{
+    --navy:#162A4C; --navy-2:#2B4470; --gold:#C8A96B; --ink:#101828; --ink-2:#344054;
+    --muted:#667085; --line:#E4E7EC; --soft:#F6F4EF; --ok:#1F7A4D; --warn:#A15C07; --bad:#B42318;
+  }
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:"Segoe UI","Tahoma",sans-serif; color:var(--ink); background:#fff;
+        font-size:10.6pt; line-height:1.75; }
+  .ltr{ direction:ltr; unicode-bidi:isolate; display:inline-block; }
+  h1,h2,h3{ color:var(--navy); line-height:1.35; margin:0; }
+  h2{ font-size:17pt; margin-bottom:4mm; padding-bottom:2mm; border-bottom:2px solid var(--gold); }
+  h3{ font-size:12pt; margin:5mm 0 2mm; }
+  p{ margin:0 0 2.5mm; }
+  .page{ page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+  .lead{ font-size:11.5pt; color:var(--ink-2); }
+  .muted{ color:var(--muted); font-size:9.2pt; }
+  ul{ margin:0 0 3mm; padding-right:6mm; } li{ margin-bottom:1.2mm; }
+
+  /* cover */
+  .cover{ height:260mm; display:flex; flex-direction:column; justify-content:space-between;
+          background:var(--navy); color:#fff; padding:22mm 18mm; border-radius:4mm; }
+  .cover h1{ color:#fff; font-size:34pt; letter-spacing:.5px; }
+  .cover h1 span{ color:var(--gold); }
+  .cover .sub{ font-size:16pt; color:#DDE3EE; margin-top:4mm; }
+  .cover .tag{ display:inline-block; border:1px solid var(--gold); color:var(--gold); border-radius:20px;
+               padding:1mm 4mm; font-size:10pt; margin-top:8mm; }
+  .cover .foot{ color:#AFBBD0; font-size:10pt; }
+
+  /* blocks */
+  .tiles{ display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; margin:3mm 0 4mm; }
+  .tile{ background:var(--soft); border-radius:3mm; padding:3.5mm 4mm; }
+  .tile .v{ font-size:17pt; font-weight:800; color:var(--navy); direction:ltr; unicode-bidi:isolate; }
+  .tile .k{ font-size:9.4pt; color:var(--ink-2); line-height:1.5; }
+  .tile .s{ font-size:8pt; color:var(--muted); margin-top:1mm; }
+  table{ width:100%; border-collapse:collapse; margin:2mm 0 4mm; font-size:9.6pt; }
+  th{ background:var(--navy); color:#fff; font-weight:700; text-align:right; padding:2mm 2.5mm; }
+  td{ border-bottom:1px solid var(--line); padding:2mm 2.5mm; vertical-align:top; }
+  tr:nth-child(even) td{ background:#FAFAF8; }
+  .num{ direction:ltr; unicode-bidi:isolate; text-align:left; white-space:nowrap; }
+  .box{ border:1px solid var(--line); border-right:4px solid var(--gold); border-radius:2mm;
+        padding:3mm 4mm; margin:3mm 0; background:#FFFDF8; }
+  .box.warn{ border-right-color:var(--warn); background:#FFF9F0; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; }
+  .pill{ display:inline-block; font-size:8.4pt; padding:.3mm 2.5mm; border-radius:10px; font-weight:700; }
+  .pill.ok{ background:#E7F5EE; color:var(--ok); } .pill.wip{ background:#FEF3E2; color:var(--warn); }
+  .pill.no{ background:#F2F4F7; color:var(--muted); }
+  .src{ font-size:8pt; color:var(--muted); direction:ltr; text-align:left; word-break:break-all; }
+  .chart{ margin:2mm 0 1mm; direction:ltr; }
+  .chart text{ font-family:"Segoe UI",Tahoma,sans-serif; }
+  .canvas{ display:grid; grid-template-columns:repeat(3,1fr); gap:2.5mm; }
+  .cell{ border:1px solid var(--line); border-radius:2mm; padding:2.5mm 3mm; min-height:34mm; }
+  .cell b{ color:var(--navy); display:block; margin-bottom:1mm; font-size:10pt; }
+  .cell ul{ padding-right:4mm; margin:0; font-size:9pt; } .cell li{ margin-bottom:.6mm; }
+  .cell.wide{ grid-column:span 3; min-height:auto; }
+</style>
+</head>
+<body>
+
+<!-- 1. Cover -->
+<section class="page">
+  <div class="cover">
+    <div>
+      <h1>Tender<span>Mind</span></h1>
+      <div class="sub">نموذج العمل، التسعير، وخطة التشغيل</div>
+      <div class="tag">قرار "ندخل ولا مندخلش" في المناقصات — بدليل من المستندات</div>
+    </div>
+    <div>
+      <p style="font-size:12.5pt;color:#fff;max-width:150mm">
+        منصة بتقرا ملفات المناقصة كلها (عربي وإنجليزي، حتى الصفحات الممسوحة ضوئيًا)،
+        وتطلع المتطلبات، وتقارنها بمستندات الشركة، وتدي قرار BID / REVIEW / NO BID
+        مع رقم الصفحة والنص اللي بُني عليه كل حكم.
+      </p>
+      <div class="foot">عرض للمستثمرين وخطة تشغيل · سبتمبر 2026 · الأسواق: مصر والسعودية والخليج</div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Executive summary -->
+<section class="page">
+  <h2>الملخص التنفيذي</h2>
+  <p class="lead">شركات المقاولات والتوريد الهندسي بتصرف أيام من وقت مهندسين كبار عشان تقرا مناقصة
+    من مئات الصفحات وتقرر هل تدخلها ولا لأ — وأغلب المناقصات اللي بيدخلوها بيخسروها.
+    TenderMind بيختصر المرحلة دي من أيام لساعات، وبيخلّي القرار مبني على دليل مكتوب مش على انطباع.</p>
+  <div class="tiles">
+    <div class="tile"><div class="v">$213B</div><div class="k">قيمة عقود المشاريع اللي اترست في دول الخليج في 2025</div><div class="s">MEED / Kamco</div></div>
+    <div class="tile"><div class="v">316.9B SAR</div><div class="k">ترسيات الحكومة السعودية على منصة اعتماد في 2025</div><div class="s">Menacon</div></div>
+    <div class="tile"><div class="v">44.9B EGP</div><div class="k">خطة استثمار الشركة المصرية لنقل الكهرباء 2025/2026</div><div class="s">Daily News Egypt</div></div>
+  </div>
+  <h3>اللي بنبيعه</h3>
+  <ul>
+    <li><b>قراءة المناقصة كلها:</b> PDF وWord وExcel وصور وملفات مضغوطة، عربي وإنجليزي، مع OCR للصفحات الممسوحة.</li>
+    <li><b>استخراج المتطلبات وتصنيفها</b> (قانونية، خبرة، مالية، فنية، سلامة…) مع رقم الصفحة والنص الأصلي لكل متطلب.</li>
+    <li><b>قرار مبني على دليل:</b> مقارنة كل متطلب إلزامي بمستندات الشركة، و"PASS" مايتقالش غير لو فيه نص موجود فعلاً في مستندات الشركة.</li>
+  </ul>
+  <h3>ليه دلوقتي</h3>
+  <ul>
+    <li>مشاريع ضخمة في الطريق: حوالي $300 مليار عقود مطروحة أو قيد التقييم في الخليج، نصها تقريبًا في السعودية.</li>
+    <li>نماذج الذكاء الاصطناعي بقت قادرة تقرا مستندات هندسية طويلة بتكلفة أقل من دولار للمناقصة (القسم 7).</li>
+    <li>المنافسين الإقليميين الحاليين بيركزوا على <i>متابعة</i> المناقصات، مش على <i>قرار الدخول</i> بدليل.</li>
+  </ul>
+  <div class="box"><b>المطلوب:</b> تمويل تأسيسي (مثال للنقاش في القسم 11: حوالي $300 ألف لمدة 18 شهر)
+    لتحويل المنتج الحالي لعملاء بيدفعوا في مصر، وأول عميلين Enterprise في السعودية.</div>
+</section>
+
+<!-- 3. Problem -->
+<section class="page">
+  <h2>المشكلة</h2>
+  <p>مناقصة محطة محولات واحدة ممكن تبقى عشرات الملفات وأكتر من ألف صفحة. مثال حقيقي جربناه عليه المنتج:
+    مناقصة محطة طريف 132 ك.ف في السعودية = <b>28 ملف، 151 ميجابايت، والملف الفني لوحده 1,530 صفحة</b>
+    منهم حوالي 320 صفحة ممسوحة ضوئيًا.</p>
+  <table>
+    <tr><th style="width:30%">الألم</th><th>اللي بيحصل النهارده</th><th style="width:22%">التمن</th></tr>
+    <tr><td>القراءة</td><td>مهندسين كبار بيقسموا الملفات ويقروها يدوي، والمتطلب المهم ممكن يكون مدفون في ملحق.</td><td>أيام عمل لكل مناقصة</td></tr>
+    <tr><td>قرار الدخول</td><td>بيتاخد في اجتماع على Excel وإيميلات، من غير ربط كل متطلب بدليل عند الشركة.</td><td>دخول مناقصات مش هنكسبها</td></tr>
+    <tr><td>تكلفة العرض</td><td>تجهيز العرض بيكلف من 0.2% لحد حوالي 1.5% من قيمة العقد حسب تعقيده.</td><td>على عقد $20M: حتى $300K</td></tr>
+    <tr><td>نسبة الفوز</td><td>متوسط نسبة فوز المقاولين حوالي 20-25% — يعني 3 من كل 4 عروض فلوسهم ضايعة.</td><td>تكلفة الفوز = 4-5 أضعاف تكلفة العرض</td></tr>
+  </table>
+  <div class="box">كل مناقصة بنقرر بدري إننا <b>مش</b> هندخلها بتوفر تكلفة عرض كاملة. وكل متطلب إلزامي بنكتشف بدري
+    إنه ناقص (زي شهادة أو خبرة سابقة أو ضمان بنكي) بيدي وقت نجهزه أو نشارك مع حد عنده.</div>
+  <p class="src">Sources: constructingexcellence.org.uk/4015-2/ · ociwins.com/government-proposal-consultants/cost-prepare-proposal/ · 4bt.us/construction-bid-win-percentage/</p>
+</section>
+
+<!-- 4. Solution + built vs roadmap -->
+<section class="page">
+  <h2>الحل — واللي اتبنى فعلاً</h2>
+  <p>المستثمر محتاج يعرف الفرق بين اللي شغال النهارده واللي لسه في الخطة. الجدول ده بيقول الحقيقة، حتى لو
+    موقع المنتج الحالي بيعرض مميزات أكتر.</p>
+  <table>
+    <tr><th>القدرة</th><th style="width:18%">الحالة</th><th>التفاصيل</th></tr>
+    <tr><td>رفع ملفات المناقصة (PDF, Word, Excel, صور, ZIP/RAR/7z, DXF)</td><td><span class="pill ok">شغال</span></td><td>حتى 5 جيجا للملف، مع رسالة واضحة للأنواع غير المدعومة</td></tr>
+    <tr><td>OCR عربي وإنجليزي للصفحات الممسوحة</td><td><span class="pill ok">شغال</span></td><td>Tesseract محلي، الصفحة الممسوحة بس هي اللي بتتعمل OCR</td></tr>
+    <tr><td>استخراج وتصنيف المتطلبات بالـ AI مع رقم الصفحة</td><td><span class="pill ok">شغال</span></td><td>دقة التصنيف 0.886 على 70 بند متقيم يدوي (القسم 6)</td></tr>
+    <tr><td>قرار BID / REVIEW / NO BID بدليل من مستندات الشركة</td><td><span class="pill ok">شغال</span></td><td>FAIL مايتقالش غير بثقة ≥ 0.8، وأي نص مقتبس لازم يكون موجود حرفيًا</td></tr>
+    <tr><td>مراجعة بشرية وتعديل القرار مع سجل كامل</td><td><span class="pill ok">شغال</span></td><td>مين غيّر إيه وليه</td></tr>
+    <tr><td>حسابات منفصلة (إيميل، Google، Microsoft) وعزل بيانات كل شركة</td><td><span class="pill ok">شغال</span></td><td>اتقفلت ثغرات أمان حرجة في سبتمبر 2026</td></tr>
+    <tr><td>نشر بـ Docker</td><td><span class="pill wip">جاهز، لم يُختبر على سيرفر</span></td><td>أول بناء على سيرفر حقيقي لسه</td></tr>
+    <tr><td>تحليل التدفق النقدي والضمانات</td><td><span class="pill no">خطة</span></td><td>بيستخرج شروط الدفع كنص بس، مفيش نموذج مالي</td></tr>
+    <tr><td>طلبات عروض أسعار المقاولين من الباطن (RFQ)</td><td><span class="pill no">خطة</span></td><td>—</td></tr>
+    <tr><td>دورة موافقات متعددة المستويات وصلاحيات أدوار</td><td><span class="pill no">خطة</span></td><td>فيه حسابات، لكن من غير أدوار</td></tr>
+    <tr><td>استضافة داخل السعودية / ISO 27001</td><td><span class="pill no">خطة</span></td><td>شرط لعملاء Enterprise هناك</td></tr>
+  </table>
+  <div class="box warn"><b>توصية:</b> صفحات التسعير والحلول على الموقع تتعدل عشان ماتعدش بمميزات "خطة" كأنها موجودة،
+    قبل أي عرض على عملاء أو مستثمرين.</div>
+</section>
+
+<!-- 5. Market -->
+<section class="page">
+  <h2>السوق</h2>
+  <p>بنستهدف <b>شركات المقاولات</b> اللي بتدخل مناقصات كبيرة ومعقدة — مقاولات المباني والعقارات، ومقاولات
+    الكهرباء والطاقة — والمستخدم المباشر هو <b>مدير المناقصات (Tender manager)</b> وفريقه. البداية بقطاع
+    الكهرباء (محطات محولات، خطوط نقل، كابلات) لأن المنتج اتجرب على مناقصاته، وبعدها المباني والمياه والبنية التحتية.
+    التقسيم جغرافي (مصر أولًا ثم السعودية والخليج) وسلوكي (شركات بتدخل مناقصات كتير شهريًا مقابل شركات بتدخل أحيانًا).</p>
+  <div class="grid2">
+    <div>
+      <h3>الخليج والسعودية</h3>
+      <ul>
+        <li>عقود الخليج في 2025: <b class="ltr">$213.2B</b> (نزلت من رقم قياسي <span class="ltr">$313.9B</span> في 2024).</li>
+        <li>السعودية: حوالي <b class="ltr">$84.5B</b> ترسيات في 2025؛ قطاع الكهرباء والمياه حوالي 27% منها.</li>
+        <li>حوالي <b class="ltr">$300B</b> عقود مطروحة أو قيد التقييم، نصها تقريبًا في السعودية.</li>
+        <li>منصة اعتماد: <b class="ltr">316.9B SAR</b> ترسيات حكومية في 2025، والتزام بالمحتوى المحلي فوق 94%.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>مصر</h3>
+      <ul>
+        <li>الشركة المصرية لنقل الكهرباء: خطة <b class="ltr">EGP 44.9B</b> لسنة 2025/2026 (47% منها مشاريع جديدة واستبدال).</li>
+        <li>استثمار <b class="ltr">EGP 26.5B</b> في شبكة النقل في 2024/2025.</li>
+        <li>تمويل أوروبي <b class="ltr">€690M</b> (بنك الاستثمار الأوروبي + الاتحاد الأوروبي) لتطوير الشبكة، أُعلن في يونيو 2026.</li>
+        <li>مناقصات دولية متكررة لمحطات GIS وخطوط 220/500 ك.ف.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>تقدير حجم الفرصة (منهج من تحت لفوق)</h3>
+  <p>مفيش رقم منشور لعدد المقاولين اللي بيدخلوا مناقصات كهرباء في المنطقة، فالتقدير ده <b>فرضيات لازم نتحقق منها</b> في أول 6 شهور:</p>
+  <table>
+    <tr><th>الشريحة</th><th>عدد الشركات (فرضية)</th><th>متوسط الإيراد السنوي للعميل</th><th>الحجم</th></tr>
+    <tr><td>مقاولين ومورّدين كهرباء متوسطين (مصر)</td><td class="num">300</td><td class="num">$1,800 – $6,000</td><td class="num">$0.5M – $1.8M</td></tr>
+    <tr><td>مقاولين EPC ومورّدين (السعودية والخليج)</td><td class="num">400</td><td class="num">$6,000 – $20,000</td><td class="num">$2.4M – $8M</td></tr>
+    <tr><td>شركات كبيرة وتحالفات (Enterprise)</td><td class="num">60</td><td class="num">$20,000 – $60,000</td><td class="num">$1.2M – $3.6M</td></tr>
+    <tr><td><b>الإجمالي في قطاع الكهرباء بس</b></td><td class="num">760</td><td></td><td class="num"><b>$4M – $13M / year</b></td></tr>
+  </table>
+  <p class="src">Sources: meed.com/contract-awards-decline-in-2025 · kamcoinvest.com (GCC Projects Market Update Q2-2025) · menacon.com/insights/saudi-arabia-awarded-government-tenders · dailynewsegypt.com/2025/11/11/egp-45bn-investment-plan-for-eetc-in-fy-2025-2026/ · dailynewsegypt.com/2026/02/09/ · north-africa-middle-east-gulf.ec.europa.eu (2026-06-15)</p>
+</section>
+
+<!-- 6. Product proof -->
+<section class="page">
+  <h2>الإثبات: التجارب على مناقصات حقيقية</h2>
+  <table>
+    <tr><th>المناقصة</th><th>الحجم</th><th>النتيجة</th></tr>
+    <tr><td>محطة سراي 220 ك.ف (مصر) — عرض توضيحي</td><td>21 متطلب مرجعي</td><td>القرار: REVIEW (متطلب إلزامي ناقص)، كل حكم بصفحته ومصدره</td></tr>
+    <tr><td>توسعات 6 أكتوبر الشمالية (مصر)</td><td>ملفين، 130 متطلب</td><td>التحليل خلص في 340 ثانية، 131 نداء AI من غير ولا فشل</td></tr>
+    <tr><td>كراسة شروط "متورين" (مصر)</td><td>168 صفحة، 150 متطلب إلزامي</td><td>19 PASS بنص مقتبس حرفيًا، و0 FAIL غلط (الطريقة القديمة كانت بتطلع NO BID غلط)، في 339 ثانية</td></tr>
+    <tr><td>محطة طريف 132 ك.ف (السعودية)</td><td>28 ملف، حوالي 1,580 صفحة</td><td id="turaif">التجربة شغالة وقت كتابة المستند</td></tr>
+  </table>
+  <h3>دقة الـ AI (تصنيف المتطلبات)</h3>
+  <svg class="chart" viewBox="0 0 640 170" width="100%" role="img" aria-label="تطور دقة تصنيف المتطلبات">
+    <g transform="translate(0,0)">
+      <line x1="40" y1="140" x2="620" y2="140" stroke="#D0D5DD" stroke-width="1"/>
+      <line x1="40" y1="20" x2="620" y2="20" stroke="#F2F4F7" stroke-width="1"/>
+      <line x1="40" y1="80" x2="620" y2="80" stroke="#F2F4F7" stroke-width="1"/>
+      <text x="34" y="144" text-anchor="end" font-size="10" fill="#667085">0.5</text>
+      <text x="34" y="84" text-anchor="end" font-size="10" fill="#667085">0.75</text>
+      <text x="34" y="24" text-anchor="end" font-size="10" fill="#667085">1.0</text>
+      <!-- bars: y = 140 - (acc-0.5)/0.5*120 -->
+      <path d="M90 140 V120 a4 4 0 0 1 4 -4 H176 a4 4 0 0 1 4 4 V140 Z" fill="#9AA9C4"/>
+      <path d="M250 140 V58.6 a4 4 0 0 1 4 -4 H336 a4 4 0 0 1 4 4 V140 Z" fill="#5A6F96"/>
+      <path d="M410 140 V51.9 a4 4 0 0 1 4 -4 H496 a4 4 0 0 1 4 4 V140 Z" fill="#162A4C"/>
+      <text x="135" y="110" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">0.60</text>
+      <text x="295" y="49" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">0.857</text>
+      <text x="455" y="42" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">0.886</text>
+      <text x="135" y="158" text-anchor="middle" font-size="10" fill="#344054">Prompt v1 (Stage 4)</text>
+      <text x="295" y="158" text-anchor="middle" font-size="10" fill="#344054">Prompt v2 (Stage 5A)</text>
+      <text x="455" y="158" text-anchor="middle" font-size="10" fill="#344054">+ qwen3 fallback (5G)</text>
+    </g>
+  </svg>
+  <p class="muted">نفس الـ 70 بند المتقيمين يدويًا من 3 مناقصات مختلفة (16 + 33 + 21). الخط ده بيوضح إن التحسين جه من
+    تصميم أفضل على نفس الموديل الصغير المحلي (3 مليار باراميتر)، مش من موديل أكبر.
+    قيمة v1 = نفس المجموعات الثلاثة بالـ prompt القديم (42/70).</p>
+  <div class="box warn"><b>بصراحة:</b> 70 بند عينة صغيرة. الخطوة الجاية الحقيقية هي عينة أكبر متقيمة يدويًا من نصوص
+    مناقصات حقيقية بعد الـ OCR، وقياس دقة قرار الـ BID نفسه (مش التصنيف بس). ده جزء من خطة أول 6 شهور.</div>
+</section>
+
+<!-- 7. Unit economics -->
+<section class="page">
+  <h2>تكلفة المناقصة الواحدة (Unit Economics)</h2>
+  <p>المناقصة الكبيرة = حوالي 300 نداء AI للتصنيف + 150 نداء لمقارنة المتطلبات الإلزامية بمستندات الشركة.
+    الحسبة بأسعار Anthropic الرسمية لكل مليون token (Opus 5: $5 إدخال / $25 إخراج، Haiku 4.5: $1 / $5):</p>
+  <table>
+    <tr><th>طريقة التشغيل</th><th>تكلفة AI للمناقصة</th><th>الملاحظات</th></tr>
+    <tr><td>موديلات محلية بس (qwen2.5:3b + qwen3:4b)</td><td class="num">~$0</td><td>التكلفة في السيرفر، والبيانات مابتخرجش من الشركة — مناسب لـ Enterprise</td></tr>
+    <tr><td>محلي + Claude Opus 5 للبنود غير الواضحة بس (~15%)</td><td class="num">~$0.84</td><td>التوصية للاشتراكات العادية: دقة أعلى بتكلفة صغيرة</td></tr>
+    <tr><td>Claude Haiku 4.5 لكل النداءات</td><td class="num">~$1.12</td><td>سيرفر خفيف من غير GPU</td></tr>
+    <tr><td>Claude Opus 5 لكل النداءات</td><td class="num">~$5.59</td><td>أعلى دقة؛ ممكن تقل 40-60% بالـ prompt caching</td></tr>
+  </table>
+  <svg class="chart" viewBox="0 0 640 150" width="100%" role="img" aria-label="تكلفة AI للمناقصة حسب طريقة التشغيل">
+    <line x1="170" y1="10" x2="170" y2="138" stroke="#D0D5DD" stroke-width="1"/>
+    <!-- width = cost/6 * 440 -->
+    <text x="160" y="30" text-anchor="end" font-size="11" fill="#344054">Local only</text>
+    <rect x="170" y="20" width="2" height="16" fill="#162A4C"/>
+    <text x="178" y="32" font-size="11" font-weight="700" fill="#101828">$0</text>
+    <text x="160" y="62" text-anchor="end" font-size="11" fill="#344054">Hybrid (15% Opus 5)</text>
+    <path d="M170 52 H227.6 a4 4 0 0 1 4 4 V64 a4 4 0 0 1 -4 4 H170 Z" fill="#162A4C"/>
+    <text x="238" y="64" font-size="11" font-weight="700" fill="#101828">$0.84</text>
+    <text x="160" y="94" text-anchor="end" font-size="11" fill="#344054">Haiku 4.5 (all)</text>
+    <path d="M170 84 H248.1 a4 4 0 0 1 4 4 V96 a4 4 0 0 1 -4 4 H170 Z" fill="#162A4C"/>
+    <text x="258" y="96" font-size="11" font-weight="700" fill="#101828">$1.12</text>
+    <text x="160" y="126" text-anchor="end" font-size="11" fill="#344054">Opus 5 (all)</text>
+    <path d="M170 116 H575.9 a4 4 0 0 1 4 4 V128 a4 4 0 0 1 -4 4 H170 Z" fill="#162A4C"/>
+    <text x="586" y="128" font-size="11" font-weight="700" fill="#101828">$5.59</text>
+  </svg>
+  <p class="muted">فرضيات الحساب: 1,500 token إدخال و120 إخراج لنداء التصنيف، و2,500 إدخال و150 إخراج لنداء المقارنة.
+    الأرقام هتتحدّث بقياس فعلي على مناقصة طريف.</p>
+  <h3>الهامش</h3>
+  <p>في باقة Professional ($499 / شهر لـ 15 مناقصة) الإيراد حوالي <b class="ltr">$33</b> للمناقصة، وتكلفة AI في الوضع
+    المختلط أقل من <b class="ltr">$1</b>. يعني هامش إجمالي على الـ AI فوق 95% قبل تكلفة السيرفر والدعم.
+    التكلفة الحقيقية الأكبر هي السيرفر: OCR لـ 1,500 صفحة بياخد وقت ومعالج، ولازم نقيسها على السيرفر اللي هنختاره.</p>
+</section>
+
+<!-- 8. Pricing -->
+<section class="page">
+  <h2>التسعير المقترح</h2>
+  <p>التسعير ده <b>فرضيات بداية</b> هنختبرها مع أول 10 عملاء، ومحسوب إنه أقل من المنافسين الأوروبيين
+    (Brainial: €5,500 – €17,500 في السنة) ومناسب لقدرة الدفع في مصر.</p>
+  <table>
+    <tr><th>الباقة</th><th>السعر</th><th>مين</th><th>بتشمل</th></tr>
+    <tr><td><b>تجربة</b></td><td class="num">Free</td><td>أي شركة</td><td>مناقصة واحدة كاملة (حتى 300 صفحة) — العميل يشوف القيمة على مناقصته هو</td></tr>
+    <tr><td><b>Starter</b></td><td class="num">$149 / month</td><td>مقاولين صغيرين ومتوسطين (مصر)</td><td>4 مناقصات شهريًا، 3 مستخدمين، استخراج المتطلبات والملخص</td></tr>
+    <tr><td><b>Professional</b></td><td class="num">$499 / month</td><td>فرق مناقصات بتدخل كتير</td><td>15 مناقصة شهريًا، مستخدمين غير محدودين، قرار BID بدليل من مستندات الشركة، مراجعة بشرية</td></tr>
+    <tr><td><b>Enterprise</b></td><td class="num">from $20,000 / year</td><td>شركات كبيرة وتحالفات (الخليج)</td><td>تشغيل داخل الشركة أو استضافة في السعودية، موديلات محلية فقط، SSO، دعم مخصص</td></tr>
+    <tr><td>مناقصة إضافية</td><td class="num">$49 / $39</td><td>Starter / Pro</td><td>فوق الحد الشهري</td></tr>
+  </table>
+  <h3>التحصيل وخدمة العملاء</h3>
+  <ul>
+    <li><b>الدفع:</b> اشتراكات شهرية بالكارت عن طريق شركة دفع إلكتروني (مصر: Paymob أو Fawry، السعودية: Moyasar أو HyperPay)،
+      وتحويل بنكي بفاتورة لعقود الشركات وEnterprise — محتاج اتفاق مع بنك لحساب تجاري بالجنيه والريال.</li>
+    <li><b>خدمة العملاء:</b> دليل استخدام بالعربي والإنجليزي، Feedback من داخل المنتج، ودعم مباشر ومدير حساب لـ Enterprise.</li>
+  </ul>
+  <h3>ليه العميل هيدفع</h3>
+  <ul>
+    <li>لو المنتج خلّى الشركة تقرر "مندخلش" في مناقصة واحدة بس في السنة بدري، وفّر تكلفة عرض كاملة — على عقد $20M ممكن تبقى عشرات آلاف الدولارات. ده أضعاف سعر الاشتراك السنوي.</li>
+    <li>ساعات المهندسين الكبار اللي بتروح على القراءة هي أغلى وقت في الشركة.</li>
+  </ul>
+  <div class="box"><b>ملحوظة عن العملة:</b> الأسعار بالدولار عشان تتقارن. في مصر هتتسعّر بالجنيه وفي السعودية بالريال،
+    وسعر الصرف في مصر خطر لازم يتراجع كل ربع سنة.</div>
+</section>
+
+<!-- 9. Competition -->
+<section class="page">
+  <h2>المنافسين والتميز</h2>
+  <table>
+    <tr><th>المنافس</th><th>بيعمل إيه</th><th>الفرق عندنا</th></tr>
+    <tr><td>Tenders Alerts, TendersRadar, Esdaar (السعودية)</td><td>متابعة مناقصات اعتماد وتنبيهات وتلخيص ومطابقة</td><td>إحنا بعد مرحلة الاكتشاف: قرار الدخول بدليل لكل متطلب، ومستندات فنية ضخمة ممسوحة ضوئيًا</td></tr>
+    <tr><td>Mustashar (السعودية)</td><td>كتابة العرض الفني والمالي بالـ AI</td><td>إحنا بنسبق كتابة العرض: هل ندخل أصلاً؟ — ممكن نبقى شركاء مش منافسين</td></tr>
+    <tr><td>Brainial, Altura, Tendium (أوروبا)</td><td>منصات إدارة مناقصات متكاملة للقطاع العام الأوروبي</td><td>مش مصممة للعربي ولا لمناقصات الكهرباء في مصر والخليج، وأسعارها أعلى</td></tr>
+    <tr><td>الشغل اليدوي (Excel + اجتماعات)</td><td>المنافس الحقيقي النهارده</td><td>نفس القرار في ساعات بدل أيام، ومعاه دليل مكتوب</td></tr>
+  </table>
+  <h3>الميزة اللي صعب تتنقل</h3>
+  <ul>
+    <li><b>قرار بدليل مش تخمين:</b> المنتج مصمم إنه مايقولش PASS غير بنص موجود فعلاً في مستندات الشركة، وأي تخمين بيتحول لـ REVIEW. ده بيبني ثقة عند مدير المناقصات.</li>
+    <li><b>سرية البيانات:</b> ممكن يشتغل بموديلات محلية بالكامل من غير ما أي مستند يخرج من الشركة — مهم جدًا لمناقصات حكومية.</li>
+    <li><b>تخصص القطاع:</b> متجرب على مناقصات محطات حقيقية في مصر والسعودية، بالعربي والإنجليزي وبالصفحات الممسوحة.</li>
+    <li><b>بيانات بتتراكم:</b> كل مناقصة بتتراجع بشريًا بتحسّن الموديل للقطاع ده بالذات.</li>
+  </ul>
+  <p class="src">Sources: capterra.com/p/10024987/Brainial/ · tendersalerts.com · tendersradar.com · esdaar.com · mustashar.sa · altura.io · tendium.com</p>
+</section>
+
+<!-- 10. GTM + canvas -->
+<section class="page">
+  <h2>الوصول للعملاء ونموذج العمل</h2>
+  <h3>خطة الوصول (Go-to-market)</h3>
+  <table>
+    <tr><th>المرحلة</th><th>الهدف</th><th>إزاي</th></tr>
+    <tr><td>0-6 شهور</td><td>10 عملاء بيدفعوا في مصر + قياس القيمة</td><td>موقع TenderMind بتسجيل وتجربة مجانية على مناقصة حقيقية للعميل، علاقات مباشرة مع مقاولين (كهرباء ومباني)، LinkedIn، ودفع إلكتروني (Paymob / Fawry)</td></tr>
+    <tr><td>6-12 شهر</td><td>أول عميل Enterprise في السعودية</td><td>شريك محلي (مكتب استشاري هندسي)، حضور معارض الطاقة، تشغيل داخل الشركة</td></tr>
+    <tr><td>12-36 شهر</td><td>توسع الخليج وقطاعات تانية</td><td>المياه والبنية التحتية، شراكات مع منصات متابعة المناقصات</td></tr>
+  </table>
+  <h3>نموذج العمل (Business Model Canvas)</h3>
+  <div class="canvas">
+    <div class="cell"><b>الشركاء الأساسيين</b><ul><li>الموردين: سيرفرات واستضافة، ونماذج AI (محلي / Claude)</li><li>شركات الدفع الإلكتروني: Paymob / Fawry (مصر)، Moyasar / HyperPay (السعودية)</li><li>اتفاق مع البنك للتحصيل والفواتير</li><li>مكاتب استشارات هندسية</li></ul></div>
+    <div class="cell"><b>الأنشطة الأساسية</b><ul><li>التسويق: تجارب مجانية، LinkedIn، معارض</li><li>تطوير الـ AI وقياس دقته</li><li>دعم العملاء وتدريبهم</li></ul></div>
+    <div class="cell"><b>القيمة المقدمة</b><ul><li>قرار دخول في ساعات بدل أيام</li><li>كل حكم بصفحته ونصه</li><li>تنبيه بأي حاجة ناقصة + أسئلة للنقط الغامضة</li><li>عربي وإنجليزي وسرية كاملة</li></ul></div>
+    <div class="cell"><b>العلاقة مع العميل</b><ul><li>دليل الاستخدام</li><li>تسهيل الاستخدام</li><li>Feedback من العميل</li><li>خدمة عملاء ومدير حساب لـ Enterprise</li></ul></div>
+    <div class="cell"><b>القنوات</b><ul><li>موقع TenderMind (تسجيل + تجربة مجانية)</li><li>بيع مباشر لمديري المناقصات</li><li>شركاء محليين في الخليج</li></ul></div>
+    <div class="cell"><b>شرايح العملاء</b><ul><li>شركات المقاولات: مباني وعقارات، وكهرباء وطاقة</li><li>Tender managers وفرق المناقصات</li><li>جغرافي: مصر ثم السعودية والخليج</li><li>سلوكي: بيدخلوا مناقصات كتير / أحيانًا</li></ul></div>
+    <div class="cell"><b>الموارد الأساسية</b><ul><li>منصة TenderMind (OCR + AI + قرار بدليل)</li><li>سيرفرات وكروت شاشة</li><li>عينات متقيمة يدويًا وفريق هندسي</li></ul></div>
+    <div class="cell"><b>هيكل التكاليف</b><ul><li>الفريق (الأكبر)</li><li>سيرفرات وOCR</li><li>AI (أقل من $1 للمناقصة)</li><li>تسويق ومبيعات، وعمولات الدفع والبنك</li></ul></div>
+    <div class="cell"><b>مصادر الإيراد</b><ul><li>اشتراك شهري / سنوي</li><li>دفع بالمناقصة ومناقصات إضافية</li><li>عقود Enterprise وتشغيل داخلي</li></ul></div>
+  </div>
+  <p class="muted">النسخة الكاملة في صفحة واحدة: TenderMind_BMC.pdf.</p>
+</section>
+
+<!-- 11. Projections + funding -->
+<section class="page">
+  <h2>التوقعات والتمويل</h2>
+  <p>السيناريو الأساسي — <b>عدد العملاء فرضيات</b>، والإيراد السنوي المتكرر (ARR) محسوب من أسعار القسم 8 في آخر كل سنة:</p>
+  <table>
+    <tr><th>السنة</th><th>Starter</th><th>Professional</th><th>Enterprise</th><th>ARR آخر السنة</th></tr>
+    <tr><td>السنة 1</td><td class="num">10</td><td class="num">6</td><td class="num">1</td><td class="num"><b>$73,808</b></td></tr>
+    <tr><td>السنة 2</td><td class="num">30</td><td class="num">20</td><td class="num">4</td><td class="num"><b>$253,400</b></td></tr>
+    <tr><td>السنة 3</td><td class="num">60</td><td class="num">50</td><td class="num">10</td><td class="num"><b>$606,680</b></td></tr>
+  </table>
+  <svg class="chart" viewBox="0 0 640 170" width="100%" role="img" aria-label="الإيراد السنوي المتكرر في السيناريو الأساسي">
+    <line x1="40" y1="140" x2="620" y2="140" stroke="#D0D5DD" stroke-width="1"/>
+    <!-- h = arr/650000*120 -->
+    <path d="M110 140 V130.4 a4 4 0 0 1 4 -4 H196 a4 4 0 0 1 4 4 V140 Z" fill="#162A4C"/>
+    <path d="M270 140 V97.2 a4 4 0 0 1 4 -4 H356 a4 4 0 0 1 4 4 V140 Z" fill="#162A4C"/>
+    <path d="M430 140 V32 a4 4 0 0 1 4 -4 H516 a4 4 0 0 1 4 4 V140 Z" fill="#162A4C"/>
+    <text x="155" y="120" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">$74K</text>
+    <text x="315" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">$253K</text>
+    <text x="475" y="22" text-anchor="middle" font-size="12" font-weight="700" fill="#101828">$607K</text>
+    <text x="155" y="158" text-anchor="middle" font-size="10.5" fill="#344054">Year 1</text>
+    <text x="315" y="158" text-anchor="middle" font-size="10.5" fill="#344054">Year 2</text>
+    <text x="475" y="158" text-anchor="middle" font-size="10.5" fill="#344054">Year 3</text>
+  </svg>
+  <h3>مثال للتمويل المطلوب (للنقاش — يتعدل بأرقام الفريق الحقيقية)</h3>
+  <table>
+    <tr><th>البند</th><th>الفرضية</th><th>المبلغ</th></tr>
+    <tr><td>الفريق</td><td>5 أفراد × متوسط تكلفة $2,500 شهريًا × 18 شهر</td><td class="num">$225,000</td></tr>
+    <tr><td>سيرفرات وAI وأدوات وأمان</td><td>استضافة، OCR، API، شهادات أمان أولية</td><td class="num">$35,000</td></tr>
+    <tr><td>مبيعات وسفر للخليج ومعارض</td><td>تجارب مجانية، زيارات، شريك محلي</td><td class="num">$40,000</td></tr>
+    <tr><td><b>الإجمالي</b></td><td>مدة تشغيل 18 شهر</td><td class="num"><b>$300,000</b></td></tr>
+  </table>
+  <p class="muted">المؤشرات اللي هنقيس بيها النجاح: نسبة تحويل التجربة لاشتراك، عدد المناقصات للعميل شهريًا،
+    الوقت الموفّر لكل مناقصة (بسؤال العميل)، ودقة قرار الدخول مقارنة بقرار الفريق البشري.</p>
+</section>
+
+<!-- 12. Risks + next steps -->
+<section class="page">
+  <h2>المخاطر وخطة أول 90 يوم</h2>
+  <table>
+    <tr><th>الخطر</th><th>التأثير</th><th>التعامل معاه</th></tr>
+    <tr><td>دقة الـ AI على صفحات ممسوحة سيئة</td><td>قرار غلط = فقدان ثقة</td><td>أي شك بيبقى REVIEW مش FAIL، ومراجعة بشرية، وعينة تقييم أكبر</td></tr>
+    <tr><td>سرية بيانات المناقصات</td><td>رفض العملاء الكبار</td><td>وضع الموديلات المحلية بالكامل، عزل بيانات كل حساب (اتنفذ)، استضافة في البلد</td></tr>
+    <tr><td>قوانين البيانات في السعودية (PDPL)</td><td>مانع لـ Enterprise</td><td>استضافة داخل المملكة أو تشغيل داخل الشركة</td></tr>
+    <tr><td>دورة بيع طويلة للشركات الكبيرة</td><td>بطء الإيراد</td><td>نبدأ بمصر وبالمتوسطين، والتجربة على مناقصة العميل نفسه</td></tr>
+    <tr><td>سعر الصرف في مصر</td><td>تآكل الإيراد</td><td>مراجعة الأسعار كل ربع سنة، والتركيز على الخليج للإيراد بالعملة الصعبة</td></tr>
+    <tr><td>منافسين محليين يضيفوا نفس الميزة</td><td>ضغط على السعر</td><td>التخصص الهندسي والدليل لكل حكم، وشراكات بدل منافسة</td></tr>
+  </table>
+  <h3>أول 90 يوم</h3>
+  <ol>
+    <li>تعديل الموقع عشان يعرض المميزات الموجودة بس، وإضافة صفحة "قيد التطوير".</li>
+    <li>رفع المنتج على سيرفر حقيقي بدومين وHTTPS، وتجربة Docker عليه.</li>
+    <li>5 تجارب مجانية مع مقاولين كهرباء في مصر على مناقصاتهم الحقيقية.</li>
+    <li>عينة تقييم أكبر (300+ متطلب) من مناقصات حقيقية بعد الـ OCR، وقياس دقة قرار الدخول.</li>
+    <li>تجربة Claude على البنود غير الواضحة وقياس الفرق في الدقة والتكلفة، قبل ما نقرره في الباقات.</li>
+    <li>أول 3 اشتراكات مدفوعة، وتثبيت الأسعار بناءً على ردود العملاء.</li>
+  </ol>
+  <div class="box"><b>الخلاصة:</b> المنتج الأساسي شغال على مناقصات حقيقية، وتكلفة التشغيل للمناقصة أقل من دولار.
+    المطلوب دلوقتي هو إثبات إن العملاء بيدفعوا — وده اللي التمويل ده معمول له.</div>
+</section>
+
+</body>
+</html>

@@ -424,3 +424,52 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
         db.close()
     _start_session(request, email, name)
     return RedirectResponse(pending.get("next") or "/dashboard", status_code=302)
+
+
+
+# ------------------------------------------------------------ Stage 5I settings
+@auth_router.patch("/me")
+def update_me(payload: dict, request: Request):
+    email = request.session.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    name = str(payload.get("name") or "").strip()[:120]
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    db = _db()
+    try:
+        user = _find_user(db, email)
+        if user is not None:
+            user.name = name
+            db.commit()
+    finally:
+        db.close()
+    request.session["name"] = name
+    return {"authenticated": True, "email": email, "name": name, "auth_disabled": not auth_enabled()}
+
+
+@auth_router.post("/change-password")
+def change_password(payload: dict, request: Request):
+    email = request.session.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    current = str(payload.get("current_password") or "")
+    new = str(payload.get("new_password") or "")
+    problem = password_problem(new)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    key = f"ip-email:{_client_ip(request)}|{email}"
+    _check_rate(key)
+    db = _db()
+    try:
+        user = _find_user(db, email)
+        if user is None:
+            raise HTTPException(status_code=400, detail="This account's password is managed by the server administrator")
+        if user.password_hash and not verify_password(current, user.password_hash):
+            _record_failure(key)
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        user.password_hash = hash_password(new)
+        db.commit()
+    finally:
+        db.close()
+    return {"changed": True}

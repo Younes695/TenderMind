@@ -233,6 +233,64 @@ export async function pollProcessingJob(jobId, { intervalMs = 1500, maxAttempts 
   throw new Error("Polling timeout: job did not reach terminal state");
 }
 
+// ---- Stage 5H: review items, Q&A, notifications, news
+export async function getTenderIssues(tenderId, { category, status } = {}) {
+  const q = new URLSearchParams();
+  if (category) q.set("category", category);
+  if (status) q.set("status", status);
+  const resp = await apiFetch(`/api/tenders/${encodeURIComponent(tenderId)}/issues${q.toString() ? `?${q}` : ""}`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function updateIssue(issueId, patch) {
+  const resp = await apiFetch(`/api/issues/${encodeURIComponent(issueId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return handleResponse(resp);
+}
+
+export async function getNotifications() {
+  const resp = await apiFetch(`/api/notifications`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function getNews({ country, q, relevant = true } = {}) {
+  const p = new URLSearchParams({ relevant: String(relevant) });
+  if (country) p.set("country", country);
+  if (q) p.set("q", q);
+  const resp = await apiFetch(`/api/news?${p}`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function refreshNews() {
+  const resp = await apiFetch(`/api/news/refresh`, { method: "POST" });
+  return handleResponse(resp);
+}
+
+// ---- Stage 5I: subcontractor RFQs, account settings, feedback
+async function jsonCall(path, method = "GET", body) {
+  const opts = { method };
+  if (body !== undefined) {
+    opts.headers = { "Content-Type": "application/json" };
+    opts.body = JSON.stringify(body);
+  }
+  return handleResponse(await apiFetch(path, opts));
+}
+
+export const listRfqs = (tenderId) => jsonCall(`/api/rfqs${tenderId ? `?tender_id=${encodeURIComponent(tenderId)}` : ""}`);
+export const createRfq = (tenderId, data) => jsonCall(`/api/tenders/${encodeURIComponent(tenderId)}/rfqs`, "POST", data);
+export const deleteRfq = (rfqId) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}`, "DELETE");
+export const addQuotation = (rfqId, data) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}/quotations`, "POST", data);
+export const deleteQuotation = (quoteId) => jsonCall(`/api/quotations/${encodeURIComponent(quoteId)}`, "DELETE");
+export const selectQuotation = (quoteId) => jsonCall(`/api/quotations/${encodeURIComponent(quoteId)}/select`, "POST");
+export const getRfqDraft = (rfqId) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}/draft`);
+export const updateProfile = (data) => jsonCall(`/api/auth/me`, "PATCH", data);
+export const changePassword = (data) => jsonCall(`/api/auth/change-password`, "POST", data);
+export const sendFeedback = (data) => jsonCall(`/api/feedback`, "POST", data);
+export const listFeedback = () => jsonCall(`/api/feedback`);
+
 const apiClient = {
   listTenders,
   createTender,
@@ -257,6 +315,22 @@ const apiClient = {
   uploadCompanyDocuments,
   deleteCompanyDocument,
   overrideDecision,
+  getTenderIssues,
+  updateIssue,
+  getNotifications,
+  getNews,
+  refreshNews,
+  listRfqs,
+  createRfq,
+  deleteRfq,
+  addQuotation,
+  deleteQuotation,
+  selectQuotation,
+  getRfqDraft,
+  updateProfile,
+  changePassword,
+  sendFeedback,
+  listFeedback,
   apiUrl,
 };
 

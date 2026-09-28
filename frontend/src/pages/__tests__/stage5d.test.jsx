@@ -24,7 +24,7 @@ describe("Stage 5D — sidebar pages and file removal", () => {
     for (const l of links) expect(appSrc).toContain(`"${l}"`);
     expect(src).not.toMatch(/badge: \d/); // no hardcoded fake counters
     expect(App).toBeTruthy();
-  });
+  }, 20000); // imports the whole app graph; slow when the full suite runs in parallel
 
   it("Tenders page lists tenders with links to their workspace", async () => {
     fetchMock.mockResolvedValue(json([{ id: "T-1", title: "First", client: "EETC" }, { id: "T-2", title: "Second" }]));

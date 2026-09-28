@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { Lock, Globe, ChevronDown, ShieldCheck, FileSearch, Cloud } from "lucide-react";
 import bgLogin from "../assets/bg_home.jpg";
 import logo from "../assets/logo.jpg";
+import { usePrefs } from "../i18n";
 
 const features = [
   { icon: ShieldCheck, title: "Role-based access", text: "Secure access for every team member." },
@@ -23,7 +23,7 @@ export function Logo({ dark = false }) {
 
 /** Shared frame for the log-in and sign-up pages (brand panel + form column). */
 export default function AuthLayout({ heading, intro, children }) {
-  const [lang, setLang] = useState("en");
+  const { lang, setLang, t } = usePrefs();
   return (
     <main className="grid min-h-screen bg-[#fafafa] lg:grid-cols-[44%_56%]">
       <aside
@@ -43,8 +43,8 @@ export default function AuthLayout({ heading, intro, children }) {
                   <Icon size={30} strokeWidth={1.6} />
                 </span>
                 <div className="max-w-[240px]">
-                  <p className="text-[14px] font-bold">{title}</p>
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-[#c5d0e6]">{text}</p>
+                  <p className="text-[14px] font-bold">{t(title)}</p>
+                  <p className="mt-0.5 text-[13px] leading-relaxed text-[#c5d0e6]">{t(text)}</p>
                 </div>
               </li>
             ))}
@@ -52,19 +52,19 @@ export default function AuthLayout({ heading, intro, children }) {
           <div className="flex max-w-[420px] items-start gap-4 rounded-xl border border-white/15 bg-white/5 p-5">
             <Lock size={20} strokeWidth={1.8} className="mt-0.5 shrink-0" />
             <div>
-              <p className="text-[14px] font-bold">Your security is our priority</p>
-              <p className="mt-0.5 text-[13px] leading-relaxed text-[#c5d0e6]">We use enterprise-grade security to protect your data.</p>
+              <p className="text-[14px] font-bold">{t("Your security is our priority")}</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-[#c5d0e6]">{t("We use enterprise-grade security to protect your data.")}</p>
             </div>
           </div>
         </div>
         <footer className="px-10 pb-10 text-[13px] text-[#c5d0e6]">
           <p className="mb-2">© {new Date().getFullYear()} TenderMind. All rights reserved.</p>
           <nav className="flex items-center gap-3">
-            <a href="/privacy" className="hover:text-white">Privacy Policy</a>
+            <a href="/privacy" className="hover:text-white">{t("Privacy Policy")}</a>
             <span className="text-white/30">|</span>
-            <a href="/terms" className="hover:text-white">Terms of Service</a>
+            <a href="/terms" className="hover:text-white">{t("Terms of Service")}</a>
             <span className="text-white/30">|</span>
-            <a href="/security" className="hover:text-white">Security</a>
+            <a href="/security" className="hover:text-white">{t("Security")}</a>
           </nav>
         </footer>
       </aside>
@@ -75,13 +75,13 @@ export default function AuthLayout({ heading, intro, children }) {
             <Logo dark />
           </div>
           <label className="relative flex items-center rounded-lg border border-[#e2e6ee] bg-white text-[13px] text-[#162A4C]">
-            <Globe size={16} strokeWidth={1.8} className="pointer-events-none absolute left-3" />
-            <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language"
-              className="h-10 appearance-none bg-transparent pl-9 pr-9 font-medium outline-none">
+            <Globe size={16} strokeWidth={1.8} className="pointer-events-none absolute start-3" />
+            <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t("Language")}
+              className="h-10 appearance-none bg-transparent ps-9 pe-9 font-medium outline-none">
               <option value="en">English</option>
               <option value="ar">العربية</option>
             </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-3" />
+            <ChevronDown size={14} className="pointer-events-none absolute end-3" />
           </label>
         </div>
         <div className="flex flex-1 items-center justify-center py-8">

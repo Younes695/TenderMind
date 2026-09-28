@@ -1,11 +1,28 @@
-import { useState } from "react";
-import { Outlet, useLocation, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import apiClient from "../api/client";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebare";
+import { useT } from "../i18n";
 
 function Dashboardlayout() {
+  const t = useT();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openReviews, setOpenReviews] = useState(0);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+
+  // Bell badge: open review items across the account's tenders (Stage 5H).
+  useEffect(() => {
+    let alive = true;
+    const load = () => apiClient.getNotifications()
+      .then((d) => { if (alive) setOpenReviews(d?.count || 0); })
+      .catch(() => {});
+    load();
+    const interval = setInterval(load, 60000);
+    window.addEventListener("tm:notifications-changed", load);
+    return () => { alive = false; clearInterval(interval); window.removeEventListener("tm:notifications-changed", load); };
+  }, [pathname]);
   const params = useParams();
 
   const isGoNoGo = pathname.startsWith("/go-no-go");
@@ -22,20 +39,21 @@ function Dashboardlayout() {
     "/subcontractors": "Subcontractors",
     "/analytics": "Analytics",
     "/notifications": "Notifications",
+    "/news": "News",
     "/help": "Help",
     "/settings": "Settings",
   };
 
   const headerTitle = isGoNoGo
-    ? tenderId ? `Go / No-Go — ${tenderId}` : "Go / No-Go"
+    ? tenderId ? `${t("Go / No-Go")} - ${tenderId}` : t("Go / No-Go")
     : isTenderWorkspace && tenderId
       ? tenderId
-      : SECTION_TITLES[pathname] || "Dashboard";
+      : t(SECTION_TITLES[pathname] || "Dashboard");
 
   const headerSubtitle = isGoNoGo
-    ? "AI recommendation with evidence · human decision required"
+    ? t("AI recommendation with evidence · human decision required")
     : isTenderWorkspace
-      ? tenderId ? `${tenderId} · Tender Workspace` : undefined
+      ? tenderId ? `${tenderId} · ${t("Tender Workspace")}` : undefined
       : undefined;
 
   return (
@@ -47,11 +65,14 @@ function Dashboardlayout() {
       {/* Right Side */}
       <div className="flex min-w-0 flex-1 flex-col">
 
-        {/* Header — same component, title only changes per page */}
+        {/* Header - same component, title only changes per page */}
         <DashboardHeader
           onMenuClick={() => setSidebarOpen(true)}
           title={headerTitle}
           subtitle={headerSubtitle}
+          hasNotifications={openReviews > 0}
+          notificationCount={openReviews}
+          onNotificationsClick={() => navigate("/notifications")}
         />
 
         {/* Page Content */}

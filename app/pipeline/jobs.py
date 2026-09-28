@@ -120,6 +120,8 @@ class JobTelemetry:
     conflicts_final: int = 0
     risk_signals_final: int = 0
     synthesis_status: str = ""
+    # Stage 5H: normalizations reused from an interrupted run's checkpoint
+    ai_cache_hits: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

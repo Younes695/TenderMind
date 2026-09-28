@@ -24,7 +24,26 @@ if DATABASE_URL.startswith("sqlite"):
 
 DB_URL = DATABASE_URL
 
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False}
+if DB_URL.startswith("sqlite"):
+    _connect_args["timeout"] = 30  # seconds to wait for a lock instead of failing at 5
+engine = create_engine(DB_URL, connect_args=_connect_args)
+
+if DB_URL.startswith("sqlite"):
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        """WAL lets pages read while a processing job writes progress. In the
+        default rollback-journal mode every read failed with 'database is
+        locked' during a commit, and one such failure killed a 1,500-page job."""
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cur.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

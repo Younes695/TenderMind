@@ -6,6 +6,7 @@ import {
   Users,
   ShoppingCart,
 } from "lucide-react";
+import { useT } from "../i18n";
 
 const personas = [
   {
@@ -53,17 +54,17 @@ const personas = [
 ];
 
 function Solutions() {
+  const t = useT();
   return (
     <>
       {/* Hero band */}
       <section className="bg-[#162A4C] py-14 sm:py-16">
         <div className="mx-auto max-w-[1190px] px-4 sm:px-6 lg:px-8">
           <h1 className="mb-4 max-w-[640px] text-[32px] font-bold leading-tight tracking-tight text-white sm:text-[38px]">
-            Built for every seat at the bid table.
+            {t("Built for every seat at the bid table.")}
           </h1>
           <p className="max-w-[560px] text-[14px] leading-relaxed text-[#c5d0e6]">
-            Each persona gets its own view — all reading from the same
-            tender truth.
+            {t("Each persona gets its own view — all reading from the same tender truth.")}
           </p>
         </div>
       </section>
@@ -80,21 +81,21 @@ function Solutions() {
                 <Icon size={17} strokeWidth={1.8} />
               </span>
               <h3 className="mb-3 text-[15px] font-bold text-[#162A4C]">
-                {title}
+                {t(title)}
               </h3>
 
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#c0453f]">
-                Problem
+                {t("Problem")}
               </p>
               <p className="mb-3 text-[13px] leading-relaxed text-[#4b5f86]">
-                {problem}
+                {t(problem)}
               </p>
 
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                How TenderMind Helps
+                {t("How TenderMind Helps")}
               </p>
               <p className="mb-4 text-[13px] leading-relaxed text-[#4b5f86]">
-                {help}
+                {t(help)}
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -103,7 +104,7 @@ function Solutions() {
                     key={tag}
                     className="rounded-md bg-[#eef0f4] px-2.5 py-1 text-[11px] font-medium text-[#162A4C]"
                   >
-                    {tag}
+                    {t(tag)}
                   </span>
                 ))}
               </div>

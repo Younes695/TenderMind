@@ -10,6 +10,7 @@ import {
   Landmark,
   ChevronRight,
 } from "lucide-react";
+import { useT } from "../i18n";
 
 const industries = [
   {
@@ -55,17 +56,17 @@ const industries = [
 ];
 
 function Industries() {
+  const t = useT();
   return (
     <>
       {/* Hero band */}
       <section className="bg-[#162A4C] py-14 sm:py-16">
         <div className="mx-auto max-w-[1190px] px-4 sm:px-6 lg:px-8">
           <h1 className="mb-4 max-w-[640px] text-[32px] font-bold leading-tight tracking-tight text-white sm:text-[38px]">
-            We understand complex tenders in your sector.
+            {t("We understand complex tenders in your sector.")}
           </h1>
           <p className="max-w-[560px] text-[14px] leading-relaxed text-[#c5d0e6]">
-            Pre-tuned requirement libraries and risk policies for Saudi
-            Arabia, the UAE, Egypt and the GCC.
+            {t("Pre-tuned requirement libraries and risk policies for Saudi Arabia, the UAE, Egypt and the GCC.")}
           </p>
         </div>
       </section>
@@ -82,16 +83,16 @@ function Industries() {
                 <Icon size={17} strokeWidth={1.8} />
               </span>
               <h3 className="mb-1.5 text-[15px] font-bold text-[#162A4C]">
-                {title}
+                {t(title)}
               </h3>
               <p className="mb-4 text-[13px] leading-relaxed text-[#4b5f86]">
-                {text}
+                {t(text)}
               </p>
               <Link
                 to={`/industries/${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                 className="inline-flex items-center gap-1 text-[13px] font-bold text-[#162A4C] transition-colors hover:text-[#C8A96B]"
               >
-                Explore
+                {t("Explore")}
                 <ChevronRight size={14} strokeWidth={2.2} />
               </Link>
             </article>

@@ -823,7 +823,15 @@ def get_analysis(tender_id: str, db: Session = Depends(get_db)):
     if not latest_job:
         raise HTTPException(status_code=404, detail="No processing job found for tender")
     if latest_job.status in ("QUEUED", "PROCESSING"):
-        return {"status": latest_job.status, "current_stage": latest_job.current_stage, "progress": latest_job.progress, "message": "Processing not complete"}
+        return {"status": latest_job.status, "current_stage": latest_job.current_stage, "progress": latest_job.progress,
+                "message": "Processing not complete",
+                # Live counts for the workspace while the job runs (Stage 5G).
+                "processing": {"job_id": latest_job.id, "status": latest_job.status,
+                               "current_stage": latest_job.current_stage, "progress": latest_job.progress,
+                               "documents_total": latest_job.documents_total,
+                               "documents_processed": latest_job.documents_processed,
+                               "documents_failed": latest_job.documents_failed,
+                               "documents_unsupported": latest_job.documents_unsupported}}
     if latest_job.status == "FAILED":
         return {"status": "FAILED", "last_error": latest_job.last_error, "error_count": latest_job.error_count}
     # For COMPLETED/PARTIAL, return persisted canonical analysis
@@ -844,8 +852,21 @@ def get_analysis(tender_id: str, db: Session = Depends(get_db)):
             "message": "Analysis ready (generic extraction available via evaluation/generic_extraction.py)",
             "pipeline_version": latest_job.pipeline_version,
         }
+    # Stage 5H: open review items / questions, so the workspace needs no extra call.
+    review = None
+    try:
+        from app.issues import sync_issues
+        from app.models import TenderIssue
+        sync_issues(db, tender_id)
+        open_items = db.query(TenderIssue.category).filter(TenderIssue.tender_id == tender_id,
+                                                           TenderIssue.status == "OPEN").all()
+        review = {"missing_open": sum(1 for (c,) in open_items if c == "missing"),
+                  "question_open": sum(1 for (c,) in open_items if c == "question")}
+    except Exception:
+        db.rollback()
     # Return canonical analysis — frontend-safe, no raw LLM, no candidate IDs
     return {
+        "review": review,
         "tender": analysis.tender,
         "documents": analysis.documents,
         "requirements": analysis.requirements,
@@ -862,3 +883,272 @@ def get_analysis(tender_id: str, db: Session = Depends(get_db)):
         "status": analysis.status,
         "created_at": analysis.created_at,
     }
+
+
+# ---- Stage 5H: review items (missing) + Q&A (questions) + notifications
+@router.get("/tenders/{tender_id}/issues")
+def list_tender_issues(tender_id: str, category: Optional[str] = None, status: Optional[str] = None,
+                       db: Session = Depends(get_db)):
+    from app.issues import sync_issues, issue_dict
+    from app.models import TenderIssue
+    if not db.query(Tender).filter(Tender.id == tender_id).first():
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    sync_issues(db, tender_id)  # picks up new analysis / evaluation results
+    q = db.query(TenderIssue).filter(TenderIssue.tender_id == tender_id)
+    if category:
+        q = q.filter(TenderIssue.category == category)
+    if status:
+        q = q.filter(TenderIssue.status == status.upper())
+    order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    items = sorted(q.all(), key=lambda i: (i.status != "OPEN", order.get(i.priority or "", 3), i.created_at or datetime.min))
+    return {"tender_id": tender_id, "issues": [issue_dict(i) for i in items],
+            "open": sum(1 for i in items if i.status == "OPEN"), "count": len(items)}
+
+
+@router.patch("/issues/{issue_id}")
+def update_issue(issue_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.issues import issue_dict
+    from app.access import can_write_tender
+    from app.models import TenderIssue
+    i = db.query(TenderIssue).filter(TenderIssue.id == issue_id).first()
+    t = db.query(Tender).filter(Tender.id == i.tender_id).first() if i else None
+    if not i or not t or not can_write_tender(t, user):
+        raise HTTPException(status_code=404, detail="Issue not found")
+    if "answer" in payload:
+        ans = str(payload.get("answer") or "").strip()
+        if len(ans) > 4000:
+            raise HTTPException(status_code=400, detail="Answer too long (max 4000 characters)")
+        i.answer = ans or None
+    if "status" in payload:
+        st = str(payload.get("status") or "").upper()
+        if st not in ("OPEN", "RESOLVED"):
+            raise HTTPException(status_code=400, detail="status must be OPEN or RESOLVED")
+        i.status = st
+        i.resolved_at = datetime.utcnow() if st == "RESOLVED" else None
+        i.resolved_by = user.get("email") if st == "RESOLVED" else None
+    db.commit()
+    return issue_dict(i)
+
+
+@router.get("/notifications")
+def notifications(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Open review items ("missing") across this account's tenders."""
+    from app.issues import sync_issues, issue_dict
+    from app.models import TenderIssue
+    q = db.query(Tender)
+    flt = owner_filter(Tender.owner_email, user)
+    tenders = (q.filter(flt) if flt is not None else q).all()
+    items = []
+    for t in tenders:
+        if t.id == "SA-2018-HV2":
+            continue  # curated demo, not a live tender
+        try:
+            sync_issues(db, t.id)
+        except Exception:
+            db.rollback()
+        items.extend(db.query(TenderIssue).filter(TenderIssue.tender_id == t.id,
+                                                  TenderIssue.category == "missing",
+                                                  TenderIssue.status == "OPEN").all())
+    order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    items.sort(key=lambda i: (order.get(i.priority or "", 3), i.tender_id, i.created_at or datetime.min))
+    return {"count": len(items), "notifications": [issue_dict(i) for i in items[:200]]}
+
+
+# ---- Stage 5H: tender news from official sources
+@router.get("/news")
+def list_news(country: Optional[str] = None, q: Optional[str] = None, relevant: bool = True,
+              limit: int = 100, db: Session = Depends(get_db)):
+    from app.models import NewsItem
+    from app import news as _news
+    query = db.query(NewsItem)
+    if relevant:
+        query = query.filter(NewsItem.relevant.is_(True))
+    if country:
+        query = query.filter(NewsItem.country == country)
+    if q:
+        like = f"%{q.strip()[:100]}%"
+        query = query.filter((NewsItem.title.ilike(like)) | (NewsItem.description.ilike(like)))
+    rows = query.order_by(NewsItem.published_at.desc().nullslast()).limit(max(1, min(limit, 500))).all()
+    countries = sorted({c for (c,) in db.query(NewsItem.country).distinct() if c})
+    return {"items": [{"id": n.id, "source": n.source, "title": n.title, "description": n.description,
+                       "country": n.country, "notice_type": n.notice_type, "organization": n.organization,
+                       "url": n.url, "relevant": bool(n.relevant),
+                       "published_at": n.published_at.isoformat() if n.published_at else None,
+                       "deadline_at": n.deadline_at.isoformat() if n.deadline_at else None} for n in rows],
+            "count": len(rows), "countries": countries, "last_refresh": _news.last_refresh(),
+            "sources": ["World Bank procurement notices (official API)"] +
+                       [h for h in sorted(_news._allowed_hosts())]}
+
+
+@router.post("/news/refresh")
+def refresh_news():
+    from app import news as _news
+    return _news.refresh()
+
+
+# ---- Stage 5I: subcontractor RFQs and quotation comparison
+def _rfq_dict(r, quotes=None):
+    from app.subcontractors import score_quotations
+    qs = score_quotations([{"id": q.id, "contractor": q.contractor, "price": q.price,
+                            "duration_weeks": q.duration_weeks, "technical_fit": q.technical_fit,
+                            "payment_terms_days": q.payment_terms_days, "notes": q.notes,
+                            "selected": bool(q.selected)} for q in (quotes or [])])
+    return {"id": r.id, "tender_id": r.tender_id, "reference": r.reference, "package_name": r.package_name,
+            "discipline": r.discipline, "scope": r.scope, "currency": r.currency or "SAR", "status": r.status,
+            "invited_count": int(r.invited_count) if r.invited_count is not None else None,
+            "closes_at": r.closes_at.isoformat() if r.closes_at else None,
+            "quoted_count": len(qs), "quotations": sorted(qs, key=lambda q: -q["score"])}
+
+
+def _num(payload, key, lo=0.0, hi=None, required=True):
+    v = payload.get(key)
+    if v in (None, ""):
+        if required:
+            raise HTTPException(status_code=400, detail=f"{key} is required")
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{key} must be a number")
+    if v < lo or (hi is not None and v > hi):
+        raise HTTPException(status_code=400, detail=f"{key} out of range")
+    return v
+
+
+def _owned_rfq(db, rfq_id, user, write=False):
+    from app.access import can_read_tender, can_write_tender
+    from app.models import Rfq
+    r = db.query(Rfq).filter(Rfq.id == rfq_id).first()
+    t = db.query(Tender).filter(Tender.id == r.tender_id).first() if r else None
+    if not r or not t or not can_read_tender(t, user) or (write and not can_write_tender(t, user)):
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    return r
+
+
+@router.get("/rfqs")
+def list_rfqs(tender_id: Optional[str] = None, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Rfq, Quotation
+    tq = db.query(Tender)
+    flt = owner_filter(Tender.owner_email, user)
+    visible = {t.id for t in (tq.filter(flt) if flt is not None else tq).all()}
+    q = db.query(Rfq).filter(Rfq.tender_id.in_(visible))
+    if tender_id:
+        q = q.filter(Rfq.tender_id == tender_id)
+    rfqs = q.order_by(Rfq.created_at.desc()).all()
+    return {"rfqs": [_rfq_dict(r, db.query(Quotation).filter(Quotation.rfq_id == r.id).all()) for r in rfqs]}
+
+
+@router.post("/tenders/{tender_id}/rfqs")
+def create_rfq(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+    from app.models import Rfq
+    if not db.query(Tender).filter(Tender.id == tender_id).first():
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    name = str(payload.get("package_name") or "").strip()[:200]
+    ref = str(payload.get("reference") or "").strip()[:60]
+    if not name or not ref:
+        raise HTTPException(status_code=400, detail="package_name and reference are required")
+    closes = None
+    if payload.get("closes_at"):
+        try:
+            closes = datetime.fromisoformat(str(payload["closes_at"])[:19])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="closes_at must be a date (YYYY-MM-DD)")
+    r = Rfq(id=f"RFQ-{uuid.uuid4().hex[:10].upper()}", tender_id=tender_id, reference=ref, package_name=name,
+            discipline=(str(payload.get("discipline") or "").strip()[:80] or None),
+            scope=(str(payload.get("scope") or "").strip()[:1000] or None),
+            invited_count=_num(payload, "invited_count", 0, 1000, required=False), closes_at=closes,
+            currency=(str(payload.get("currency") or "SAR").upper()[:3]))
+    db.add(r)
+    db.commit()
+    return _rfq_dict(r, [])
+
+
+@router.delete("/rfqs/{rfq_id}")
+def delete_rfq(rfq_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Quotation
+    r = _owned_rfq(db, rfq_id, user, write=True)
+    db.query(Quotation).filter(Quotation.rfq_id == r.id).delete()
+    db.delete(r)
+    db.commit()
+    return {"deleted": rfq_id}
+
+
+@router.post("/rfqs/{rfq_id}/quotations")
+def add_quotation(rfq_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Quotation
+    r = _owned_rfq(db, rfq_id, user, write=True)
+    contractor = str(payload.get("contractor") or "").strip()[:200]
+    if not contractor:
+        raise HTTPException(status_code=400, detail="contractor is required")
+    q = Quotation(id=f"QT-{uuid.uuid4().hex[:10].upper()}", rfq_id=r.id, contractor=contractor,
+                  price=_num(payload, "price", 0.01), duration_weeks=_num(payload, "duration_weeks", 0.1, 520),
+                  technical_fit=_num(payload, "technical_fit", 0, 100),
+                  payment_terms_days=_num(payload, "payment_terms_days", 0, 3650),
+                  notes=(str(payload.get("notes") or "").strip()[:2000] or None))
+    db.add(q)
+    db.commit()
+    return _rfq_dict(r, db.query(Quotation).filter(Quotation.rfq_id == r.id).all())
+
+
+@router.delete("/quotations/{quote_id}")
+def delete_quotation(quote_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Quotation
+    q = db.query(Quotation).filter(Quotation.id == quote_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    r = _owned_rfq(db, q.rfq_id, user, write=True)
+    db.delete(q)
+    db.commit()
+    return _rfq_dict(r, db.query(Quotation).filter(Quotation.rfq_id == r.id).all())
+
+
+@router.post("/quotations/{quote_id}/select")
+def select_quotation(quote_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Quotation
+    q = db.query(Quotation).filter(Quotation.id == quote_id).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    r = _owned_rfq(db, q.rfq_id, user, write=True)
+    for other in db.query(Quotation).filter(Quotation.rfq_id == r.id).all():
+        other.selected = other.id == q.id
+    r.status = "AWARDED"
+    db.commit()
+    return _rfq_dict(r, db.query(Quotation).filter(Quotation.rfq_id == r.id).all())
+
+
+@router.get("/rfqs/{rfq_id}/draft")
+def rfq_draft(rfq_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.subcontractors import draft_rfq_text
+    r = _owned_rfq(db, rfq_id, user)
+    t = db.query(Tender).filter(Tender.id == r.tender_id).first()
+    a = (db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == r.tender_id)
+         .order_by(TenderAnalysis.created_at.desc()).first())
+    return draft_rfq_text(_rfq_dict(r), {"id": t.id, "title": t.title}, (a.requirements if a else []) or [])
+
+
+# ---- Stage 5I: problem reports / suggestions and plan-upgrade requests
+@router.post("/feedback")
+def send_feedback(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Feedback
+    msg = str(payload.get("message") or "").strip()
+    kind = str(payload.get("kind") or "problem")
+    if kind not in ("problem", "suggestion", "upgrade"):
+        raise HTTPException(status_code=400, detail="kind must be problem, suggestion or upgrade")
+    if not msg and kind != "upgrade":
+        raise HTTPException(status_code=400, detail="Please describe the problem")
+    f = Feedback(id=f"FB-{uuid.uuid4().hex[:10].upper()}", user_email=user.get("email"), kind=kind,
+                 message=(msg or f"Upgrade request: {payload.get('plan')}")[:4000],
+                 page=(str(payload.get("page") or "")[:300] or None),
+                 plan=(str(payload.get("plan") or "")[:40] or None))
+    db.add(f)
+    db.commit()
+    return {"id": f.id, "status": f.status, "created_at": f.created_at.isoformat()}
+
+
+@router.get("/feedback")
+def my_feedback(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import Feedback
+    rows = (db.query(Feedback).filter(Feedback.user_email == user.get("email"))
+            .order_by(Feedback.created_at.desc()).limit(50).all())
+    return {"items": [{"id": f.id, "kind": f.kind, "message": f.message, "plan": f.plan, "status": f.status,
+                       "created_at": f.created_at.isoformat()} for f in rows]}

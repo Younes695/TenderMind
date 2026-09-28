@@ -72,6 +72,51 @@ def is_scanned_or_garbled(page_text: str, garbled_ratio: float) -> bool:
     return l < 100 or garbled_ratio > 0.3
 
 
+def ocr_png_text_and_confidence(png_bytes: bytes, lang: str = TESS_LANG, config: str = TESS_CONFIG):
+    """One Tesseract run -> (text, mean word confidence 0..1 or None).
+
+    Text and confidence used to come from two full OCR passes (image_to_string +
+    image_to_data), doubling the time of every scanned page. Tesseract writes
+    both outputs from one pass when given the `txt` and `tsv` configs. The text
+    is byte-for-byte what image_to_string returned (same engine, same config).
+    """
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="tm_ocr_") as tmp:
+        src = os.path.join(tmp, "page.png")
+        base = os.path.join(tmp, "out")
+        with open(src, "wb") as fh:
+            fh.write(png_bytes)
+        cmd = [pytesseract.pytesseract.tesseract_cmd, src, base, "-l", lang, *config.split(), "txt", "tsv"]
+        env = dict(os.environ)
+        # Pages run in parallel (one process each); stop each one from also
+        # spawning a thread per core.
+        env.setdefault("OMP_THREAD_LIMIT", "1")
+        proc = subprocess.run(cmd, capture_output=True, env=env,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if proc.returncode != 0:
+            raise RuntimeError(f"tesseract failed ({proc.returncode}): {proc.stderr[:300]!r}")
+        with open(base + ".txt", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        confs = []
+        try:
+            with open(base + ".tsv", encoding="utf-8", errors="replace") as fh:
+                header = fh.readline().rstrip("\n").split("\t")
+                ci = header.index("conf")
+                for line in fh:
+                    parts = line.rstrip("\n").split("\t")
+                    if len(parts) > ci:
+                        try:
+                            c = float(parts[ci])
+                        except ValueError:
+                            continue
+                        if c >= 0:
+                            confs.append(c)
+        except (OSError, ValueError):
+            confs = []
+    return text, (sum(confs) / len(confs) / 100.0) if confs else None
+
+
 def ocr_page_with_tesseract(pdf_path: Path, page_number: int, dpi: int = DPI, lang: str = TESS_LANG) -> Dict[str, Any]:
     """OCR a single PDF page via Tesseract, preserving provenance."""
     doc = fitz.open(str(pdf_path))
@@ -96,16 +141,8 @@ def ocr_page_with_tesseract(pdf_path: Path, page_number: int, dpi: int = DPI, la
         doc.close()
         raise RuntimeError(f"Could not render page {page_number} at any dpi")
     img_bytes = pix.tobytes("png")
-    img = Image.open(io.BytesIO(img_bytes))
     t0 = time.time()
-    text = pytesseract.image_to_string(img, lang=lang, config=TESS_CONFIG)
-    try:
-        data = pytesseract.image_to_data(img, lang=lang, config=TESS_CONFIG, output_type=pytesseract.Output.DICT)
-        confs = [int(c) for c in data.get("conf", []) if str(c).strip().lstrip("-").isdigit() and int(c) >= 0]
-        avg_conf = sum(confs) / len(confs) if confs else None
-        conf_norm = (avg_conf / 100.0) if avg_conf is not None else None
-    except Exception:
-        conf_norm = None
+    text, conf_norm = ocr_png_text_and_confidence(img_bytes, lang=lang, config=TESS_CONFIG)
     elapsed = time.time() - t0
     doc.close()
     return {
@@ -122,47 +159,92 @@ def ocr_page_with_tesseract(pdf_path: Path, page_number: int, dpi: int = DPI, la
     }
 
 
+def ocr_workers() -> int:
+    """Scanned pages OCR'd at the same time (TENDERMIND_OCR_WORKERS, default: cores - 2, max 6)."""
+    raw = os.environ.get("TENDERMIND_OCR_WORKERS", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return max(1, min(6, (os.cpu_count() or 2) - 2))
+
+
+def _ocr_scanned_page(pdf_path: Path, i: int, garbled: float, native_len: int) -> Dict[str, Any]:
+    try:
+        ocr_res = ocr_page_with_tesseract(pdf_path, i + 1)
+        ocr_res["garbled_ratio"] = garbled
+        ocr_res["native_len"] = native_len
+        ocr_res["is_scanned"] = True
+        return ocr_res
+    except Exception as e:
+        return {
+            "source_filename": str(pdf_path),
+            "source_page_number": i + 1,
+            "text": "",
+            "confidence": None,
+            "ocr_applied": True,
+            "method": f"{METHOD_TESS}_failed_{type(e).__name__}",
+            "error": str(e)[:500],
+            "garbled_ratio": garbled,
+        }
+
+
 def extract_pdf_with_tesseract_routing(pdf_path: Path) -> List[Dict[str, Any]]:
     """
     Scanned-page routing — mirrors evaluation/run_real_benchmark_v4.py:30 extract_pdf_with_azure_routing
     but swaps Azure for local Tesseract. Only routes scanned/garbled pages to OCR.
+
+    Scanned pages are OCR'd in parallel (one Tesseract process each, see
+    ocr_workers()); the result keeps page order. A 1,530-page tender with 285
+    scanned pages used to OCR them one at a time on one core.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     doc = fitz.open(str(pdf_path))
-    pages: List[Dict[str, Any]] = []
+    total = len(doc)
+    pages: List[Any] = [None] * total
+    scanned = []
     for i, page in enumerate(doc):
         text = page.get_text("text")
         l = len(text.strip())
-        garbled = text.count("\uFFFD") / max(len(text), 1) if text else 0
+        garbled = text.count("�") / max(len(text), 1) if text else 0
         if "�" in text:
             garbled = max(garbled, text.count("�") / max(len(text), 1))
-        is_scanned = is_scanned_or_garbled(text, garbled)
-        if not is_scanned:
-            pages.append({
-                "source_filename": str(pdf_path),
-                "source_page_number": i + 1,
-                "text": text,
-                "confidence": 0.95 if l > 100 and garbled < 0.1 else 0.7,
-                "ocr_applied": False,
-                "method": METHOD_NATIVE,
-                "garbled_ratio": garbled,
-            })
-        else:
-            try:
-                ocr_res = ocr_page_with_tesseract(pdf_path, i + 1)
-                ocr_res["garbled_ratio"] = garbled
-                ocr_res["native_len"] = l
-                ocr_res["is_scanned"] = True
-                pages.append(ocr_res)
-            except Exception as e:
-                pages.append({
-                    "source_filename": str(pdf_path),
-                    "source_page_number": i + 1,
-                    "text": "",
-                    "confidence": None,
-                    "ocr_applied": True,
-                    "method": f"{METHOD_TESS}_failed_{type(e).__name__}",
-                    "error": str(e)[:500],
-                    "garbled_ratio": garbled,
-                })
+        if is_scanned_or_garbled(text, garbled):
+            scanned.append((i, garbled, l))
+            continue
+        pages[i] = {
+            "source_filename": str(pdf_path),
+            "source_page_number": i + 1,
+            "text": text,
+            "confidence": 0.95 if l > 100 and garbled < 0.1 else 0.7,
+            "ocr_applied": False,
+            "method": METHOD_NATIVE,
+            "garbled_ratio": garbled,
+        }
     doc.close()
+    done = total - len(scanned)
+    if done:
+        _report_page(done, total)
+    workers = min(ocr_workers(), len(scanned)) or 1
+    if workers == 1:
+        for i, garbled, l in scanned:
+            pages[i] = _ocr_scanned_page(pdf_path, i, garbled, l)
+            done += 1
+            _report_page(done, total)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = {ex.submit(_ocr_scanned_page, pdf_path, i, g, l): i for i, g, l in scanned}
+            # Collected on this thread so the job's progress listener sees each page.
+            for fut in as_completed(futs):
+                pages[futs[fut]] = fut.result()
+                done += 1
+                _report_page(done, total)
     return pages
+
+
+def _report_page(done: int, total: int) -> None:
+    """Live per-page progress for the processing job (no-op outside the app)."""
+    try:
+        from app.pipeline.progress import report
+    except ImportError:
+        return
+    report("pages", done, total)

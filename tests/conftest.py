@@ -17,4 +17,8 @@ _TMP = tempfile.mkdtemp(prefix="tm_tests_")
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_TMP, 'test.db').replace(os.sep, '/')}"
 os.environ["TENDERMIND_STORAGE_ROOT"] = os.path.join(_TMP, "uploads")
 os.environ["TENDERMIND_SKIP_DOTENV"] = "1"  # a developer .env must not leak into tests
+# Background services stay off in tests (they are tested directly).
+os.environ["TENDERMIND_AUTO_RESUME"] = "0"
+os.environ["TENDERMIND_WATCHDOG"] = "0"
+os.environ["TENDERMIND_NEWS_ENABLED"] = "0"
 atexit.register(shutil.rmtree, _TMP, True)
