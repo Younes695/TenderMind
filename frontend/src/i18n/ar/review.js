@@ -87,4 +87,11 @@ export default {
   "Delete {label}?\n\nIt will be removed from this tender and cannot be undone.": "حذف {label}؟\n\nسيتم إزالته من هذه المناقصة ولا يمكن التراجع عنها.",
   "Referenced documents not in the package": "مستندات مذكورة غير موجودة في الملف",
   "{n} requirements could not be classified": "تعذّر تصنيف {n} متطلبًا",
+  "These forms / annexes / appendices are mentioned in the files below, but no uploaded file carries their name. Many are sections inside the same file or standards — upload only the ones that are really missing, then mark this resolved.":
+    "هذه النماذج / الملاحق مذكورة في الملفات التالية، لكن لا يوجد ملف مرفوع بنفس اسمها. كثير منها أقسام داخل الملف نفسه أو مواصفات قياسية — ارفع الناقص فعلًا فقط، ثم علِّم التنبيه كمحلول.",
+  HIGH: "عالية",
+  MEDIUM: "متوسطة",
+  LOW: "منخفضة",
+  page: "صفحة",
+  "Open|status": "مفتوح",
 };

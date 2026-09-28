@@ -346,7 +346,7 @@ def test_noisy_items_are_grouped(tmp_path, monkeypatch):
         items = db.query(TenderIssue).filter(TenderIssue.tender_id == tid).all()
         assert len(items) == 2
         refs = next(i for i in items if i.kind == "referenced-form-absent")
-        assert refs.title == "Referenced documents not in the package" and "ANNEX 95" not in refs.detail and "96 forms" in refs.detail
+        assert refs.title == "Referenced documents not in the package" and refs.detail.startswith("SOW.pdf: ANNEX 0, ANNEX 1, ANNEX 2,") and refs.detail.endswith("ANNEX 29 (+66)")
         unk = next(i for i in items if i.kind == "unclassified-requirement")
         assert unk.title == "40 requirements could not be classified" and "and 10 more" in unk.detail
     finally:

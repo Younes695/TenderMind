@@ -55,7 +55,7 @@ export default function QA() {
               {tenders.map((t) => <option key={t.id} value={t.id}>{t.id}{t.title ? ` - ${t.title}` : ""}</option>)}
             </select>
             <div className="flex overflow-hidden rounded-lg border border-[#d0d5dd] text-[13px]" role="group" aria-label="Filter">
-              {[["OPEN", t("Open")], ["RESOLVED", t("Answered")], ["ALL", t("All")]].map(([v, label]) => (
+              {[["OPEN", t("Open|status")], ["RESOLVED", t("Answered")], ["ALL", t("All")]].map(([v, label]) => (
                 <button key={v} type="button" onClick={() => setShow(v)}
                   className={`px-3 py-1.5 font-semibold ${show === v ? "bg-[#162A4C] text-white" : "bg-white text-[#344054]"}`}>{label}</button>
               ))}

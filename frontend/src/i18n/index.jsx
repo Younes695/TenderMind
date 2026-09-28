@@ -30,7 +30,7 @@ function writePrefs(p) {
 }
 
 export function translate(lang, text, vars) {
-  let s = lang === "ar" && AR[text] ? AR[text] : text;
+  let s = lang === "ar" && AR[text] ? AR[text] : text.split("|")[0]; // "Open|status": context hint, not shown
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
   return s;
 }

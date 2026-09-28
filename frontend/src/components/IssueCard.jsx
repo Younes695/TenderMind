@@ -52,14 +52,17 @@ export default function IssueCard({ issue, withAnswer = false, showTender = fals
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${PRIORITY_STYLE[issue.priority] || PRIORITY_STYLE.LOW}`}>{issue.priority}</span>
-          <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${resolved ? "bg-[#e7f5ee] text-[#1f7a4d]" : "bg-[#f2f4f7] text-[#344054]"}`}>{resolved ? t("Resolved") : t("Open")}</span>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${PRIORITY_STYLE[issue.priority] || PRIORITY_STYLE.LOW}`}>{t(issue.priority)}</span>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold ${resolved ? "bg-[#e7f5ee] text-[#1f7a4d]" : "bg-[#f2f4f7] text-[#344054]"}`}>{resolved ? t("Resolved") : t("Open|status")}</span>
         </div>
       </div>
-      {issue.detail && <p className="mt-2 whitespace-pre-line text-[14px] text-[#344054]">{issue.detail}</p>}
+      {issue.kind === "referenced-form-absent" && (
+        <p className="mt-2 text-[13px] text-[#475467]">{t("These forms / annexes / appendices are mentioned in the files below, but no uploaded file carries their name. Many are sections inside the same file or standards — upload only the ones that are really missing, then mark this resolved.")}</p>
+      )}
+      {issue.detail && <p className="mt-2 whitespace-pre-line text-[14px] text-[#344054]" dir="auto">{issue.detail}</p>}
       {(issue.source_document || issue.page) && (
         <p className="mt-2 flex items-center gap-1 text-[12px] text-[#667085]">
-          <FileText size={13} /> {issue.source_document || "-"}{issue.page ? ` · page ${issue.page}` : ""}
+          <FileText size={13} /> {issue.source_document || "-"}{issue.page ? ` · ${t("page")} ${issue.page}` : ""}
         </p>
       )}
       {withAnswer && (

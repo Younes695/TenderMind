@@ -103,3 +103,13 @@ def test_epc_tenders_compare_with_epc_awards_not_equipment_supply():
     assert scope_of("Design, Supply & installation of 132/33kV substations") == "epc"
     assert scope_of("Supplying 36 and 11 KV Switchgear and Equipment") == "supply"
     assert scope_of("LSTK power transformer foundation and substation") == "epc"
+
+
+def test_form_references_are_normalised_and_words_are_not_identifiers():
+    from app.pipeline.gaps import normalize_form_ref
+    assert normalize_form_ref("Appendix\nV") == "APPENDIX V"
+    assert normalize_form_ref("Annexure  XII.") == "ANNEXURE XII"
+    assert normalize_form_ref("Form 15109") == "FORM 15109"
+    assert normalize_form_ref("Exhibit B-2") == "EXHIBIT B-2"
+    for word in ("Appendix shall", "Annexure to", "Form of", "Appendix \nDescribe", "Appendix Vie", "Format"):
+        assert normalize_form_ref(word) is None, word

@@ -14,7 +14,17 @@ from typing import Any, Dict, List
 
 from app.pipeline.contracts import DocumentArtifact, SourceText
 
-_FORM_REF = re.compile(r"\b(FORM\s+[A-Z0-9]+|Exhibit\s+[A-Z0-9]+|Annex(?:ure)?\s+[A-Z0-9]+|Appendix\s+[A-Z0-9]+)", re.IGNORECASE)
+_FORM_REF = re.compile(r"\b((?:FORM|Exhibit|Annex(?:ure)?|Appendix)[ \t]*\n?[ \t]*[A-Z0-9][A-Z0-9.\-]*)", re.IGNORECASE)
+_ROMAN = r"(?=[IVXLCM])M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})"
+_REF_ID = re.compile(r"^(FORM|EXHIBIT|ANNEX|ANNEXURE|APPENDIX) (" + _ROMAN
+                     + r"|\d{1,5}(?:[.\-]\d{1,3})*[A-Z]?|[A-Z](?:[.\-]?\d{1,3})*)$")
+
+
+def normalize_form_ref(raw: str):
+    """'Appendix\\nV' -> 'APPENDIX V'. None for a following word that is not an
+    identifier ('Appendix shall', 'Annexure to'), which flooded the missing list."""
+    ref = re.sub(r"\s+", " ", raw or "").strip().rstrip(".-").upper()
+    return ref if _REF_ID.match(ref) else None
 
 
 @dataclass
@@ -53,7 +63,9 @@ def analyze_package_gaps(documents: List[DocumentArtifact],
     refs: Dict[str, List[str]] = {}
     for s in sources:
         for m in _FORM_REF.finditer(s.text or ""):
-            refs.setdefault(m.group(1).upper(), []).append(f"{s.source_document}#p{s.page_number}")
+            ref = normalize_form_ref(m.group(1))
+            if ref:
+                refs.setdefault(ref, []).append(f"{s.source_document}#p{s.page_number}")
     for ref in sorted(refs):
         token = re.sub(r"\W+", "", ref).lower()
         if token and token not in known.replace(" ", "").replace("_", "").replace("-", ""):

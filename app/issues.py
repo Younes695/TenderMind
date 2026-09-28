@@ -36,6 +36,19 @@ def _key(*parts: Any) -> str:
     return hashlib.sha1("|".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:24]
 
 
+def _natural(ref: str):
+    """APPENDIX II before APPENDIX X, FORM 2 before FORM 10."""
+    from app.pipeline.gaps import _ROMAN
+    import re
+    kind, _, ident = ref.partition(" ")
+    if re.fullmatch(_ROMAN, ident):
+        vals = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+        n = sum(-vals[a] if vals[a] < vals.get(b, 0) else vals[a] for a, b in zip(ident, ident[1:] + " "))
+        return (kind, 0, n, "")
+    m = re.match(r"\d+", ident)
+    return (kind, 1, int(m.group()) if m else 0, ident)
+
+
 def _latest_analysis(db: Session, tender_id: str):
     return (db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id)
             .order_by(TenderAnalysis.created_at.desc()).first())
@@ -64,15 +77,26 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                         "priority": "HIGH" if kind in _HIGH_GAPS else "MEDIUM",
                         "dedupe_key": _key("gap", kind, g.get("description"))})
         if refs_absent:
-            names = [str(g.get("description") or "").split(" referenced")[0] for g in refs_absent]
-            shown = ", ".join(names[:40]) + (" …" if len(names) > 40 else "")
-            out.append({"category": "missing", "kind": "referenced-form-absent",
-                        "title": "Referenced documents not in the package",
-                        "detail": (f"{len(names)} forms / annexes / appendices are mentioned in the tender text "
-                                   f"but no uploaded file matches them. Many are standards or parts of other "
-                                   f"files — check the list and upload any that are really missing: {shown}"),
-                        "source_document": None, "page": None, "priority": "MEDIUM",
-                        "dedupe_key": _key("refs-absent", len(names))})
+            from app.pipeline.gaps import normalize_form_ref  # also cleans analyses stored before the fix
+            by_doc: Dict[str, set] = defaultdict(set)
+            for g in refs_absent:
+                n = normalize_form_ref(str(g.get("description") or "").split(" referenced")[0])
+                if n:
+                    ev = g.get("evidence") or []
+                    by_doc[ev[0].split("#")[0] if ev else "?"].add(n)
+            names = {n for refs in by_doc.values() for n in refs}
+            if names:
+                # Language-neutral detail (file: references); the explanation is
+                # translated in the UI for this kind.
+                lines = []
+                for doc, refs in sorted(by_doc.items()):
+                    r = sorted(refs, key=_natural)
+                    lines.append(f"{doc}: {', '.join(r[:30])}" + (f" (+{len(r) - 30})" if len(r) > 30 else ""))
+                out.append({"category": "missing", "kind": "referenced-form-absent",
+                            "title": "Referenced documents not in the package",
+                            "detail": "\n".join(lines),
+                            "source_document": None, "page": None, "priority": "MEDIUM",
+                            "dedupe_key": _key("refs-absent", sorted(names))})
         for d in a.documents or []:
             name = d.get("filename")
             status = d.get("extraction_status") or d.get("document_status")
