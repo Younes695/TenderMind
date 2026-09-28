@@ -254,7 +254,9 @@ def test_postprocess_end_to_end_ids_evidence():
 
 
 def test_postprocess_rejects_bad_category_and_keeps_unknown():
-    ok_u = (LLMNormalizationResult(summary="Unclear fragment here please", category="UNKNOWN"), _cand("chunk-0001-seg-01"))
+    # no rule cue in the text either (Stage 5K fallback), so UNKNOWN is kept
+    ok_u = (LLMNormalizationResult(summary="Unclear fragment here please", category="UNKNOWN"),
+            _cand("chunk-0001-seg-01", text="Door Schedule & Details"))
     bad = (LLMNormalizationResult(summary="x", category="NOPE"), _cand("chunk-0001-seg-02"))
     reqs, evs, fails = PP.post_process([ok_u, bad])
     assert len(reqs) == 1 and reqs[0].category == "UNKNOWN"
