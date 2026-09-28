@@ -10,7 +10,7 @@
 set -euo pipefail
 
 : "${DOMAIN:?set DOMAIN=your.domain}"
-: "${EMAIL:?set EMAIL=you@example.com (Let's Encrypt notices)}"
+: "${EMAIL:?set EMAIL=you@example.com for HTTPS certificate notices}"
 cd "$(dirname "$0")/.."
 
 echo "==> Docker"
