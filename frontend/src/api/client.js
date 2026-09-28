@@ -290,6 +290,11 @@ export const updateProfile = (data) => jsonCall(`/api/auth/me`, "PATCH", data);
 export const changePassword = (data) => jsonCall(`/api/auth/change-password`, "POST", data);
 export const sendFeedback = (data) => jsonCall(`/api/feedback`, "POST", data);
 export const listFeedback = () => jsonCall(`/api/feedback`);
+export const getRecommendation = (id, lang = "en") => jsonCall(`/api/tenders/${encodeURIComponent(id)}/recommendation?lang=${lang}`);
+export const getValueEstimate = (id) => jsonCall(`/api/tenders/${encodeURIComponent(id)}/value-estimate`);
+export const getEmailDraft = (id, lang = "en") => jsonCall(`/api/tenders/${encodeURIComponent(id)}/email-draft?lang=${lang}`);
+export const getCompanyProfile = () => jsonCall(`/api/company-profile`);
+export const saveCompanyProfile = (data) => jsonCall(`/api/company-profile`, "PUT", data);
 
 const apiClient = {
   listTenders,
@@ -331,6 +336,11 @@ const apiClient = {
   changePassword,
   sendFeedback,
   listFeedback,
+  getRecommendation,
+  getValueEstimate,
+  getEmailDraft,
+  getCompanyProfile,
+  saveCompanyProfile,
   apiUrl,
 };
 

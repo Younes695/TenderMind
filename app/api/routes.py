@@ -1152,3 +1152,90 @@ def my_feedback(db: Session = Depends(get_db), user: dict = Depends(require_auth
             .order_by(Feedback.created_at.desc()).limit(50).all())
     return {"items": [{"id": f.id, "kind": f.kind, "message": f.message, "plan": f.plan, "status": f.status,
                        "created_at": f.created_at.isoformat()} for f in rows]}
+
+
+# ---- Stage 5J: company profile, bid recommendation, first-draft email
+_PROFILE_FIELDS = ("name", "intro", "contact_name", "contact_title", "email", "phone", "website", "address")
+
+
+def _profile_key(user):
+    return user.get("email") if not user.get("auth_disabled") else "local"
+
+
+def _profile_dict(p):
+    return {k: getattr(p, k) for k in _PROFILE_FIELDS} if p else {k: None for k in _PROFILE_FIELDS}
+
+
+@router.get("/company-profile")
+def get_company_profile(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import CompanyProfile
+    return _profile_dict(db.query(CompanyProfile).filter(CompanyProfile.id == _profile_key(user)).first())
+
+
+@router.put("/company-profile")
+def put_company_profile(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import CompanyProfile
+    key = _profile_key(user)
+    p = db.query(CompanyProfile).filter(CompanyProfile.id == key).first() or CompanyProfile(id=key)
+    limits = {"intro": 2000, "address": 400}
+    for k in _PROFILE_FIELDS:
+        if k in payload:
+            v = str(payload.get(k) or "").strip()[:limits.get(k, 200)]
+            setattr(p, k, v or None)
+    p.updated_at = datetime.utcnow()
+    db.merge(p)
+    db.commit()
+    return _profile_dict(p)
+
+
+def _open_issues(db, tender_id, category):
+    from app.models import TenderIssue
+    return [{"title": i.title, "detail": i.detail, "source_document": i.source_document, "page": i.page}
+            for i in db.query(TenderIssue).filter(TenderIssue.tender_id == tender_id, TenderIssue.category == category,
+                                                  TenderIssue.status == "OPEN").all()]
+
+
+@router.get("/tenders/{tender_id}/recommendation")
+def tender_recommendation(tender_id: str, lang: str = "en", db: Session = Depends(get_db)):
+    from app.recommendation import build_recommendation
+    from app.issues import sync_issues
+    if not db.query(Tender).filter(Tender.id == tender_id).first():
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    try:
+        detail = get_decision_detail(tender_id, db)
+    except HTTPException:
+        detail = None
+    a = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id).order_by(TenderAnalysis.created_at.desc()).first()
+    analysis = {"deadlines": a.deadlines, "risks": a.risks} if a else None
+    try:
+        sync_issues(db, tender_id)
+    except Exception:
+        db.rollback()
+    review = {"missing_open": len(_open_issues(db, tender_id, "missing")),
+              "question_open": len(_open_issues(db, tender_id, "question"))}
+    return build_recommendation(detail, analysis, review, lang)
+
+
+@router.get("/tenders/{tender_id}/email-draft")
+def tender_email_draft(tender_id: str, lang: str = "en", db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.recommendation import build_email
+    from app.models import CompanyProfile
+    t = db.query(Tender).filter(Tender.id == tender_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    prof = db.query(CompanyProfile).filter(CompanyProfile.id == _profile_key(user)).first()
+    draft = build_email({"id": t.id, "title": t.title, "client": t.client}, _profile_dict(prof) if prof else None,
+                        _open_issues(db, tender_id, "question"), _open_issues(db, tender_id, "missing"), lang)
+    return {**draft, "company_profile_complete": bool(prof and prof.name)}
+
+
+@router.get("/tenders/{tender_id}/value-estimate")
+def tender_value_estimate(tender_id: str, db: Session = Depends(get_db)):
+    """Expected contract value from comparable awarded contracts (Stage 5J)."""
+    from app.market import estimate
+    t = db.query(Tender).filter(Tender.id == tender_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    a = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id).order_by(TenderAnalysis.created_at.desc()).first()
+    reqs = " ".join(str(r.get("summary") or "") for r in ((a.requirements if a else None) or [])[:400])
+    return estimate(db, reqs, title=f"{t.title or ''} {t.id}")

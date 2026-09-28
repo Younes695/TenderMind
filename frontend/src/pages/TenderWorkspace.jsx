@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { CheckCircle2, Trash2, RefreshCw, Layers, FolderOpen, ListChecks, Users, FileText, AlertTriangle, Clock, Building2, Info, ChevronDown, ChevronUp, Search, Filter } from "lucide-react";
 import apiClient from "../api/client";
 import DecisionPanel from "../components/DecisionPanel";
+import RecommendationPanel from "../components/RecommendationPanel";
 import { confirmRemoval } from "../utils/confirm";
 import { useT } from "../i18n";
 
@@ -327,6 +328,8 @@ function TenderWorkspace() {
             </div>
           </section>
         )}
+
+        {jobStatus && jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && <RecommendationPanel tenderId={id} />}
 
         {/* Bid decision with evidence (Stage 5C) */}
         {jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && (

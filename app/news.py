@@ -27,10 +27,13 @@ WB_API = "https://search.worldbank.org/api/v2/procnotices"
 WB_NOTICE_URL = "https://projects.worldbank.org/en/projects-operations/procurement-detail/{id}"
 # Egypt first, then GCC and the wider MENA region (ISO codes as the API expects).
 COUNTRIES = ["EG", "SA", "AE", "OM", "KW", "BH", "QA", "JO", "MA", "TN", "IQ", "LB", "LY", "DZ", "YE", "DJ"]
-RELEVANT = re.compile(
-    r"substation|transformer|transmission|switchgear|\bgis\b|\bkv\b|overhead line|cable|electric|electrical|"
-    r"power|grid|energy|solar|wind|battery|bess|water|desalination|pumping|sewage|wastewater|"
-    r"محطة|محول|كهرب|طاقة|مياه", re.IGNORECASE)
+RELEVANT = re.compile(  # electricity sector only (generation, transmission, distribution)
+    r"substation|transformer|transmission line|transmission|switchgear|gis|kv|overhead line|"
+    r"underground cable|power cable|electric|electrical|electricity|power plant|power station|power supply|"
+    r"grid|interconnect|distribution network|metering|scada|solar|photovoltaic|pv|wind farm|"
+    r"battery energy|bess|محطة محولات|محول|كهرب|خطوط نقل|جهد", re.IGNORECASE)
+OPEN_NOTICE_TYPES = ("Invitation for Bids", "Request for Expression of Interest",
+                     "General Procurement Notice", "Invitation for Prequalification")
 TIMEOUT = 20
 MAX_BYTES = 2 * 1024 * 1024
 MIN_REFRESH_GAP_S = 15 * 60
@@ -63,21 +66,26 @@ def fetch_world_bank(countries: Iterable[str] = COUNTRIES, rows: int = 40,
     fields = ("id,notice_type,noticedate,submission_deadline_date,project_ctry_name,project_name,"
               "bid_description,procurement_method_name,contact_organization")
     for code in countries:
-        try:
-            r = http.get(WB_API, timeout=TIMEOUT, params={
-                "format": "json", "rows": rows, "srt": "noticedate", "order": "desc",
-                "project_ctry_code": code, "fl": fields})
-            r.raise_for_status()
-            notices = (r.json() or {}).get("procnotices") or []
-        except Exception:
-            continue  # one country failing must not stop the others
-        if isinstance(notices, dict):
-            notices = list(notices.values())
+        notices = []
+        # Only notices a contractor can still act on — contract awards were two
+        # thirds of the feed and crowded out the open tenders.
+        for ntype in OPEN_NOTICE_TYPES:
+            try:
+                r = http.get(WB_API, timeout=TIMEOUT, params={
+                    "format": "json", "rows": rows, "srt": "noticedate", "order": "desc",
+                    "project_ctry_code": code, "notice_type_exact": ntype, "fl": fields})
+                r.raise_for_status()
+                got = (r.json() or {}).get("procnotices") or []
+            except Exception:
+                continue  # one country / type failing must not stop the others
+            notices.extend(got.values() if isinstance(got, dict) else got)
+        seen = set()
         for n in notices:
             nid = str(n.get("id") or "").strip()
             title = _clean(n.get("bid_description") or n.get("project_name"), 500)
-            if not nid or not title:
+            if not nid or not title or nid in seen:
                 continue
+            seen.add(nid)
             desc = _clean(" · ".join(x for x in (n.get("project_name"), n.get("procurement_method_name")) if x))
             out.append({"source": "World Bank", "external_id": nid, "title": title, "description": desc,
                         "country": n.get("project_ctry_name"), "notice_type": n.get("notice_type"),
@@ -182,6 +190,11 @@ def start_refresher(interval_s: int = 6 * 3600, first_delay_s: int = 30) -> None
         while True:
             try:
                 refresh(force=True)
+            except Exception:
+                pass
+            try:
+                from app.market import refresh_awards
+                refresh_awards()  # comparable contract values (Stage 5J)
             except Exception:
                 pass
             time.sleep(interval_s)

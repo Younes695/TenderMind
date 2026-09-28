@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check } from "lucide-react";
+import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
 
@@ -44,11 +44,20 @@ export default function Settings() {
   const [problem, setProblem] = useState("");
   const [problemMsg, setProblemMsg] = useState(null);
   const [reports, setReports] = useState([]);
+  const [company, setCompany] = useState({});
+  const [companyMsg, setCompanyMsg] = useState(null);
 
   useEffect(() => {
     apiClient.getCurrentUser().then((u) => { setMe(u); setName(u?.name || ""); }).catch(() => {});
     apiClient.listFeedback().then((d) => setReports(d?.items || [])).catch(() => {});
+    apiClient.getCompanyProfile().then((p) => setCompany(p || {})).catch(() => {});
   }, []);
+
+  const saveCompany = async (e) => {
+    e.preventDefault();
+    try { setCompany(await apiClient.saveCompanyProfile(company)); setCompanyMsg(`ok:${t("Saved")}`); }
+    catch (err) { setCompanyMsg(`err:${err.message}`); }
+  };
 
   const saveName = async (e) => {
     e.preventDefault();
@@ -111,6 +120,22 @@ export default function Settings() {
           <div><button type="submit" className={primary} disabled={!name.trim()}>{t("Save")}</button></div>
         </form>
         <Notice msg={nameMsg} />
+      </Card>
+
+      <Card icon={Building2} title={t("Company profile")}>
+        <form onSubmit={saveCompany} data-testid="company-profile" className="grid gap-3 sm:grid-cols-2">
+          {[["name", "Company name"], ["contact_name", "Contact person"], ["contact_title", "Job title"], ["email", "Email"],
+            ["phone", "Phone"], ["website", "Website"], ["address", "Address"]].map(([k, label]) => (
+            <label key={k} className="text-[13px] text-[#344054]">{t(label)}
+              <input className={input} value={company[k] || ""} onChange={(e) => setCompany({ ...company, [k]: e.target.value })} maxLength={k === "address" ? 400 : 200} />
+            </label>
+          ))}
+          <label className="text-[13px] text-[#344054] sm:col-span-2">{t("Short introduction (used in bid emails)")}
+            <textarea className={input} rows={3} maxLength={2000} value={company.intro || ""} onChange={(e) => setCompany({ ...company, intro: e.target.value })} />
+          </label>
+          <div><button type="submit" className={primary}>{t("Save")}</button></div>
+        </form>
+        <Notice msg={companyMsg} />
       </Card>
 
       <Card icon={KeyRound} title={t("Change password")}>

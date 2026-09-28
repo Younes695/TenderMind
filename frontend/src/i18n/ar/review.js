@@ -49,7 +49,7 @@ export default {
   "No questions for this tender (process it first if it has not been analysed).": "لا توجد أسئلة لهذه المناقصة (معالجتها أولاً إذا لم تتم تحليلها).",
   "Nothing in this filter.": "لا شيء في هذا المرشح.",
   "Tender news": "أخبار المناقصات",
-  "Power, energy and water tenders from official sources. Sources:": "مناقصات الكهرباء والطاقة والمياه من مصادر رسمية. المصادر:",
+  "Electricity-sector tenders from official sources. Sources:": "مناقصات قطاع الكهرباء من مصادر رسمية. المصادر:",
   "World Bank procurement notices": "إشعارات المشتريات من البنك الدولي",
   "Last updated": "آخر تحديث",
   "Updating…": "جارٍ التحديث…",

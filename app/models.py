@@ -312,3 +312,33 @@ class Feedback(Base):
     plan = Column(String, nullable=True)
     status = Column(String, default="NEW")           # NEW | IN_PROGRESS | DONE
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CompanyProfile(Base):
+    """Stage 5J — the bidder's own details, used in bid emails (one per account)."""
+    __tablename__ = "company_profiles"
+    id = Column(String, primary_key=True)  # account email, or "local" when auth is off
+    name = Column(String, nullable=True)
+    intro = Column(Text, nullable=True)
+    contact_name = Column(String, nullable=True)
+    contact_title = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class MarketAward(Base):
+    """Stage 5J — awarded power-sector contracts with their signed price (World Bank notices)."""
+    __tablename__ = "market_awards"
+    id = Column(String, primary_key=True)
+    external_id = Column(String, unique=True, nullable=False)
+    title = Column(Text, nullable=False)
+    country = Column(String, nullable=True)
+    kind = Column(String, index=True, nullable=False)
+    kv = Column(Float, nullable=True)
+    amount_usd = Column(Float, nullable=False)
+    awarded_at = Column(DateTime, nullable=True)
+    url = Column(String, nullable=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)

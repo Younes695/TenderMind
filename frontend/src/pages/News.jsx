@@ -38,7 +38,7 @@ export default function News() {
         <div>
           <h1 className="flex items-center gap-2 text-[24px] font-black text-[#101828]"><Newspaper size={22} /> {t("Tender news")}</h1>
           <p className="mt-1 text-[14px] text-[#667085]">
-            {t("Power, energy and water tenders from official sources. Sources:")} {(data?.sources || ["World Bank procurement notices"]).join(", ")}.
+            {t("Electricity-sector tenders from official sources. Sources:")} {(data?.sources || ["World Bank procurement notices"]).join(", ")}.
           </p>
           {data?.last_refresh?.at && <p className="text-[12px] text-[#98a2b3]">{t("Last updated")} {new Date(data.last_refresh.at).toLocaleString()}</p>}
         </div>
