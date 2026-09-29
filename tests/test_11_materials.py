@@ -140,3 +140,10 @@ def test_radar_match_is_explained_and_never_guessed():
     assert match({"title": "Consulting services", "deadline_at": "2026-11-01"}, cap, now)["match"] is None
     close = match(dict(item, deadline_at="2026-10-05T00:00:00"), cap, now)
     assert close["match"] == 88 and any(f["status"] == "PARTIAL" for f in close["factors"])
+
+
+def test_eligibility_percent_counts_missing_information_as_not_met():
+    from app.eligibility import score
+    checks = [{"result": "PASS"}, {"result": "PASS"}, {"result": "PASS"}, {"result": "UNCLEAR"}]
+    assert score(checks) == {"percent": 75, "met": 3, "failed": 0, "unclear": 1, "total": 4}
+    assert score([]) is None

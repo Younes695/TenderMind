@@ -65,7 +65,7 @@ def _action(key: str, **vars_) -> Dict[str, Any]:
 def build(db, tender, user) -> Dict[str, Any]:
     from app.certifications import summary as cert_summary, tender_certifications
     from app.conflicts import tender_conflicts
-    from app.eligibility import capability_dict, capability_for
+    from app.eligibility import capability_dict, capability_for, score as elig_score
     from app.models import DepartmentVote, EligibilityResult, EvidenceMatch, Requirement, TenderAnalysis, TenderIssue
     from app.sections import sources_from_cache
     from app.tender_facts import classify_kind, detect_client, detect_country, main_kv
@@ -155,7 +155,8 @@ def build(db, tender, user) -> Dict[str, Any]:
                   "pages": sum(int(d.get("page_count") or 0) for d in ((a.documents if a else None) or [])),
                   "requirements": len(reqs), "mandatory": mandatory,
                   "by_category": dict(cats.most_common(6))},
-        "eligibility": {"status": el.status if el else None, "overridden": bool(el and el.override_by)},
+        "eligibility": {"status": el.status if el else None, "overridden": bool(el and el.override_by),
+                        "score": elig_score(el.checks) if el else None},
         "certificates": cs,
         "contradictions": len(conflicts),
         "dates": dates,

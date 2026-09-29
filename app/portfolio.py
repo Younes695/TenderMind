@@ -23,7 +23,7 @@ def _votes(db, tender_id):
 def board(db, user, tenders) -> List[Dict[str, Any]]:
     from app.api.routes import _LAST_SCORE
     from app.certifications import summary as cert_summary, tender_certifications
-    from app.eligibility import capability_dict, capability_for
+    from app.eligibility import capability_dict, capability_for, score as elig_score
     from app.models import EligibilityResult, TenderAnalysis
     from app.scoring import tender_score
     from app.similarity import profile
@@ -48,6 +48,7 @@ def board(db, user, tenders) -> List[Dict[str, Any]]:
                      "outcome": t.outcome, "analysed": t.id in analysed,
                      "score": (sc or {}).get("score"), "band": (sc or {}).get("band"),
                      "eligibility": el.status if el else None, "overridden": bool(el and el.override_by),
+                     "eligibility_percent": (elig_score(el.checks) or {}).get("percent") if el else None,
                      "needs_partner": bool(certs and certs.get("needs_partner")),
                      "votes": v, "final_decision": t.final_decision})
     return rows

@@ -54,6 +54,21 @@ function Checks({ checks }) {
   );
 }
 
+/** The eligibility percentage and how it was reached; missing information is never counted as met. */
+export function EligibilityScore({ score }) {
+  const t = useT();
+  if (!score) return null;
+  const tone = score.failed ? "text-[#b42318]" : score.unclear ? "text-[#8a6a22]" : "text-[#1f7a4d]";
+  return (
+    <p data-testid="eligibility-score" className="mb-2 text-[13px] text-[#475467]">
+      <b className={`me-2 text-[18px] ${tone}`}>{t("Eligibility {p}%", { p: score.percent })}</b>
+      {t("{m} of {n} checks met", { m: score.met, n: score.total })}
+      {score.unclear > 0 && <> · <span className="text-[#8a6a22]">{t("{n} with information missing", { n: score.unclear })}</span></>}
+      {score.failed > 0 && <> · <span className="text-[#b42318]">{t("{n} not met", { n: score.failed })}</span></>}
+    </p>
+  );
+}
+
 /** Shown on an INELIGIBLE tender: why, and "continue anyway". */
 export function EligibilityBanner({ tenderId, onContinue }) {
   const t = useT();
@@ -72,7 +87,7 @@ export function EligibilityBanner({ tenderId, onContinue }) {
     <section data-testid="eligibility-banner" className="rounded-2xl border border-[#f5c6c6] bg-[#fdf6f6] p-5 sm:p-6">
       <h2 className="flex items-center gap-2 text-[17px] font-bold text-[#b42318]"><ShieldAlert size={19} /> {t("This tender does not fit the company")}</h2>
       <p className="mt-1 text-[13px] text-[#667085]">{t("The full analysis was stopped after the eligibility check. Review the reasons below.")}</p>
-      {el?.checks?.length ? <div className="mt-3"><Checks checks={el.checks} /></div> : null}
+      {el?.checks?.length ? <div className="mt-3"><EligibilityScore score={el.score} /><Checks checks={el.checks} /></div> : null}
       <form onSubmit={go} className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_2fr_auto]">
         <input className={input} placeholder={t("Your name")} value={form.by} onChange={(e) => setForm({ ...form, by: e.target.value })} maxLength={120} />
         <input className={input} placeholder={t("Why continue anyway?")} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} maxLength={1000} />
@@ -327,7 +342,7 @@ export default function BidTools({ tenderId, outcome }) {
             <Block icon={ShieldCheck} title={t("Eligibility check")} testid="eligibility-checks">
               {elig.status === "SKIPPED"
                 ? <p className="text-[13px] text-[#667085]">{t("Not checked — fill Company capabilities in Settings.")}</p>
-                : elig.checks?.length ? <Checks checks={elig.checks} />
+                : elig.checks?.length ? <><EligibilityScore score={elig.score} /><Checks checks={elig.checks} /></>
                   : <p className="text-[13px] text-[#667085]">{t("Nothing in this tender needed checking against your capabilities.")}</p>}
               {elig.override_by && <p className="mt-2 text-[12px] text-[#8a6a22]">{t("Continued by {by}: {reason}", { by: elig.override_name || elig.override_by, reason: elig.override_reason || "" })}</p>}
             </Block>

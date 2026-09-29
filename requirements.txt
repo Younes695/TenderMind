@@ -30,3 +30,6 @@ requests==2.34.2
 python-docx==1.2.0
 olefile==0.47
 openpyxl==3.1.5
+
+# Time-zone database for the market-local "today" (app/reminders.py) on hosts without one (Windows).
+tzdata==2025.1

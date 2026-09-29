@@ -77,7 +77,7 @@ export function DecisionBoard() {
                         <td><span className={`inline-block w-14 rounded px-1.5 py-0.5 text-center text-[12px] font-bold text-white ${bg}`}>{r.score ?? "—"}</span>
                           <span className="block text-[11px] text-[#667085]">{t(bl)}</span></td>
                         <td>{r.eligibility === "INELIGIBLE" ? <span className="text-[#b42318]">{r.overridden ? t("Continued anyway") : t("Does not fit")}</span>
-                          : r.eligibility === "ELIGIBLE" ? <span className="text-[#1f7a4d]">{t("Fits")}</span> : <span className="text-[#98a2b3]">{t("Not checked")}</span>}</td>
+                          : r.eligibility === "ELIGIBLE" ? <span className="text-[#1f7a4d]">{t("Fits")}{r.eligibility_percent != null ? ` · ${r.eligibility_percent}%` : ""}</span> : <span className="text-[#98a2b3]">{t("Not checked")}</span>}</td>
                         <td>{r.needs_partner ? <span className="flex items-center gap-1 text-[#8a6a22]"><Handshake size={13} /> {t("Needs a partner")}</span> : <span className="text-[#98a2b3]">—</span>}</td>
                         <td>{r.votes?.total ? `${r.votes.approve_pct ?? "—"}% (${r.votes.approve}/${r.votes.approve + r.votes.reject})` : <span className="text-[#98a2b3]">—</span>}</td>
                         <td>{r.stage ? t(STAGE_LABEL[r.stage]) : <span className="text-[#98a2b3]">—</span>}</td>

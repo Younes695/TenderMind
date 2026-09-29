@@ -230,10 +230,22 @@ def run_gate(db, tender_id: str, job, doc_results: Dict[str, Any]) -> bool:
     return True
 
 
+def score(checks: Iterable[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Share of the tender's checks the company meets. UNCLEAR (information missing) is not counted
+    as met and is reported separately; no checks = no percentage."""
+    checks = list(checks or [])
+    if not checks:
+        return None
+    n = {r: sum(1 for c in checks if c.get("result") == r) for r in ("PASS", "FAIL", "UNCLEAR")}
+    return {"percent": round(100 * n["PASS"] / len(checks)), "met": n["PASS"], "failed": n["FAIL"],
+            "unclear": n["UNCLEAR"], "total": len(checks)}
+
+
 def result_dict(row) -> Optional[Dict[str, Any]]:
     if row is None:
         return None
-    return {"status": row.status, "checks": row.checks or [], "override_by": row.override_by,
+    return {"status": row.status, "checks": row.checks or [], "score": score(row.checks),
+            "override_by": row.override_by,
             "override_name": getattr(row, "override_name", None),
             "override_reason": row.override_reason,
             "overridden_at": row.overridden_at.isoformat() if row.overridden_at else None,

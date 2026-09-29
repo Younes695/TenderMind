@@ -56,6 +56,7 @@ export function SummaryCard({ tenderId, onPlanChange }) {
         <Fact label="Voltage" value={f.voltage_kv ? `${f.voltage_kv} kV` : null} />
         <Fact label="Country" value={f.country ? t(f.country) : null} />
         <Fact label="Documents" value={f.documents ? t("{d} files · {p} pages", { d: f.documents, p: f.pages }) : null} />
+        <Fact label="Eligibility" value={s.eligibility?.score ? t("{p}% — {m} of {n} met", { p: s.eligibility.score.percent, m: s.eligibility.score.met, n: s.eligibility.score.total }) : null} />
         <Fact label="Mandatory requirements" value={f.requirements ? t("{m} of {n}", { m: f.mandatory, n: f.requirements }) : null} />
       </div>
       {(s.dates || []).length > 0 && (

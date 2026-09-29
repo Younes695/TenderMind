@@ -8,13 +8,24 @@ from typing import Any, Dict, List, Optional
 CLOSED_STAGES = {"SUBMITTED", "CLOSED"}
 
 
+def local_today() -> date:
+    """Today in the market's time zone (Egypt/GCC are UTC+2..+4): a UTC date is a day behind
+    for the first hours after local midnight. TENDERMIND_TZ overrides the default Africa/Cairo."""
+    import os
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo(os.environ.get("TENDERMIND_TZ", "Africa/Cairo"))).date()
+    except Exception:
+        return datetime.utcnow().date()
+
+
 def _days(d: Optional[datetime], today: date) -> Optional[int]:
     return (d.date() - today).days if d else None
 
 
 def for_tenders(db, tenders, today: Optional[date] = None) -> List[Dict[str, Any]]:
     from app.models import SubmissionItem, TenderTask
-    today = today or datetime.utcnow().date()
+    today = today or local_today()
     out: List[Dict[str, Any]] = []
     for t in tenders:
         if (t.stage in CLOSED_STAGES) or t.outcome in ("WON", "LOST", "NOT_SUBMITTED"):

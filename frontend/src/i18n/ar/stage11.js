@@ -20,6 +20,14 @@ export default {
   "{days} days left to prepare": "باقي {days} يوم للتحضير",
   "Analyze tender": "تحليل المناقصة",
 
+  // Eligibility %
+  "Eligibility": "الأهلية",
+  "{p}% — {m} of {n} met": "{p}% — تحقق {m} من {n}",
+  "Eligibility {p}%": "الأهلية {p}%",
+  "{m} of {n} checks met": "تحقق {m} من {n} شروط",
+  "{n} with information missing": "{n} بمعلومات ناقصة",
+  "{n} not met": "{n} غير متحقق",
+
   // Materials & prices
   "Materials & prices": "المواد والأسعار",
   "PRICE UNAVAILABLE": "السعر غير متاح",

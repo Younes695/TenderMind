@@ -78,7 +78,7 @@ def test_plan_notes_audit_and_reminders():
     c = _c()
     tid = _tender(c, "Plan test substation")
     soon = (date.today() + timedelta(days=2)).isoformat()
-    past = (date.today() - timedelta(days=1)).isoformat()
+    past = (date.today() - timedelta(days=3)).isoformat()  # clear of the local-vs-UTC day boundary
     r = c.put(f"/api/tenders/{tid}/plan", json={"stage": "pricing", "submission_deadline": soon}).json()
     assert r == {"stage": "PRICING", "submission_deadline": soon}
     assert c.put(f"/api/tenders/{tid}/plan", json={"stage": "dreaming"}).status_code == 422
