@@ -27,7 +27,7 @@ export default {
   "Pre-qualified subcontractor for the parts you are not pre-qualified in": "مقاول من الباطن مؤهل للأجزاء غير المؤهلين لها",
   "Approved / prequalified manufacturers and vendors": "مصنّعون وموردون معتمدون / مؤهلون",
   "Type-test certificates (KEMA / CESI / IEC) of the equipment": "شهادات اختبار النوع للمعدات (KEMA / CESI / IEC)",
-  "Certificates of competency for staff (welders, jointers, operators)": "شهادات كفاءة للعاملين (لحّامون، فنيو وصلات، مشغلون)",
+  "Certificates of competency for staff (welders / jointers / operators)": "شهادات كفاءة للعاملين (لحّامون / فنيو وصلات / مشغلون)",
   "Product certificates of the equipment (SASO / SABER)": "شهادات مطابقة المنتج للمعدات (SASO / SABER)",
   "Local content certificates of suppliers": "شهادات المحتوى المحلي للموردين",
   "Contractor classification certificate": "شهادة تصنيف المقاولين",

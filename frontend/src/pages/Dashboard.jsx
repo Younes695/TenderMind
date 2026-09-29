@@ -31,12 +31,16 @@ function Dashboard() {
       });
   }, []);
 
+  const [att, setAtt] = useState(null);
+  useEffect(() => { apiClient.getAttention().then((x) => x && x.stages && setAtt(x)).catch(() => {}); }, []);
+  const count = (kind) => (att ? att.reminders.filter((r) => r.kind === kind).length : null);
+  const val = (v) => (v == null ? t("Not available") : String(v));
   const stats = [
-    { icon: FolderOpen, label: "Active Tenders", value: tenders ? String(tenders.length) : t("Not available"), note: tenders ? `${tenders.length} total` : t("Not available"), iconBg: "bg-[#eef2f8]", iconColor: "text-[#162A4C]" },
-    { icon: Stamp, label: "Awaiting Approval", value: t("Not available"), note: t("Not available"), iconBg: "bg-[#f7efdf]", iconColor: "text-[#a98238]" },
-    { icon: MessageSquare, label: "Q&A Deadlines", value: t("Not available"), note: t("Not available"), iconBg: "bg-[#eef2f8]", iconColor: "text-[#162A4C]" },
-    { icon: AlertTriangle, label: "High Risk", value: t("Not available"), note: t("Not available"), iconBg: "bg-[#fae8e8]", iconColor: "text-[#df6b6b]" },
-    { icon: CheckSquare, label: "Tasks Due Today", value: t("Not available"), note: t("Not available"), iconBg: "bg-[#e4f1eb]", iconColor: "text-[#3c8b68]" },
+    { icon: FolderOpen, label: "Active Tenders", value: tenders ? String(tenders.length) : t("Not available"), note: t("In your workspace"), iconBg: "bg-[#eef2f8]", iconColor: "text-[#162A4C]" },
+    { icon: Stamp, label: "Awaiting a Go/No-Go decision", value: val(att?.awaiting_decision.length), note: t("Analysed, no outcome yet"), iconBg: "bg-[#f7efdf]", iconColor: "text-[#a98238]" },
+    { icon: MessageSquare, label: "Deadlines this week", value: val(att && count("deadline-soon")), note: t("Submission deadlines in 7 days"), iconBg: "bg-[#eef2f8]", iconColor: "text-[#162A4C]" },
+    { icon: AlertTriangle, label: "Stopped by the eligibility check", value: val(att?.blocked.length), note: t("Do not fit the company"), iconBg: "bg-[#fae8e8]", iconColor: "text-[#df6b6b]" },
+    { icon: CheckSquare, label: "Overdue tasks", value: val(att && count("task-overdue")), note: t("Past their due date"), iconBg: "bg-[#e4f1eb]", iconColor: "text-[#3c8b68]" },
   ];
 
   if (loading) return <main className="min-h-screen bg-[#f8f7f3]"><WorkspaceLoading /></main>;
@@ -45,7 +49,7 @@ function Dashboard() {
     <main className="min-h-screen bg-[#f8f7f3] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1450px]">
         {error && <div data-testid="error-banner" className="mb-4 rounded-xl border border-[#f5c6c6] bg-[#fdf0f0] px-4 py-3 text-[14px] text-[#a33a3a]">{error}</div>}
-        <AttentionPanel />
+        <AttentionPanel data={att} />
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5 xl:grid-cols-5">
           {stats.map(({ icon: Icon, label, value, note, iconBg, iconColor }) => (
             <div key={label} className="min-h-[150px] rounded-2xl border border-[#e5e1d9] bg-white p-5">

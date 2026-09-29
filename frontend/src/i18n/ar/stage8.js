@@ -33,6 +33,13 @@ export default {
   "Closed|stage": "مغلقة",
   "NEW|stage": "جديدة",
   "ANALYSED|stage": "تم تحليلها",
+  "In your workspace": "في مساحة العمل",
+  "Deadlines this week": "مواعيد هذا الأسبوع",
+  "Submission deadlines in 7 days": "مواعيد تقديم خلال 7 أيام",
+  "Do not fit the company": "غير مناسبة للشركة",
+  "Overdue tasks": "مهام متأخرة",
+  "Past their due date": "تجاوزت موعدها",
+  "Analysed, no outcome yet": "تم تحليلها ولم تُحدد نتيجتها",
   // Similar / client history
   "Similar tenders and client history": "مناقصات مشابهة وتاريخ العميل",
   "Show": "عرض",

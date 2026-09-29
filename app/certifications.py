@@ -41,7 +41,7 @@ NAMES = {
     "prequal_partner": "Pre-qualified subcontractor for the parts you are not pre-qualified in",
     "approved_list": "Approved / prequalified manufacturers and vendors",
     "type_test": "Type-test certificates (KEMA / CESI / IEC) of the equipment",
-    "competency": "Certificates of competency for staff (welders, jointers, operators)",
+    "competency": "Certificates of competency for staff (welders / jointers / operators)",
     "product": "Product certificates of the equipment (SASO / SABER)",
     "local_content": "Local content certificates of suppliers",
     "classification": "Contractor classification certificate",

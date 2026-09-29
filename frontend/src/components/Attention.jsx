@@ -38,10 +38,13 @@ function Box({ icon: Icon, title, count, children, testid }) {
   );
 }
 
-export default function AttentionPanel() {
+export default function AttentionPanel({ data }) {
   const t = useT();
-  const [d, setD] = useState(null);
-  useEffect(() => { apiClient.getAttention().then((x) => x && x.stages && setD(x)).catch(() => {}); }, []);
+  const [own, setOwn] = useState(null);
+  useEffect(() => {
+    if (data === undefined) apiClient.getAttention().then((x) => x && x.stages && setOwn(x)).catch(() => {});
+  }, [data]);
+  const d = data === undefined ? own : data;
   if (!d) return null;
   const empty = <p className="text-[13px] text-[#667085]">{t("Nothing here right now.")}</p>;
   return (

@@ -48,7 +48,7 @@ def test_staff_certificates_and_optional_flag():
                       "Certificate of small and medium local establishment (SME) issued by Monshaat (if any). "
                       "Local content certificate"), {}, {})
     b = {i["name"]: i for i in items}
-    assert b["Certificates of competency for staff (welders, jointers, operators)"]["who"] == "staff"
+    assert b["Certificates of competency for staff (welders / jointers / operators)"]["who"] == "staff"
     assert "Local content certificates of suppliers" in b
 
 
