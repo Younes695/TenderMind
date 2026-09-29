@@ -445,3 +445,28 @@ class TenderNote(Base):
     author = Column(String, nullable=True)
     text = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceList(Base):
+    """A supplier price list uploaded by the account (the only source of material prices)."""
+    __tablename__ = "price_lists"
+    id = Column(String, primary_key=True)
+    owner = Column(String, index=True, nullable=False)   # account key (email, or "local" with auth off)
+    supplier = Column(String, nullable=False)
+    currency = Column(String, nullable=False)
+    price_date = Column(DateTime, nullable=False)        # the date printed on / given for the list
+    filename = Column(String, nullable=True)
+    items_count = Column(Float, default=0)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceItem(Base):
+    __tablename__ = "price_items"
+    id = Column(String, primary_key=True)
+    list_id = Column(String, ForeignKey("price_lists.id"), index=True, nullable=False)
+    description = Column(Text, nullable=False)
+    unit = Column(String, nullable=True)
+    price = Column(Float, nullable=False)
+    currency = Column(String, nullable=False)
+    min_qty = Column(Float, default=0)                   # a price break: this price from this quantity
+    key = Column(String, index=True, nullable=True)      # app.materials.material_key

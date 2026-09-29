@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ShieldAlert, ShieldCheck, Layers, ListTodo, Vote, Trophy, Trash2, CheckCircle2, Circle, ClipboardCheck, FileSpreadsheet, FileText, PackageOpen } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Layers, ListTodo, Vote, Trophy, Trash2, CheckCircle2, Circle, ClipboardCheck, FileSpreadsheet, FileText, PackageOpen, Boxes } from "lucide-react";
 import { Link } from "react-router-dom";
 import { usePrefs } from "../i18n";
 import apiClient from "../api/client";
 import { useT } from "../i18n";
 import { DEPARTMENTS } from "./SettingsStage6";
 import RfqPackages from "./RfqPackages";
+import TenderMaterials from "./TenderMaterials";
 
 /** Stage 6 — tender workspace tools: the eligibility result (and override),
  *  RFP parts with past suppliers, team tasks, department votes and the outcome. */
@@ -332,6 +333,7 @@ export default function BidTools({ tenderId, outcome }) {
             </Block>
           )}
           <Block icon={Layers} title={t("RFP parts and suggested suppliers")} testid="rfp-sections"><Sections data={sections} /></Block>
+          <Block icon={Boxes} title={t("BOQ materials and current prices")} testid="tender-materials"><TenderMaterials tenderId={tenderId} /></Block>
           <Block icon={PackageOpen} title={t("RFQ packages")} testid="rfq-packages"><RfqPackages tenderId={tenderId} /></Block>
           <Block icon={ClipboardCheck} title={t("Submission checklist")} testid="submission-checklist"><Checklist tenderId={tenderId} team={team} /></Block>
           <Block icon={ListTodo} title={t("Team tasks")} testid="tender-tasks"><Tasks tenderId={tenderId} team={team} /></Block>

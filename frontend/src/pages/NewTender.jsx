@@ -763,7 +763,11 @@ function NewTender() {
   const [step, setStep] = useState(1);
   const navigate = useNavigate();
   const [tenderId, setTenderId] = useState(null);
-  const [tenderForm, setTenderForm] = useState({ id: "", title: "", client: "", location: "" });
+  // a notice opened from the Tender Radar arrives with its title, organisation and country
+  const [tenderForm, setTenderForm] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return { id: "", title: q.get("title") || "", client: q.get("client") || "", location: q.get("location") || "" };
+  });
   const [files, setFiles] = useState([]);
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [jobId, setJobId] = useState(null);

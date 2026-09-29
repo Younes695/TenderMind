@@ -1,5 +1,5 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from app.auth import require_auth
 from app.access import (enforce_tender_access, owner_filter, owner_for_new_rows, owns,
                         tender_owner_or_404, is_admin, DEMO_COMPANY_ID)
@@ -968,7 +968,7 @@ def notifications(db: Session = Depends(get_db), user: dict = Depends(require_au
 # ---- Stage 5H: tender news from official sources
 @router.get("/news")
 def list_news(country: Optional[str] = None, q: Optional[str] = None, relevant: bool = True,
-              limit: int = 100, db: Session = Depends(get_db)):
+              limit: int = 100, sort: str = "date", db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     from app.models import NewsItem
     from app import news as _news
     query = db.query(NewsItem)
@@ -983,11 +983,20 @@ def list_news(country: Optional[str] = None, q: Optional[str] = None, relevant: 
         query = query.filter((NewsItem.title.ilike(like)) | (NewsItem.description.ilike(like)))
     rows = query.order_by(NewsItem.published_at.desc().nullslast()).limit(max(1, min(limit, 500))).all()
     countries = sorted({c for (c,) in db.query(NewsItem.country).distinct() if c})
-    return {"items": [{"id": n.id, "source": n.source, "title": n.title, "description": n.description,
-                       "country": n.country, "notice_type": n.notice_type, "organization": n.organization,
-                       "url": n.url, "relevant": bool(n.relevant),
-                       "published_at": n.published_at.isoformat() if n.published_at else None,
-                       "deadline_at": n.deadline_at.isoformat() if n.deadline_at else None} for n in rows],
+    from app.eligibility import capability_dict
+    from app.models import CompanyCapability
+    from app.radar import match, summary
+    cap = capability_dict(db.query(CompanyCapability).filter(CompanyCapability.id == _profile_key(user)).first())
+    items = [{"id": n.id, "source": n.source, "title": n.title, "description": n.description,
+              "country": n.country, "notice_type": n.notice_type, "organization": n.organization,
+              "url": n.url, "relevant": bool(n.relevant),
+              "published_at": n.published_at.isoformat() if n.published_at else None,
+              "deadline_at": n.deadline_at.isoformat() if n.deadline_at else None} for n in rows]
+    for it in items:
+        it["fit"] = match(it, cap)
+    if sort == "match":
+        items.sort(key=lambda i: -(i["fit"]["match"] if i["fit"]["match"] is not None else -1))
+    return {"items": items, "summary": summary(items), "capabilities_set": bool(cap),
             "count": len(rows), "countries": countries, "last_refresh": _news.last_refresh(),
             "sources": ["World Bank procurement notices (official API)"] +
                        [h for h in sorted(_news._allowed_hosts())]}
@@ -2138,3 +2147,105 @@ def rfq_packages_zip(tender_id: str, keys: Optional[str] = None, closes_at: Opti
     safe = re.sub(r"[^A-Za-z0-9_-]+", "-", tender_id)[:60]
     return Response(data, media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="RFQs-{safe}.zip"'})
+
+
+# ---- Materials: BOQ lines, supplier price lists (the only price source), estimated cost, bulk across tenders
+_MAX_PRICE_FILE = 10 * 1024 * 1024
+
+
+def _price_items(db, user):
+    from app.models import PriceItem, PriceList
+    lists = {p.id: p for p in db.query(PriceList).filter(PriceList.owner == _profile_key(user)).all()}
+    if not lists:
+        return []
+    rows = db.query(PriceItem).filter(PriceItem.list_id.in_(list(lists))).all()
+    return [{"key": r.key, "price": r.price, "currency": r.currency, "unit": r.unit, "min_qty": r.min_qty or 0,
+             "list_id": r.list_id, "supplier": lists[r.list_id].supplier, "price_date": lists[r.list_id].price_date,
+             "filename": lists[r.list_id].filename, "description": r.description} for r in rows]
+
+
+def _price_list_dict(p):
+    return {"id": p.id, "supplier": p.supplier, "currency": p.currency, "price_date": p.price_date.date().isoformat(),
+            "filename": p.filename, "items": int(p.items_count or 0), "uploaded_at": p.uploaded_at.isoformat()}
+
+
+@router.get("/price-lists")
+def list_price_lists(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import PriceList
+    rows = (db.query(PriceList).filter(PriceList.owner == _profile_key(user))
+            .order_by(PriceList.price_date.desc()).all())
+    return {"lists": [_price_list_dict(p) for p in rows]}
+
+
+@router.post("/price-lists")
+def upload_price_list(supplier: str = Form(...), currency: str = Form(...), price_date: str = Form(...),
+                      file: UploadFile = File(...), db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """A supplier's price sheet (xlsx / csv): description, unit, price[, currency][, min qty]."""
+    import tempfile
+    from app.materials import parse_price_rows, read_sheet
+    from app.models import PriceItem, PriceList
+    supplier, currency = supplier.strip()[:200], currency.strip().upper()[:3]
+    if not supplier or len(currency) != 3:
+        raise HTTPException(status_code=400, detail="supplier and a 3-letter currency are required")
+    try:
+        when = datetime.fromisoformat(price_date.strip()[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="price_date must be a date (YYYY-MM-DD)")
+    name = Path(file.filename or "prices.xlsx").name
+    if not name.lower().endswith((".xlsx", ".xlsm", ".csv")):
+        raise HTTPException(status_code=400, detail="Upload an Excel (.xlsx) or CSV price list")
+    data = file.file.read(_MAX_PRICE_FILE + 1)
+    if len(data) > _MAX_PRICE_FILE:
+        raise HTTPException(status_code=413, detail="Price list is larger than 10 MB")
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / name
+        path.write_bytes(data)
+        try:
+            items = parse_price_rows(read_sheet(str(path)), currency)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Could not read the price list")
+    if not items:
+        raise HTTPException(status_code=400, detail="No priced rows found — the sheet needs Description and Price columns")
+    pl = PriceList(id=f"PL-{uuid.uuid4().hex[:10].upper()}", owner=_profile_key(user), supplier=supplier,
+                   currency=currency, price_date=when, filename=name, items_count=len(items))
+    db.add(pl)
+    for it in items:
+        db.add(PriceItem(id=f"PI-{uuid.uuid4().hex[:12].upper()}", list_id=pl.id, description=it["description"],
+                         unit=it["unit"], price=it["price"], currency=it["currency"], min_qty=it["min_qty"],
+                         key=it["key"]))
+    db.commit()
+    return dict(_price_list_dict(pl), recognised=sum(1 for i in items if i["key"]))
+
+
+@router.delete("/price-lists/{list_id}")
+def delete_price_list(list_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import PriceItem, PriceList
+    p = db.query(PriceList).filter(PriceList.id == list_id, PriceList.owner == _profile_key(user)).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Price list not found")
+    db.query(PriceItem).filter(PriceItem.list_id == p.id).delete()
+    db.delete(p)
+    db.commit()
+    return {"deleted": list_id}
+
+
+@router.get("/tenders/{tender_id}/materials")
+def tender_materials(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.materials import cost_view, price_index, tender_boq
+    _tender_or_404(db, tender_id)
+    return cost_view(tender_boq(tender_id), price_index(_price_items(db, user)), None)
+
+
+def _active(t):
+    return not t.outcome and (t.stage or "") not in ("CLOSED", "SUBMITTED") and t.final_decision != "NO_GO"
+
+
+@router.get("/portfolio/materials")
+def portfolio_materials(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """The same material across the account's active tenders."""
+    from app.materials import aggregate, price_index, tender_boq
+    tenders = [t for t in _account_tenders(db, user) if _active(t)]
+    lines = {t.id: tender_boq(t.id) for t in tenders}
+    res = aggregate({k: v for k, v in lines.items() if v}, {t.id: t.title for t in tenders},
+                    price_index(_price_items(db, user)))
+    return dict(res, active_tenders=len(tenders), tenders_with_boq=sum(1 for v in lines.values() if v))

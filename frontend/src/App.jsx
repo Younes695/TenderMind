@@ -10,6 +10,7 @@ import NewTender from "./pages/NewTender";
 import TenderWorkspace from "./pages/TenderWorkspace";
 import DecisionPack from "./pages/DecisionPack";
 import { Approvals, WorkPackages, DocumentsLibrary, Analytics } from "./pages/Portfolio";
+import Materials from "./pages/Materials";
 import Help from "./pages/Help";
 import Solutions from "./pages/Solution";
 import Industries from "./pages/Industries";
@@ -66,6 +67,7 @@ function App() {
             <Route path="/subcontractors" element={<Subcontractors/>}/>
             <Route path="/settings" element={<Settings/>}/>
             <Route path="/work-packages" element={<WorkPackages/>}/>
+            <Route path="/materials" element={<Materials/>}/>
             <Route path="/approvals" element={<Approvals/>}/>
             <Route path="/documents" element={<DocumentsLibrary/>}/>
             <Route path="/analytics" element={<Analytics/>}/>

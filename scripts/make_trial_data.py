@@ -7,6 +7,10 @@
    - DEMO-OBOUR-132: fits the company; contains certificates, prequalification, a contradiction,
      a words-vs-digits mismatch, a TBD value, key dates, submission items and technical sections.
    - DEMO-KUWAIT-500: 500 kV line in Kuwait — the eligibility check stops it.
+   - DEMO-BADR-66: a second active substation whose BOQ shares cables and breakers with
+     DEMO-OBOUR-132 (materials across tenders / bulk opportunity).
+3. Uploads a DEMO supplier price list (with a price break for large quantities) so BOQ
+   lines show a listed price, its supplier and date. Real prices come only from lists you upload.
 Run: python scripts/make_trial_data.py
 """
 import os
@@ -39,6 +43,17 @@ def docx(path, paras):
     for p in paras:
         d.add_paragraph(p)
     d.save(path)
+
+
+def xlsx(path, rows):
+    from openpyxl import Workbook
+    wb = Workbook()
+    for r in rows:
+        wb.active.append(r)
+    wb.save(path)
+
+
+BOQ_HEAD = ["Item", "Description", "Unit", "Qty", "Unit Rate", "Amount"]
 
 
 def packages():
@@ -93,6 +108,30 @@ def packages():
         ["SECTION 6 - CIVIL WORKS", "Civil works include the GIS building, foundations, cable trenches and roads."],
         ["SECTION 7 - HVAC AND FIRE FIGHTING", "HVAC and fire alarm and fire fighting systems for the building."],
     ])
+    xlsx(os.path.join(a, "04 Bill of Quantities.xlsx"), [
+        ["BILL OF QUANTITIES - DEMO"], ["El-Obour 132/11 kV GIS Substation"], BOQ_HEAD,
+        [1, "XLPE/SWA/PVC Cu cable 4x16 mm2 0.6/1 kV", "m", 12000, None, None],
+        [2, "XLPE/SWA/PVC Cu cable 4x95 mm2 0.6/1 kV", "m", 3500, None, None],
+        [3, "11 kV XLPE Cu cable 3x240 mm2", "m", 2400, None, None],
+        [4, "MCCB 3P 250A 36kA", "No", 18, None, None],
+        [5, "uPVC conduit 50mm", "m", 1500, None, None],
+        [6, "LED flood light 150W", "No", 40, None, None],
+        [7, "Excavation for cable trenches", "m3", 900, None, None],
+    ])
+    b = os.path.join(OUT, "DEMO-BADR-66")
+    os.makedirs(b, exist_ok=True)
+    pdf(os.path.join(b, "Invitation to Bid.pdf"), [
+        ["INVITATION TO BID - DEMO", f"Client: {CLIENT}",
+         "Subject: Extension of Badr 66/11 kV Substation (DEMO), Egypt",
+         "All bids must be submitted as follows:", "Date : 30.11.2026",
+         "The Bidder shall be certified to ISO 9001.", "Bids shall remain valid for 90 days."]])
+    xlsx(os.path.join(b, "Bill of Quantities.xlsx"), [
+        ["جدول الكميات - DEMO"], ["م", "البيان", "الوحدة", "الكمية", "الفئة", "الإجمالي"],
+        [1, "كابل نحاس 4×16 مم2 معزول XLPE مسلح جهد 0.6/1 ك.ف", "م.ط", 8000, None, None],
+        [2, "11 kV XLPE Cu cable 3x240 mm2", "m", 1200, None, None],
+        [3, "MCCB 3P 250A 36kA", "عدد", 10, None, None],
+        [4, "Cu cable 4x25 mm2 1 kV", "m", 600, None, None],
+    ])
     pdf(os.path.join(k, "Invitation.pdf"), [
         ["INVITATION TO BID - DEMO",
          "Client: Gulf Grid Holding - DEMO",
@@ -100,10 +139,22 @@ def packages():
          "The Bidder shall be certified to ISO 9001.",
          "Bids shall remain valid for 120 days."],
     ])
-    return a, k
+    prices = os.path.join(OUT, "DEMO price list - Nile Cables (DEMO).xlsx")
+    xlsx(prices, [
+        ["Nile Cables (DEMO) - price list - fictional prices for testing only"],
+        ["Description", "Unit", "Unit Price", "Min Qty"],
+        ["XLPE/SWA/PVC Cu cable 4x16 mm2 0.6/1 kV", "m", 152, None],
+        ["XLPE/SWA/PVC Cu cable 4x16 mm2 0.6/1 kV", "m", 141, 15000],
+        ["XLPE/SWA/PVC Cu cable 4x95 mm2 0.6/1 kV", "m", 690, None],
+        ["11 kV XLPE Cu cable 3x240 mm2", "m", 2350, None],
+        ["11 kV XLPE Cu cable 3x240 mm2", "m", 2240, 3000],
+        ["MCCB 3P 250A 36kA", "No", 9800, None],
+        ["MCCB 3P 250A 36kA", "No", 9300, 25],
+    ])
+    return a, k, b, prices
 
 
-def seed():
+def seed(prices=None):
     s = requests.Session()
     ok = lambda r: r.status_code < 300 or print("  !", r.status_code, r.text[:120])
     ok(s.put(f"{B}/company-profile", json={
@@ -136,13 +187,19 @@ def seed():
                                                                       "payment_terms_days": 60})
             if sel and q.status_code < 300:
                 s.post(f"{B}/quotations/{q.json()['id']}/select")
+    if prices:
+        with open(prices, "rb") as f:
+            ok(s.post(f"{B}/price-lists", data={"supplier": "Nile Cables (DEMO)", "currency": "EGP",
+                                                "price_date": "2026-09-28"},
+                      files={"file": (os.path.basename(prices), f)}))
 
 
 if __name__ == "__main__":
-    a, k = packages()
+    a, k, b, prices = packages()
     try:
-        seed()
+        seed(prices)
     except requests.ConnectionError:
         sys.exit("Start the server first (http://localhost:8001).")
-    print("Seeded company, capabilities, team and 2 past tenders.")
-    print("Upload these folders through New Tender:\n ", os.path.abspath(a), "\n ", os.path.abspath(k))
+    print("Seeded company, capabilities, team, 2 past tenders and a DEMO price list.")
+    print("Upload these folders through New Tender:\n ", os.path.abspath(a), "\n ", os.path.abspath(b),
+          "\n ", os.path.abspath(k))

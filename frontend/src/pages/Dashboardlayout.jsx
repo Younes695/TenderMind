@@ -40,7 +40,8 @@ function Dashboardlayout() {
     "/subcontractors": "Subcontractors",
     "/analytics": "Analytics",
     "/notifications": "Notifications",
-    "/news": "News",
+    "/news": "Tender Radar",
+    "/materials": "Materials & prices",
     "/help": "Help",
     "/settings": "Settings",
   };

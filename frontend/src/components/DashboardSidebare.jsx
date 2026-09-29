@@ -15,6 +15,8 @@ import {
   LifeBuoy,
   Settings,
   Newspaper,
+  Radar,
+  Boxes,
   X,
   LogOut,
 } from "lucide-react";
@@ -34,9 +36,19 @@ const mainNav = [
     end: true,
   },
   {
+    to: "/news",
+    label: "Tender Radar",
+    icon: Radar,
+  },
+  {
     to: "/tenders",
     label: "Tenders",
     icon: FolderOpen,
+  },
+  {
+    to: "/materials",
+    label: "Materials & prices",
+    icon: Boxes,
   },
   {
     to: "/go-no-go",
@@ -52,11 +64,6 @@ const mainNav = [
     to: "/qa",
     label: "Q&A",
     icon: MessageSquare,
-  },
-  {
-    to: "/news",
-    label: "News",
-    icon: Newspaper,
   },
   {
     to: "/approvals",

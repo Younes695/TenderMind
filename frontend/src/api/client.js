@@ -256,8 +256,9 @@ export async function getNotifications() {
   return handleResponse(resp);
 }
 
-export async function getNews({ country, q, relevant = true } = {}) {
+export async function getNews({ country, q, relevant = true, sort } = {}) {
   const p = new URLSearchParams({ relevant: String(relevant) });
+  if (sort) p.set("sort", sort);
   if (country) p.set("country", country);
   if (q) p.set("q", q);
   const resp = await apiFetch(`/api/news?${p}`, { method: "GET" });
@@ -321,6 +322,20 @@ export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
 export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
 export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
 export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
+// Materials: BOQ, supplier price lists, bulk opportunities
+export const getTenderMaterials = (id) => jsonCall(`${T(id)}/materials`);
+export const getPortfolioMaterials = () => jsonCall(`/api/portfolio/materials`);
+export const listPriceLists = () => jsonCall(`/api/price-lists`);
+export const deletePriceList = (id) => jsonCall(`/api/price-lists/${encodeURIComponent(id)}`, "DELETE");
+export async function uploadPriceList({ file, supplier, currency, price_date }) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("supplier", supplier);
+  fd.append("currency", currency);
+  fd.append("price_date", price_date);
+  const resp = await apiFetch(`/api/price-lists`, { method: "POST", body: fd });
+  return handleResponse(resp);
+}
 // RFQ packages
 export const getRfqPackages = (id) => jsonCall(`${T(id)}/rfq-packages`);
 export const createRfqPackages = (id, data) => jsonCall(`${T(id)}/rfq-packages`, "POST", data);
@@ -413,6 +428,11 @@ const apiClient = {
   getDecisionPack,
   complianceMatrixUrl,
   getRfqPackages,
+  getTenderMaterials,
+  getPortfolioMaterials,
+  listPriceLists,
+  deletePriceList,
+  uploadPriceList,
   createRfqPackages,
   rfqPackagesZipUrl,
   getSummary,
