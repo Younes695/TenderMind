@@ -28,6 +28,8 @@ WB_NOTICE_URL = "https://projects.worldbank.org/en/projects-operations/procureme
 # Target market: Egypt and the GCC only (ISO codes as the API expects).
 COUNTRIES = ["EG", "SA", "AE", "OM", "KW", "BH", "QA"]
 COUNTRY_NAMES = {"Egypt", "Egypt, Arab Republic of", "Saudi Arabia", "United Arab Emirates", "Oman", "Kuwait", "Bahrain", "Qatar"}
+# Sources: World Bank notices (Egypt; the Bank rarely finances GCC projects) and the public tender
+# table of Bahrain's Electricity & Water Authority (robots.txt allows all agents).
 RELEVANT = re.compile(  # electricity sector only (generation, transmission, distribution)
     r"substation|transformer|transmission line|transmission|switchgear|gis|kv|overhead line|"
     r"underground cable|power cable|electric|electrical|electricity|power plant|power station|power supply|"
@@ -43,9 +45,14 @@ _state = {"last_refresh": 0.0, "last_result": None}
 _lock = threading.Lock()
 
 
-def _parse_date(value: Optional[str]) -> Optional[dt.datetime]:
+def _parse_date(value: Optional[str], day_first: bool = False) -> Optional[dt.datetime]:
     if not value:
         return None
+    if day_first:
+        try:
+            return dt.datetime.strptime(value.strip(), "%d-%m-%Y")
+        except ValueError:
+            pass
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%d-%b-%Y", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z"):
         try:
             d = dt.datetime.strptime(value.strip(), fmt)
@@ -94,6 +101,40 @@ def fetch_world_bank(countries: Iterable[str] = COUNTRIES, rows: int = 40,
                         "url": WB_NOTICE_URL.format(id=nid),
                         "published_at": _parse_date(n.get("noticedate")),
                         "deadline_at": _parse_date(n.get("submission_deadline_date"))})
+    return out
+
+
+EWA_URL = "https://www.ewa.bh/en/tenders"
+
+
+def fetch_ewa(session=None, html_text: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Bahrain Electricity & Water Authority: the public "Published Domestic Tenders" table.
+    robots.txt allows all agents; fetched at most once per refresh (every 6 h)."""
+    import html as _html
+    if html_text is None:
+        http = session or requests
+        try:
+            r = http.get(EWA_URL, timeout=TIMEOUT, headers={"User-Agent": "TenderMind/1.0 (+tender news)"})
+            r.raise_for_status()
+            html_text = r.text[:MAX_BYTES]
+        except Exception:
+            return []
+    i = html_text.find("Published Domestic Tenders")
+    j = html_text.find("Tender Opening Results", i)
+    seg = html_text[i:j if j > i else i + 60000] if i >= 0 else ""
+    out = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", seg, re.S):
+        cells = [" ".join(_html.unescape(re.sub(r"<[^>]+>", " ", c)).split())
+                 for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S)]
+        if len(cells) < 6 or cells[1].lower() == "title":
+            continue
+        ref, title, desc, directorate, published, closing = cells[:6]
+        ref = ref if ref and ref != "-" else None
+        out.append({"source": "EWA Bahrain", "external_id": (ref or title)[:200], "title": title[:500],
+                    "description": _clean(f"{desc} · {directorate}"), "country": "Bahrain", "notice_type": "Tender",
+                    "organization": "Electricity & Water Authority (Bahrain)", "url": EWA_URL,
+                    "published_at": _parse_date(published.replace(" ", "").replace("/", "-")[:10], day_first=True),
+                    "deadline_at": _parse_date(closing.replace(" ", "").replace("/", "-")[:10], day_first=True)})
     return out
 
 
@@ -165,7 +206,7 @@ def refresh(force: bool = False) -> Dict[str, Any]:
         if not force and now - _state["last_refresh"] < MIN_REFRESH_GAP_S and _state["last_result"]:
             return {**_state["last_result"], "skipped": True}
         from app.database import SessionLocal
-        items = fetch_world_bank()
+        items = fetch_world_bank() + fetch_ewa()
         feeds = [f.strip() for f in os.environ.get("TENDERMIND_NEWS_FEEDS", "").split(",") if f.strip()]
         items += fetch_rss(feeds)
         db = SessionLocal()

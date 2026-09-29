@@ -35,3 +35,15 @@ def test_final_decision_flow_and_portfolio_pages():
     assert d["hits"] == [] and isinstance(d["files"], list)
     audit = c.get(f"/api/tenders/{tid}/decision-pack").json()["audit"]
     assert sum(1 for e in audit if e["action"] == "final_decision") == 2
+
+
+def test_ewa_bahrain_table_parsing():
+    from app.news import fetch_ewa
+    html = ("<h2>Published Domestic Tenders</h2><table><tr><th>Tender Reference No.</th><th>Title</th><th>Description</th>"
+            "<th>Directorate</th><th>Published Date</th><th>Closing Date</th></tr>"
+            "<tr><td>2026-139-DM-EPD</td><td>Gas Turbine Air Intake Pipes Replacement</td><td>Replace pipes</td>"
+            "<td>Electricity Transmission Directorate</td><td>09/09/2026</td><td>27 /09/2026</td></tr></table>"
+            "<h2>Tender Opening Results</h2><table><tr><td>2026-077</td><td>Old</td><td>x</td><td>y</td><td>1</td><td>2</td></tr></table>")
+    items = fetch_ewa(html_text=html)
+    assert len(items) == 1 and items[0]["external_id"] == "2026-139-DM-EPD" and items[0]["country"] == "Bahrain"
+    assert items[0]["deadline_at"].strftime("%Y-%m-%d") == "2026-09-27"
