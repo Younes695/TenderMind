@@ -972,6 +972,8 @@ def list_news(country: Optional[str] = None, q: Optional[str] = None, relevant: 
     from app.models import NewsItem
     from app import news as _news
     query = db.query(NewsItem)
+    from app.news import COUNTRY_NAMES  # target market: Egypt + GCC (older rows from other countries hidden)
+    query = query.filter(NewsItem.country.in_(COUNTRY_NAMES) | NewsItem.country.is_(None))
     if relevant:
         query = query.filter(NewsItem.relevant.is_(True))
     if country:

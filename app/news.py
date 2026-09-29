@@ -25,8 +25,9 @@ import requests
 
 WB_API = "https://search.worldbank.org/api/v2/procnotices"
 WB_NOTICE_URL = "https://projects.worldbank.org/en/projects-operations/procurement-detail/{id}"
-# Egypt first, then GCC and the wider MENA region (ISO codes as the API expects).
-COUNTRIES = ["EG", "SA", "AE", "OM", "KW", "BH", "QA", "JO", "MA", "TN", "IQ", "LB", "LY", "DZ", "YE", "DJ"]
+# Target market: Egypt and the GCC only (ISO codes as the API expects).
+COUNTRIES = ["EG", "SA", "AE", "OM", "KW", "BH", "QA"]
+COUNTRY_NAMES = {"Egypt", "Egypt, Arab Republic of", "Saudi Arabia", "United Arab Emirates", "Oman", "Kuwait", "Bahrain", "Qatar"}
 RELEVANT = re.compile(  # electricity sector only (generation, transmission, distribution)
     r"substation|transformer|transmission line|transmission|switchgear|gis|kv|overhead line|"
     r"underground cable|power cable|electric|electrical|electricity|power plant|power station|power supply|"

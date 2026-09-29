@@ -53,8 +53,6 @@ COUNTRIES = {
     "Kuwait": ("kuwait", "mew kuwait", "الكويت"),
     "Oman": ("oman", "muscat", "oetc", "عمان"),
     "Bahrain": ("bahrain", "manama", "ewa bahrain", "البحرين"),
-    "Jordan": ("jordan", "amman", "nepco", "الأردن"),
-    "Iraq": ("iraq", "baghdad", "العراق"),
 }
 
 
@@ -91,7 +89,6 @@ KNOWN_CLIENTS = {
     "Dubai Electricity and Water Authority (DEWA)": ("dewa", "dubai electricity"),
     "KAHRAMAA": ("kahramaa",),
     "OETC": ("oetc", "oman electricity transmission"),
-    "NEPCO": ("nepco",),
 }
 _CLIENT_LINE = re.compile(r"\b(?:client|owner|employer|purchaser|contracting\s+authority)\s*[:\-]\s*"
                           r"([A-Z][A-Za-z&.,'\u2019() -]{3,70})", re.IGNORECASE)

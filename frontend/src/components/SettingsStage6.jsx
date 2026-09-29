@@ -7,7 +7,7 @@ import { useT } from "../i18n";
  *  team (one shared login, named members) and the Go/No-Go factor weights. */
 
 export const WORK_TYPES = ["substation", "overhead line", "cable", "distribution", "generation", "renewables", "other"];
-export const COUNTRIES = ["Saudi Arabia", "Egypt", "United Arab Emirates", "Qatar", "Kuwait", "Oman", "Bahrain", "Jordan", "Iraq"];
+export const COUNTRIES = ["Saudi Arabia", "Egypt", "United Arab Emirates", "Qatar", "Kuwait", "Oman", "Bahrain"];
 export const DEPARTMENTS = ["Engineering", "Procurement", "Finance", "Legal", "Commercial", "Projects", "HSE", "Management"];
 
 const input = "w-full rounded-lg border border-[#d0d5dd] px-3 py-2 text-[14px] outline-none focus:border-[#162A4C]";
