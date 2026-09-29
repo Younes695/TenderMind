@@ -77,3 +77,52 @@ def detect_country(texts: Iterable[str]) -> Optional[str]:
             if n:
                 counts[country] = counts.get(country, 0) + n * (5 if i == 0 else 1)
     return max(counts, key=counts.get) if counts else None
+
+
+# Stage 8 — the client (tender owner). Known power-sector owners first (name as shown), then an
+# explicit "Client / Owner / Employer: X" line. Returns (name, evidence) — evidence has file + page.
+KNOWN_CLIENTS = {
+    "Saudi Electricity Company (SEC)": ("saudi electricity company", "saudi electricity co", "sec "),
+    "National Grid SA": ("national grid", "ngsa"),
+    "Ma'aden": ("ma'aden", "maaden", "ma\u2019aden"),
+    "NEOM": ("neom",),
+    "Saudi Aramco": ("saudi aramco", "aramco"),
+    "Egyptian Electricity Transmission Company (EETC)": ("egyptian electricity transmission", "eetc"),
+    "Dubai Electricity and Water Authority (DEWA)": ("dewa", "dubai electricity"),
+    "KAHRAMAA": ("kahramaa",),
+    "OETC": ("oetc", "oman electricity transmission"),
+    "NEPCO": ("nepco",),
+}
+_CLIENT_LINE = re.compile(r"\b(?:client|owner|employer|purchaser|contracting\s+authority)\s*[:\-]\s*"
+                          r"([A-Z][A-Za-z&.,'\u2019() -]{3,70})", re.IGNORECASE)
+
+
+def normalise_client(name: str) -> str:
+    """For matching the same client across tenders: known name, else lower-case letters only."""
+    low = f" {(name or '').lower()} "
+    for canon, keys in KNOWN_CLIENTS.items():
+        if any(k in low for k in keys):
+            return canon
+    return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+
+
+def detect_client(sources, entered: str = ""):
+    """(client name, evidence|None). The team's entry wins; otherwise the most-mentioned known owner."""
+    if (entered or "").strip():
+        return normalise_client(entered) if normalise_client(entered) in KNOWN_CLIENTS else entered.strip(), None
+    counts, first = {}, {}
+    for s in list(sources)[:400]:
+        low = f" {(s.text or '').lower()} "
+        for canon, keys in KNOWN_CLIENTS.items():
+            n = sum(low.count(k) for k in keys)
+            if n:
+                counts[canon] = counts.get(canon, 0) + n
+                first.setdefault(canon, {"file": s.source_document, "page": s.page_number})
+    if counts:
+        best = max(counts, key=counts.get)
+        return best, first[best]
+    for s in list(sources)[:60]:
+        m = _CLIENT_LINE.search(s.text or "")
+        if m:
+            return m.group(1).strip(" .,-"), {"file": s.source_document, "page": s.page_number}
+    return None, None

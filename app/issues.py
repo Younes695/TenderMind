@@ -182,6 +182,21 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                                            [v["quote"][:80] for v in c["values"]])})
     except Exception:
         pass
+    try:  # Stage 8: the company has worked with this client before
+        from app.models import Tender as _T
+        from app.similarity import client_history
+        t = db.query(_T).filter(_T.id == tender_id).first()
+        hist, client = client_history(db, t) if t else ([], None)
+        if hist:
+            lines = [f"- {h['id']} — {h['title'] or ''}"
+                     + (f" · {h['decision']}" if h.get("decision") else "") + (f" · {h['outcome']}" if h.get("outcome") else "")
+                     for h in hist[:10]]
+            out.append({"category": "info", "kind": "client-history",
+                        "title": f"You took part in a tender with this client before: {client}",
+                        "detail": "\n".join(lines), "source_document": None, "page": None, "priority": "LOW",
+                        "dedupe_key": _key("client-history", client, sorted(h["id"] for h in hist))})
+    except Exception:
+        db.rollback()
     from app.models import EligibilityResult  # Stage 6 gate
     el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()
     if el is not None and el.status == "INELIGIBLE" and not el.override_by:
@@ -230,6 +245,7 @@ _SUPERSEDED = {  # Stage 5I: per-item kinds now grouped — drop their open, unt
     "unclassified-requirement": "Requirement could not be classified",
     # Stage 6: grouped model-doubt "questions" replaced by per-requirement quotes
     "unclear-applicability": "", "undefined-term": "", "missing-value": "", "unclear-date-anchor": "",
+    "client-history": "",  # Stage 8: refreshed when more tenders with the client arrive
     "ineligible": "",  # Stage 6: disappears once the manager overrides or the tender becomes eligible
 }
 

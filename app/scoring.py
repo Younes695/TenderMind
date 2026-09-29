@@ -81,8 +81,15 @@ def fit_factor(match_percent: Optional[float], eligibility_checks: List[Dict[str
     return _r(None, "No evaluation or eligibility check yet.")
 
 
-def history_factor(kind: Optional[str], past: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """past: [{"kind", "outcome"}] of the account's other tenders."""
+def history_factor(kind: Optional[str], past: List[Dict[str, Any]], client: Optional[str] = None,
+                   client_key: Optional[str] = None) -> Dict[str, Any]:
+    """past: [{"kind", "outcome", "client_key"}] of the account's other tenders. The same client's
+    won/lost record counts first (Stage 8); otherwise tenders of the same type of work."""
+    by_client = [p for p in past if client_key and p.get("client_key") == client_key and p.get("outcome") in ("WON", "LOST")]
+    if by_client:
+        won = sum(1 for p in by_client if p["outcome"] == "WON")
+        return _r(100 * won / len(by_client), "Won {won} of {n} past tenders with {client}.",
+                  won=won, n=len(by_client), client=client)
     same = [p for p in past if kind and p.get("kind") == kind and p.get("outcome") in ("WON", "LOST")]
     if not same:
         return _r(None, "No won/lost tenders of the same type recorded yet." if kind else "Tender type not recognised.")
@@ -138,8 +145,14 @@ def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_cou
     if f is not None:
         q = q.filter(f)
     others = q.all()
-    past = [{"kind": classify_kind(f"{t.title or ''} {t.id}") or _kind_from_analysis(db, t.id), "outcome": t.outcome}
-            for t in others if t.outcome in ("WON", "LOST")]
+    from app.similarity import profile as _profile
+    past = []
+    for t in others:
+        if t.outcome in ("WON", "LOST"):
+            pr = _profile(db, t)
+            past.append({"kind": pr["work_type"] or _kind_from_analysis(db, t.id), "outcome": t.outcome,
+                         "client_key": pr["client_key"]})
+    me = _profile(db, tender)
     try:
         disciplines = [s["discipline"] for s in tender_sections(tender.id)]
     except Exception:
@@ -154,6 +167,6 @@ def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_cou
         hard = f"{hard_fail_count} mandatory requirement(s) contradicted by your documents."  # shown with t()
     elif el is not None and el.status == "INELIGIBLE" and not el.override_by:
         hard = "Blocked by the eligibility check."
-    return compute({"fit": fit_factor(match_percent, checks), "history": history_factor(kind, past),
+    return compute({"fit": fit_factor(match_percent, checks), "history": history_factor(kind, past, me["client"], me["client_key"]),
                     "partners": partners_factor(disciplines, suppliers), "votes": votes_factor(vote_summary(votes))},
                    clean_weights(st.weights if st else None), hard)

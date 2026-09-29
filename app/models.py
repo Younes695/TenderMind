@@ -34,6 +34,8 @@ class Tender(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     owner_email = Column(String, nullable=True, index=True)  # app/access.py
     outcome = Column(String, nullable=True)  # Stage 6: WON | LOST | SUBMITTED | NOT_SUBMITTED
+    stage = Column(String, nullable=True)  # Stage 8: ELIGIBILITY | STUDY | PRICING | SUBMISSION | SUBMITTED | CLOSED
+    submission_deadline = Column(DateTime, nullable=True)  # Stage 8: set by the team
 
 class TenderDocument(Base):
     __tablename__ = "tender_documents"
@@ -429,3 +431,13 @@ class AuditEvent(Base):
     actor = Column(String, nullable=True)             # signed-in account
     actor_name = Column(String, nullable=True)        # person named on the shared login
     at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class TenderNote(Base):
+    """Stage 8 — a note on a tender by a team member (shared login: the name is typed)."""
+    __tablename__ = "tender_notes"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    author = Column(String, nullable=True)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

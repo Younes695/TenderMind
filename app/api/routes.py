@@ -958,7 +958,7 @@ def notifications(db: Session = Depends(get_db), user: dict = Depends(require_au
         except Exception:
             db.rollback()
         items.extend(db.query(TenderIssue).filter(TenderIssue.tender_id == t.id,
-                                                  TenderIssue.category == "missing",
+                                                  TenderIssue.category.in_(("missing", "info")),
                                                   TenderIssue.status == "OPEN").all())
     order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
     items.sort(key=lambda i: (order.get(i.priority or "", 3), i.tender_id, i.created_at or datetime.min))
@@ -1856,3 +1856,147 @@ def decision_pack(tender_id: str, lang: str = "en", db: Session = Depends(get_db
         "tasks": tasks,
         "audit": events(db, tender_id),
     }
+
+
+# ---- Stage 8: quick summary, similar tenders, stage/deadline, notes, reminders, dashboard
+STAGES = ("ELIGIBILITY", "STUDY", "PRICING", "SUBMISSION", "SUBMITTED", "CLOSED")
+
+
+def _account_tenders(db, user, include_demo=False):
+    from app.access import DEMO_TENDER_ID
+    q = db.query(Tender)
+    f = owner_filter(Tender.owner_email, user)
+    if f is not None:
+        q = q.filter(f)
+    return [t for t in q.all() if include_demo or t.id != DEMO_TENDER_ID]
+
+
+@router.get("/tenders/{tender_id}/summary")
+def tender_summary(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.summary import build
+    return build(db, _tender_or_404(db, tender_id), user)
+
+
+@router.get("/tenders/{tender_id}/similar")
+def tender_similar(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.similarity import for_tender
+    return for_tender(db, _tender_or_404(db, tender_id), user)
+
+
+@router.put("/tenders/{tender_id}/plan")
+def set_tender_plan(tender_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Stage and submission deadline, set by the team (audited)."""
+    from app.audit import log as _audit
+    t = _tender_or_404(db, tender_id)
+    changes = {}
+    if "stage" in payload:
+        st = str(payload.get("stage") or "").upper() or None
+        if st is not None and st not in STAGES:
+            raise HTTPException(status_code=422, detail=f"stage must be one of {', '.join(STAGES)}")
+        if st != t.stage:
+            changes["stage"] = {"previous": t.stage, "new": st}
+            t.stage = st
+    if "submission_deadline" in payload:
+        d = _parse_due(payload.get("submission_deadline"))
+        if d != t.submission_deadline:
+            changes["deadline"] = {"previous": t.submission_deadline.date().isoformat() if t.submission_deadline else None,
+                                   "new": d.date().isoformat() if d else None}
+            t.submission_deadline = d
+    db.commit()
+    for k, v in changes.items():
+        _audit(db, tender_id, "stage_set" if k == "stage" else "deadline_set", v, user)
+    return {"stage": t.stage, "submission_deadline": t.submission_deadline.date().isoformat() if t.submission_deadline else None}
+
+
+def _note_dict(n):
+    return {"id": n.id, "author": n.author, "text": n.text, "created_at": n.created_at.isoformat() if n.created_at else None}
+
+
+@router.get("/tenders/{tender_id}/notes")
+def list_notes(tender_id: str, db: Session = Depends(get_db)):
+    from app.models import TenderNote
+    _tender_or_404(db, tender_id)
+    return [_note_dict(n) for n in db.query(TenderNote).filter(TenderNote.tender_id == tender_id)
+            .order_by(TenderNote.created_at.desc()).all()]
+
+
+@router.post("/tenders/{tender_id}/notes")
+def add_note(tender_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.audit import log as _audit
+    from app.models import TenderNote
+    _tender_or_404(db, tender_id)
+    n = TenderNote(id=f"TN-{uuid.uuid4().hex[:10].upper()}", tender_id=tender_id,
+                   author=_clean(payload, "author"), text=_clean(payload, "text", 4000, required=True))
+    db.add(n)
+    db.commit()
+    _audit(db, tender_id, "note_added", {"text": n.text[:120]}, user, n.author)
+    return _note_dict(n)
+
+
+@router.delete("/tenders/{tender_id}/notes/{note_id}")
+def delete_note(tender_id: str, note_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.audit import log as _audit
+    from app.models import TenderNote
+    n = db.query(TenderNote).filter(TenderNote.id == note_id, TenderNote.tender_id == tender_id).first()
+    if n is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    text = n.text[:120]
+    db.delete(n)
+    db.commit()
+    _audit(db, tender_id, "note_deleted", {"text": text}, user)
+    return {"deleted": note_id}
+
+
+@router.get("/reminders")
+def reminders(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.reminders import for_tenders
+    return for_tenders(db, _account_tenders(db, user))
+
+
+@router.get("/dashboard/attention")
+def dashboard_attention(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """What needs the Tender Manager now, across the account's tenders."""
+    from collections import Counter
+    from app.models import EligibilityResult, TenderAnalysis, TenderIssue
+    from app.reminders import CLOSED_STAGES, for_tenders
+    from app.scoring import tender_score
+    tenders = _account_tenders(db, user)
+    analysed = {tid for (tid,) in db.query(TenderAnalysis.tender_id).distinct().all()}
+    blocked, awaiting, history = [], [], []
+    for t in tenders:
+        el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == t.id).first()
+        if el is not None and el.status == "INELIGIBLE" and not el.override_by:
+            blocked.append({"id": t.id, "title": t.title})
+            continue
+        if t.id in analysed and not t.outcome and t.stage not in CLOSED_STAGES:
+            try:
+                sc = tender_score(db, t, user, None, 0)
+            except Exception:
+                db.rollback()
+                sc = None
+            awaiting.append({"id": t.id, "title": t.title, "stage": t.stage,
+                             "deadline": t.submission_deadline.date().isoformat() if t.submission_deadline else None,
+                             "score": sc.get("score") if sc else None, "band": sc.get("band") if sc else None})
+        hit = (db.query(TenderIssue).filter(TenderIssue.tender_id == t.id, TenderIssue.kind == "client-history",
+                                            TenderIssue.status == "OPEN").first())
+        if hit:
+            history.append({"id": t.id, "title": t.title, "message": hit.title})
+    awaiting.sort(key=lambda x: (x["deadline"] or "9999", -(x["score"] or 0)))
+    stages = Counter(t.stage or ("ANALYSED" if t.id in analysed else "NEW") for t in tenders)
+    return {"reminders": for_tenders(db, tenders), "awaiting_decision": awaiting, "blocked": blocked,
+            "client_history": history, "stages": dict(stages), "total": len(tenders)}
+
+
+@router.post("/assistant/ask")
+def assistant_ask(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.assistant import answer
+    q = str(payload.get("question") or "").strip()[:500]
+    if not q:
+        raise HTTPException(status_code=422, detail="question is required")
+    tid = payload.get("tender_id") or None
+    if tid:
+        t = _tender_or_404(db, tid)
+        from app.access import can_read_tender
+        if not can_read_tender(t, user):
+            raise HTTPException(status_code=404, detail="Tender not found")
+    return answer(db, user, q, tid, "ar" if payload.get("lang") == "ar" else "en")

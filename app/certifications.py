@@ -152,9 +152,11 @@ def tender_certifications(tender_id: str, cap: Optional[Dict[str, Any]], supplie
     d = cache_dir(tender_id)
     stamp = (tuple(sorted((f.name, f.stat().st_mtime) for f in d.glob("extract-v*.json"))) if d.is_dir() else (),
              json.dumps([cap, suppliers], sort_keys=True, default=str))
-    hit = _CACHE.get(tender_id)
-    if hit and hit[0] == stamp:
-        return hit[1]
+    key = (tender_id, stamp)
+    if key in _CACHE:
+        return _CACHE[key]
     res = find(sources_from_cache(tender_id), cap, suppliers) if stamp[0] else []
-    _CACHE[tender_id] = (stamp, res)
+    if len(_CACHE) > 64:
+        _CACHE.clear()
+    _CACHE[key] = res
     return res
