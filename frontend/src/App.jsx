@@ -9,6 +9,8 @@ import GoNoGo from "./pages/GoNoGo";
 import NewTender from "./pages/NewTender";
 import TenderWorkspace from "./pages/TenderWorkspace";
 import DecisionPack from "./pages/DecisionPack";
+import { Approvals, WorkPackages, DocumentsLibrary, Analytics } from "./pages/Portfolio";
+import Help from "./pages/Help";
 import Solutions from "./pages/Solution";
 import Industries from "./pages/Industries";
 import Security from "./pages/Security";
@@ -24,13 +26,7 @@ import Subcontractors from "./pages/Subcontractors";
 import Settings from "./pages/Settings";
 
 // Sidebar sections that are planned but not built yet.
-const PLANNED_SECTIONS = [
-  ["/work-packages", "Work Packages", "Split a tender into packages of work with owners and due dates."],
-  ["/approvals", "Approvals", "Route the bid decision through management approval with an audit trail."],
-  ["/documents", "Documents", "One library of every tender document across all tenders."],
-  ["/analytics", "Analytics", "Win rate, bid pipeline and effort per tender over time."],
-  ["/help", "Help", "Guides for uploading tenders, company evidence and reading the bid decision."],
-];
+const PLANNED_SECTIONS = [];
 
 function App() {
   return (
@@ -69,6 +65,11 @@ function App() {
             <Route path="/news" element={<News/>}/>
             <Route path="/subcontractors" element={<Subcontractors/>}/>
             <Route path="/settings" element={<Settings/>}/>
+            <Route path="/work-packages" element={<WorkPackages/>}/>
+            <Route path="/approvals" element={<Approvals/>}/>
+            <Route path="/documents" element={<DocumentsLibrary/>}/>
+            <Route path="/analytics" element={<Analytics/>}/>
+            <Route path="/help" element={<Help/>}/>
             {PLANNED_SECTIONS.map(([path, title, description]) => (
               <Route key={path} path={path} element={<ComingSoon title={title} description={description}/>}/>
             ))}

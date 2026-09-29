@@ -331,6 +331,13 @@ export const deleteNote = (id, noteId) => jsonCall(`${T(id)}/notes/${encodeURICo
 export const getReminders = () => jsonCall(`/api/reminders`);
 export const getAttention = () => jsonCall(`/api/dashboard/attention`);
 export const askAssistant = (data) => jsonCall(`/api/assistant/ask`, "POST", data);
+// Stage 9
+export const getBoard = () => jsonCall(`/api/portfolio/board`);
+export const getApprovals = () => jsonCall(`/api/portfolio/approvals`);
+export const setFinalDecision = (id, data) => jsonCall(`${T(id)}/final-decision`, "PUT", data);
+export const getWorkPackages = () => jsonCall(`/api/portfolio/work-packages`);
+export const getDocuments = (q = "") => jsonCall(`/api/portfolio/documents?q=${encodeURIComponent(q)}`);
+export const getAnalytics = () => jsonCall(`/api/portfolio/analytics`);
 
 const apiClient = {
   listTenders,
@@ -409,6 +416,12 @@ const apiClient = {
   getReminders,
   getAttention,
   askAssistant,
+  getBoard,
+  getApprovals,
+  setFinalDecision,
+  getWorkPackages,
+  getDocuments,
+  getAnalytics,
   apiUrl,
 };
 

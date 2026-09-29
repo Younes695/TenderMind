@@ -40,7 +40,7 @@ const mainNav = [
   },
   {
     to: "/go-no-go",
-    label: "Go / No-Go",
+    label: "Decision board",
     icon: Scale,
   },
   {
