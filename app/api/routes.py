@@ -1316,6 +1316,8 @@ def tender_eligibility_override(tender_id: str, payload: dict, background_tasks:
     row.override_name = str(payload.get("by") or "").strip()[:120] or None
     row.override_reason, row.overridden_at = reason, datetime.utcnow()
     db.commit()
+    from app.audit import log as _audit
+    _audit(db, tender_id, "eligibility_override", {"reason": reason}, user, row.override_name)
     try:
         job = create_processing_job(db, tender_id)
     except ValueError as e:
@@ -1455,7 +1457,8 @@ def add_task(tender_id: str, payload: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/tenders/{tender_id}/tasks/{task_id}")
-def update_task(tender_id: str, task_id: str, payload: dict, db: Session = Depends(get_db)):
+def update_task(tender_id: str, task_id: str, payload: dict, db: Session = Depends(get_db),
+                user: dict = Depends(require_auth)):
     from app.models import TenderTask
     t = db.query(TenderTask).filter(TenderTask.id == task_id, TenderTask.tender_id == tender_id).first()
     if t is None:
@@ -1469,7 +1472,11 @@ def update_task(tender_id: str, task_id: str, payload: dict, db: Session = Depen
         st = str(payload.get("status") or "").upper()
         if st not in ("OPEN", "DONE"):
             raise HTTPException(status_code=422, detail="status must be OPEN or DONE")
+        changed = st != t.status
         t.status, t.done_at = st, (datetime.utcnow() if st == "DONE" else None)
+        if changed:
+            from app.audit import log as _audit
+            _audit(db, tender_id, "task_done" if st == "DONE" else "task_reopened", {"task": t.title}, user, t.assignee)
     db.commit()
     return _task_dict(t)
 
@@ -1515,7 +1522,7 @@ def list_votes(tender_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/tenders/{tender_id}/votes")
-def put_vote(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+def put_vote(tender_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     """The tender manager records one member's vote (insert or update)."""
     from app.models import DepartmentVote
     from app.team import VOTES
@@ -1532,28 +1539,34 @@ def put_vote(tender_id: str, payload: dict, db: Session = Depends(get_db)):
     v.department = _clean(payload, "department", required=True)
     v.vote, v.comment, v.updated_at = vote, _clean(payload, "comment", 1000), datetime.utcnow()
     db.commit()
+    from app.audit import log as _audit
+    _audit(db, tender_id, "vote_saved", {"member": name, "department": v.department, "vote": vote}, user, name)
     return _votes_payload(db, tender_id)
 
 
 @router.delete("/tenders/{tender_id}/votes/{member_name}")
-def delete_vote(tender_id: str, member_name: str, db: Session = Depends(get_db)):
+def delete_vote(tender_id: str, member_name: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     from app.models import DepartmentVote
     db.query(DepartmentVote).filter(DepartmentVote.tender_id == tender_id,
                                     DepartmentVote.member_name == member_name).delete()
     db.commit()
+    from app.audit import log as _audit
+    _audit(db, tender_id, "vote_removed", {"member": member_name}, user)
     return _votes_payload(db, tender_id)
 
 
 @router.put("/tenders/{tender_id}/outcome")
-def set_outcome(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+def set_outcome(tender_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     from app.team import OUTCOMES
     t = _tender_or_404(db, tender_id)
     o = payload.get("outcome")
     o = str(o).upper() if o else None
     if o is not None and o not in OUTCOMES:
         raise HTTPException(status_code=422, detail=f"outcome must be one of {', '.join(OUTCOMES)}")
-    t.outcome = o
+    previous, t.outcome = t.outcome, o
     db.commit()
+    from app.audit import log as _audit
+    _audit(db, tender_id, "outcome_set", {"previous": previous, "new": o}, user)
     return {"tender_id": t.id, "outcome": t.outcome}
 
 
@@ -1606,3 +1619,228 @@ def put_score_weights(payload: dict, db: Session = Depends(get_db), user: dict =
     db.merge(st)
     db.commit()
     return w
+
+
+# ---- Stage 7: submission checklist, compliance matrix, decision pack
+def _latest_analysis_row(db, tender_id):
+    return (db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id)
+            .order_by(TenderAnalysis.created_at.desc()).first())
+
+
+def _checklist_items(db, tender_id):
+    from app.checklist import build
+    from app.models import SubmissionItem
+    a = _latest_analysis_row(db, tender_id)
+    items = build((a.requirements if a else None) or [])
+    state = {r.item_key: r for r in db.query(SubmissionItem).filter(SubmissionItem.tender_id == tender_id).all()}
+    for it in items:
+        st = state.get(it["key"])
+        it.update(status=st.status if st else "TODO", assignee=st.assignee if st else None, note=st.note if st else None)
+    return items
+
+
+@router.get("/tenders/{tender_id}/checklist")
+def get_checklist(tender_id: str, db: Session = Depends(get_db)):
+    from app.checklist import progress
+    _tender_or_404(db, tender_id)
+    items = _checklist_items(db, tender_id)
+    return {"items": items, "progress": progress(items)}
+
+
+@router.put("/tenders/{tender_id}/checklist/{item_key}")
+def put_checklist_item(tender_id: str, item_key: str, payload: dict, db: Session = Depends(get_db),
+                       user: dict = Depends(require_auth)):
+    from app.audit import log as _audit
+    from app.checklist import STATUSES
+    from app.models import SubmissionItem
+    _tender_or_404(db, tender_id)
+    items = {i["key"]: i for i in _checklist_items(db, tender_id)}
+    if item_key not in items:
+        raise HTTPException(status_code=404, detail="Checklist item not found")
+    row = (db.query(SubmissionItem).filter(SubmissionItem.tender_id == tender_id, SubmissionItem.item_key == item_key)
+           .first())
+    if row is None:
+        row = SubmissionItem(id=f"SI-{uuid.uuid4().hex[:10].upper()}", tender_id=tender_id, item_key=item_key)
+        db.add(row)
+    previous = row.status or "TODO"
+    if "status" in payload:
+        st = str(payload.get("status") or "").upper()
+        if st not in STATUSES:
+            raise HTTPException(status_code=422, detail="status must be TODO, READY or NOT_APPLICABLE")
+        row.status = st
+    for k in ("assignee", "note"):
+        if k in payload:
+            setattr(row, k, _clean(payload, k, 1000 if k == "note" else 120))
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    if row.status != previous:
+        _audit(db, tender_id, "checklist_item", {"item": items[item_key]["title"], "previous": previous,
+                                                 "new": row.status}, user, row.assignee)
+    it = items[item_key]
+    it.update(status=row.status, assignee=row.assignee, note=row.note)
+    return it
+
+
+_MATRIX_HEAD = {
+    "en": ["Req ID", "Requirement (tender's words)", "Category", "Mandatory", "Source file", "Page",
+           "Company evidence", "Status", "Gap", "Comment"],
+    "ar": ["رقم المتطلب", "المتطلب (بنص المناقصة)", "الفئة", "إلزامي", "ملف المصدر", "الصفحة",
+           "دليل الشركة", "الحالة", "الفجوة", "تعليق"],
+}
+_STATUS_TEXT = {
+    "en": {"PASS": "Met", "FAIL": "Contradicted", "REVIEW": "Needs review", "MISSING_EVIDENCE": "No evidence",
+           None: "Not evaluated"},
+    "ar": {"PASS": "مستوفى", "FAIL": "متعارض", "REVIEW": "يحتاج مراجعة", "MISSING_EVIDENCE": "بلا دليل",
+           None: "لم يُقيّم"},
+}
+_GAP_TEXT = {
+    "en": {"FAIL": "Company documents contradict the requirement", "REVIEW": "Evidence found — a person must confirm it",
+           "MISSING_EVIDENCE": "No company evidence found"},
+    "ar": {"FAIL": "مستندات الشركة تتعارض مع المتطلب", "REVIEW": "يوجد دليل — يحتاج تأكيدًا بشريًا",
+           "MISSING_EVIDENCE": "لا يوجد دليل من مستندات الشركة"},
+}
+
+
+def _compliance_counts(reqs):
+    mand = [r for r in reqs if r.get("mandatory")]
+    counts = {k: sum(1 for r in mand if r.get("status") == k) for k in ("PASS", "FAIL", "REVIEW", "MISSING_EVIDENCE")}
+    counts["mandatory_total"] = len(mand)
+    counts["total"] = len(reqs)
+    evaluated = any(r.get("evidence") for r in mand) or counts["PASS"] or counts["FAIL"]
+    counts["compliance_percent"] = round(100 * counts["PASS"] / len(mand)) if mand and evaluated else None
+    return counts
+
+
+@router.get("/tenders/{tender_id}/compliance-matrix.xlsx")
+def compliance_matrix(tender_id: str, lang: str = "en", db: Session = Depends(get_db)):
+    """The bidder's compliance matrix: every requirement with its source, company evidence and gap."""
+    import io as _io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    lang = "ar" if lang == "ar" else "en"
+    t = _tender_or_404(db, tender_id)
+    try:
+        detail = get_decision_detail(tender_id, db)
+    except HTTPException:
+        detail = {"requirements": []}
+    reqs = detail.get("requirements") or []
+    counts = _compliance_counts(reqs)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Summary" if lang == "en" else "الملخص"
+    ar = lang == "ar"
+    rows = [
+        (("Tender" if not ar else "المناقصة"), f"{t.id} — {t.title or ''}"),
+        (("Generated" if not ar else "تاريخ الإنشاء"), datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")),
+        (("Requirements (all)" if not ar else "كل المتطلبات"), counts["total"]),
+        (("Mandatory requirements" if not ar else "المتطلبات الإلزامية"), counts["mandatory_total"]),
+    ] + [(_STATUS_TEXT[lang][k], counts[k]) for k in ("PASS", "FAIL", "REVIEW", "MISSING_EVIDENCE")] + [
+        (("Compliance %" if not ar else "نسبة الامتثال"),
+         f"{counts['compliance_percent']}%" if counts["compliance_percent"] is not None
+         else ("Not evaluated yet" if not ar else "لم يُقيّم بعد")),
+        (("Method" if not ar else "طريقة الحساب"),
+         "Met mandatory requirements ÷ all mandatory requirements. 'Needs review' and 'No evidence' never count as met."
+         if not ar else "المتطلبات الإلزامية المستوفاة ÷ كل المتطلبات الإلزامية. «يحتاج مراجعة» و«بلا دليل» لا تُحتسب مستوفاة أبدًا."),
+    ]
+    for r in rows:
+        ws.append(list(r))
+    for c in ws["A"]:
+        c.font = Font(bold=True)
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["B"].width = 90
+    m = wb.create_sheet("Matrix" if not ar else "المصفوفة")
+    m.append(_MATRIX_HEAD[lang])
+    head_fill = PatternFill("solid", fgColor="162A4C")
+    for c in m[1]:
+        c.font, c.fill = Font(bold=True, color="FFFFFF"), head_fill
+    fills = {"PASS": "E7F5EE", "FAIL": "FDF0F0", "REVIEW": "FDF4DE", "MISSING_EVIDENCE": "F2F4F7"}
+    for r in reqs:
+        ev = r.get("evidence") or []
+        ev_txt = "\n".join(f"{e.get('source_document') or ''} {e.get('page_or_section') or ''}: "
+                           f"{str(e.get('quote') or e.get('fact') or '')[:200]}".strip() for e in ev[:3])
+        st = r.get("status")
+        m.append([r.get("requirement_id"), r.get("source_quote") or r.get("requirement"), r.get("category"),
+                  ("Yes" if not ar else "نعم") if r.get("mandatory") else ("No" if not ar else "لا"),
+                  r.get("source_document"), r.get("page_or_section"), ev_txt,
+                  _STATUS_TEXT[lang].get(st, st), _GAP_TEXT[lang].get(st, ""), ""])
+        if st in fills:
+            m.cell(row=m.max_row, column=8).fill = PatternFill("solid", fgColor=fills[st])
+    for col, w in zip("ABCDEFGHIJ", (10, 70, 14, 10, 30, 8, 50, 16, 34, 30)):
+        m.column_dimensions[col].width = w
+    for row in m.iter_rows(min_row=2):
+        for c in row:
+            c.alignment = Alignment(wrap_text=True, vertical="top")
+    m.freeze_panes = "A2"
+    if ar:
+        ws.sheet_view.rightToLeft = True
+        m.sheet_view.rightToLeft = True
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", t.id)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f'attachment; filename="compliance-matrix-{safe}.xlsx"'})
+
+
+@router.get("/tenders/{tender_id}/decision-pack")
+def decision_pack(tender_id: str, lang: str = "en", db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Everything management needs to decide, in one place — certifications first. Facts carry their source;
+    the decision itself belongs to the company's authorised team."""
+    from app.audit import events
+    from app.certifications import find as find_certs, summary as cert_summary
+    from app.checklist import progress
+    from app.conflicts import tender_conflicts
+    from app.eligibility import capability_for, capability_dict, result_dict
+    from app.models import DepartmentVote, EligibilityResult, TenderTask
+    from app.recommendation import build_recommendation
+    from app.sections import sources_from_cache, suppliers_by_discipline
+    from app.team import vote_summary
+    t = _tender_or_404(db, tender_id)
+    try:
+        detail = get_decision_detail(tender_id, db)
+    except HTTPException:
+        detail = None
+    a = _latest_analysis_row(db, tender_id)
+    rec = build_recommendation(detail, {"deadlines": a.deadlines, "risks": a.risks} if a else None, None, lang)
+    try:
+        score = _score_for(db, tender_id, user, rec, detail)
+    except Exception:
+        db.rollback()
+        score = None
+    others = [x for x in _account_tender_ids(db, user) if x != tender_id]
+    try:
+        certs = find_certs(sources_from_cache(tender_id), capability_dict(capability_for(db, t)),
+                           suppliers_by_discipline(db, others))
+    except Exception:
+        certs = []
+    reqs = (detail or {}).get("requirements") or []
+    gaps = [r for r in reqs if r.get("mandatory") and r.get("status") in ("FAIL", "MISSING_EVIDENCE", "REVIEW")]
+    gaps.sort(key=lambda r: {"FAIL": 0, "REVIEW": 1, "MISSING_EVIDENCE": 2}[r["status"]])
+    checklist = _checklist_items(db, tender_id)
+    votes = [{"member_name": v.member_name, "department": v.department, "vote": v.vote, "comment": v.comment}
+             for v in db.query(DepartmentVote).filter(DepartmentVote.tender_id == tender_id).all()]
+    tasks = [_task_dict(x) for x in db.query(TenderTask).filter(TenderTask.tender_id == tender_id).all()]
+    try:
+        conflicts = tender_conflicts(tender_id)
+    except Exception:
+        conflicts = []
+    return {
+        "tender": {"id": t.id, "title": t.title, "client": t.client, "location": t.location, "outcome": t.outcome},
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "certifications": {"items": certs, "summary": cert_summary(certs)},
+        "eligibility": result_dict(db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()),
+        "score": score,
+        "recommendation": {"decision": rec.get("decision"), "headline": rec.get("headline"), "notes": rec.get("notes"),
+                           "sections": rec.get("sections")},
+        "compliance": _compliance_counts(reqs),
+        "gaps": [{k: r.get(k) for k in ("requirement_id", "requirement", "status", "source_document", "page_or_section")}
+                 for r in gaps[:15]],
+        "conflicts": conflicts,
+        "questions": _open_issues(db, tender_id, "question", _EMAIL_SKIP),
+        "missing_documents": _open_issues(db, tender_id, "missing", _EMAIL_SKIP),
+        "checklist": {"items": checklist, "progress": progress(checklist)},
+        "votes": {"votes": votes, "summary": vote_summary(votes)},
+        "tasks": tasks,
+        "audit": events(db, tender_id),
+    }

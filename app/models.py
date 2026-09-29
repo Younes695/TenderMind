@@ -404,3 +404,28 @@ class ScoreSettings(Base):
     id = Column(String, primary_key=True)             # account email or "local"
     weights = Column(JSON, default=dict)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SubmissionItem(Base):
+    """Stage 7 — team state of one bid submission checklist item (items come from the analysis)."""
+    __tablename__ = "submission_items"
+    __table_args__ = (UniqueConstraint("tender_id", "item_key", name="uq_submission_item"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    item_key = Column(String, nullable=False)
+    status = Column(String, default="TODO")           # TODO | READY | NOT_APPLICABLE
+    assignee = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditEvent(Base):
+    """Stage 7 — who changed what on a tender, and when (decision pack audit trail)."""
+    __tablename__ = "audit_events"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    action = Column(String, nullable=False)
+    detail = Column(JSON, default=dict)
+    actor = Column(String, nullable=True)             # signed-in account
+    actor_name = Column(String, nullable=True)        # person named on the shared login
+    at = Column(DateTime, default=datetime.utcnow, index=True)

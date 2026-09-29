@@ -112,7 +112,8 @@ def test_other_account_cannot_reach_team_tasks_votes_or_capabilities(app_auth_on
     assert bob.put(f"/api/team/{m['id']}", json={"name": "hijack"}).status_code == 404
     assert bob.delete(f"/api/team/{m['id']}").status_code == 404
     for path in (f"/api/tenders/{tid}/tasks", f"/api/tenders/{tid}/votes", f"/api/tenders/{tid}/sections",
-                 f"/api/tenders/{tid}/eligibility"):
+                 f"/api/tenders/{tid}/eligibility", f"/api/tenders/{tid}/checklist",
+                 f"/api/tenders/{tid}/decision-pack", f"/api/tenders/{tid}/compliance-matrix.xlsx"):
         assert bob.get(path).status_code == 404, path
     assert bob.put(f"/api/tenders/{tid}/tasks/{task['id']}", json={"status": "DONE"}).status_code == 404
     assert bob.put(f"/api/tenders/{tid}/votes", json={"member_name": "x", "department": "y",
