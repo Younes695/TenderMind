@@ -22,7 +22,7 @@ CAP = {"work_types": ["substation"], "max_kv": 132, "countries": ["Saudi Arabia"
        "certifications": ["ISO 9001"], "years_experience": 12, "annual_turnover": 80e6, "turnover_currency": "SAR"}
 PAGES = ("Instructions to bidders for the Riyadh project, Kingdom of Saudi Arabia.",
          "The Bidder shall be certified to ISO 9001 and ISO 45001.",
-         "Minimum 10 years of experience in similar substation works.",
+         "The Bidder shall have minimum 10 years of experience in similar substation works.",
          "Average annual turnover not less than SAR 50 million over the last 3 years.")
 
 
@@ -132,4 +132,45 @@ def test_capability_and_override_endpoints(monkeypatch):
     r = c.post(f"/api/tenders/{tid}/eligibility/override", json={"by": "Omar", "reason": "strategic client"})
     assert r.status_code == 200 and r.json()["job_id"]
     e = c.get(f"/api/tenders/{tid}/eligibility").json()
-    assert e["override_by"] == "Omar" and e["override_reason"] == "strategic client"
+    assert e["override_name"] == "Omar" and e["override_reason"] == "strategic client"
+    assert e["override_by"] == "local"  # the signed-in account, not a typed name
+
+
+def test_staff_experience_is_not_company_experience():
+    cap = dict(CAP, years_experience=8)
+    k = _by_key(check(cap, "Riyadh 132kV Substation",
+                      _src("The Project Manager shall have a minimum of 15 years experience in substations.")))
+    assert "experience" not in k or k["experience"]["result"] != "FAIL"
+    k2 = _by_key(check(cap, "Riyadh 132kV Substation",
+                       _src("The Bidder shall have a minimum of 10 years of experience in similar works.")))
+    assert k2["experience"]["result"] == "FAIL"
+
+
+def test_sub_supplier_iso_demand_does_not_block():
+    k = _by_key(check(CAP, "Riyadh 132kV Substation",
+                      _src("The Supplier of transformers shall be certified to ISO 14001.")))
+    assert "certifications" not in k or k["certifications"]["result"] != "FAIL"
+
+
+def test_work_type_from_body_only_is_unclear_not_fail():
+    cap = dict(CAP, work_types=["renewables"])
+    res = check(cap, "TURAIF", _src("Solar PV plant with 33kV cable to the substation."))
+    assert _by_key(res)["work_type"]["result"] == "UNCLEAR" and res["status"] == "ELIGIBLE"
+
+
+def test_override_needs_a_reason_and_records_the_account():
+    from app.api import routes
+    from app.database import SessionLocal
+    from app.main import app
+    from app.models import EligibilityResult
+    import unittest.mock as um
+    with um.patch.object(routes, "process_tender", lambda *a, **k: None):
+        c = TestClient(app)
+        tid = f"EL-{uuid.uuid4().hex[:6]}"
+        c.post("/api/tenders", json={"id": tid, "title": "x"})
+        db = SessionLocal()
+        db.add(EligibilityResult(tender_id=tid, status="INELIGIBLE", checks=[])); db.commit(); db.close()
+        assert c.post(f"/api/tenders/{tid}/eligibility/override", json={"by": "Omar"}).status_code == 422
+        assert c.post(f"/api/tenders/{tid}/eligibility/override", json={"by": "Omar", "reason": "ok"}).status_code == 200
+        e = c.get(f"/api/tenders/{tid}/eligibility").json()
+        assert e["override_by"] == "local" and e["override_name"] == "Omar"

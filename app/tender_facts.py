@@ -45,7 +45,7 @@ def main_kv(title: str, body: str = "") -> Optional[int]:
 
 
 COUNTRIES = {
-    "Saudi Arabia": ("saudi", "ksa", "kingdom of saudi arabia", "riyadh", "jeddah", "dammam", "sec ", "maaden",
+    "Saudi Arabia": ("saudi", "ksa", "kingdom of saudi arabia", "riyadh", "jeddah", "dammam", "maaden",
                      "ma'aden", "ma’aden", "السعودية"),
     "Egypt": ("egypt", "cairo", "egyptian electricity", "eetc", "مصر"),
     "United Arab Emirates": ("united arab emirates", "uae", "dubai", "abu dhabi", "dewa", "taqa", "الإمارات"),
@@ -58,13 +58,22 @@ COUNTRIES = {
 }
 
 
+_WORDS = {}
+
+
+def _word(key: str):
+    if key not in _WORDS:
+        _WORDS[key] = re.compile(rf"(?<![\w\u0600-\u06ff]){re.escape(key)}(?![\w\u0600-\u06ff])")
+    return _WORDS[key]
+
+
 def detect_country(texts: Iterable[str]) -> Optional[str]:
     """Most-mentioned known country across the texts (title/client first)."""
     counts = {}
     for i, t in enumerate(texts):
-        low = f" {(t or '').lower()} "
+        low = (t or "").lower()
         for country, keys in COUNTRIES.items():
-            n = sum(low.count(k) for k in keys)
+            n = sum(len(_word(k).findall(low)) for k in keys)  # whole words: "oman" is not in "roman"
             if n:
                 counts[country] = counts.get(country, 0) + n * (5 if i == 0 else 1)
     return max(counts, key=counts.get) if counts else None

@@ -1220,7 +1220,11 @@ def tender_recommendation(tender_id: str, lang: str = "en", db: Session = Depend
     review = {"missing_open": len(_open_issues(db, tender_id, "missing")),
               "question_open": len(_open_issues(db, tender_id, "question"))}
     rec = build_recommendation(detail, analysis, review, lang)
-    rec["score"] = _score_for(db, tender_id, user, rec, detail)
+    try:
+        rec["score"] = _score_for(db, tender_id, user, rec, detail)
+    except Exception:  # the recommendation must still load if a score input is broken
+        db.rollback()
+        rec["score"] = None
     return rec
 
 
@@ -1260,7 +1264,10 @@ def put_company_capability(payload: dict, db: Session = Depends(get_db), user: d
     cap = db.query(CompanyCapability).filter(CompanyCapability.id == key).first() or CompanyCapability(id=key)
     for k in _CAP_LISTS:
         if k in payload:
-            items = [str(x).strip()[:120] for x in (payload.get(k) or []) if str(x).strip()][:30]
+            raw = payload.get(k) or []
+            if not isinstance(raw, list):
+                raise HTTPException(status_code=422, detail=f"{k} must be a list")
+            items = [str(x).strip()[:120] for x in raw if str(x).strip()][:30]
             if k == "work_types":
                 bad = [x for x in items if x not in WORK_TYPES]
                 if bad:
@@ -1302,8 +1309,12 @@ def tender_eligibility_override(tender_id: str, payload: dict, background_tasks:
     if row is None or row.status != "INELIGIBLE":
         raise HTTPException(status_code=409, detail="Tender is not blocked by the eligibility check")
     reason = str(payload.get("reason") or "").strip()[:1000]
-    by = str(payload.get("by") or "").strip()[:120] or user.get("email") or "local"
-    row.override_by, row.override_reason, row.overridden_at = by, reason or None, datetime.utcnow()
+    if not reason:
+        raise HTTPException(status_code=422, detail="reason is required")
+    # audit trail: the signed-in account, plus the name typed by the manager (shared login)
+    row.override_by = _profile_key(user)
+    row.override_name = str(payload.get("by") or "").strip()[:120] or None
+    row.override_reason, row.overridden_at = reason, datetime.utcnow()
     db.commit()
     try:
         job = create_processing_job(db, tender_id)

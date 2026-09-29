@@ -130,10 +130,15 @@ function Tasks({ tenderId, team }) {
     } catch (err) { setError(err.message); }
   };
   const toggle = async (task) => {
-    const upd = await apiClient.updateTask(tenderId, task.id, { status: task.status === "DONE" ? "OPEN" : "DONE" });
-    setTasks(tasks.map((x) => (x.id === task.id ? upd : x)));
+    try {
+      const upd = await apiClient.updateTask(tenderId, task.id, { status: task.status === "DONE" ? "OPEN" : "DONE" });
+      setTasks(tasks.map((x) => (x.id === task.id ? upd : x)));
+    } catch (err) { setError(err.message); }
   };
-  const remove = async (task) => { await apiClient.deleteTask(tenderId, task.id); setTasks(tasks.filter((x) => x.id !== task.id)); };
+  const remove = async (task) => {
+    try { await apiClient.deleteTask(tenderId, task.id); setTasks(tasks.filter((x) => x.id !== task.id)); }
+    catch (err) { setError(err.message); }
+  };
   return (
     <div>
       <ul className="mb-3 space-y-1">
@@ -262,10 +267,11 @@ export default function BidTools({ tenderId, outcome }) {
         <div className="mt-4 space-y-4">
           {elig?.status && (elig.status !== "INELIGIBLE" || elig.override_by) && (
             <Block icon={ShieldCheck} title={t("Eligibility check")} testid="eligibility-checks">
-              {elig.status === "SKIPPED" || !elig.checks?.length
+              {elig.status === "SKIPPED"
                 ? <p className="text-[13px] text-[#667085]">{t("Not checked — fill Company capabilities in Settings.")}</p>
-                : <Checks checks={elig.checks} />}
-              {elig.override_by && <p className="mt-2 text-[12px] text-[#8a6a22]">{t("Continued by {by}: {reason}", { by: elig.override_by, reason: elig.override_reason || "" })}</p>}
+                : elig.checks?.length ? <Checks checks={elig.checks} />
+                  : <p className="text-[13px] text-[#667085]">{t("Nothing in this tender needed checking against your capabilities.")}</p>}
+              {elig.override_by && <p className="mt-2 text-[12px] text-[#8a6a22]">{t("Continued by {by}: {reason}", { by: elig.override_name || elig.override_by, reason: elig.override_reason || "" })}</p>}
             </Block>
           )}
           <Block icon={Layers} title={t("RFP parts and suggested suppliers")} testid="rfp-sections"><Sections data={sections} /></Block>

@@ -352,7 +352,8 @@ class EligibilityResult(Base):
     tender_id = Column(String, ForeignKey("tenders.id"), primary_key=True)
     status = Column(String, nullable=False)           # ELIGIBLE | INELIGIBLE | SKIPPED
     checks = Column(JSON, default=list)
-    override_by = Column(String, nullable=True)
+    override_by = Column(String, nullable=True)       # the account that continued
+    override_name = Column(String, nullable=True)     # the person named (shared company login)
     override_reason = Column(Text, nullable=True)
     overridden_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

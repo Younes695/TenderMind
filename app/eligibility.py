@@ -29,6 +29,19 @@ _TURNOVER = re.compile(r"\b(turnover|annual revenue|revenues?)\b.{0,100}?\b(not 
                        r"min\.?)\b.{0,20}?\b(SAR|SR|USD|US\$|EGP|AED|QAR|KWD|OMR|EUR)?\s?([\d][\d,.]*)\s*"
                        r"(million|mn|m|billion|bn)?\b", re.IGNORECASE)
 _CUR = {"SR": "SAR", "US$": "USD"}
+# Who a sentence is about. A demand on the bidder/company can block; one on staff,
+# manufacturers or sub-suppliers is not about the company and must not.
+_COMPANY = re.compile(r"\b(bidder|tenderer|applicant|company|firm|contractor(?!\s+of)|in business)\b", re.IGNORECASE)
+_PERSONNEL = re.compile(r"\b(manager|engineer|personnel|staff|supervisor|foreman|specialist|expert|operator|"
+                        r"technician|inspector|superintendent|coordinator|officer|key person)", re.IGNORECASE)
+_THIRD_PARTY = re.compile(r"\b(supplier|manufacturer|vendor|sub-?contractor|fabricator|factory|laborator)", re.IGNORECASE)
+
+
+def _sentence(text: str, start: int, end: int) -> str:
+    a = max(text.rfind(".", 0, start), text.rfind("\n", 0, start)) + 1
+    b_dot, b_nl = text.find(".", end), text.find("\n", end)
+    b = min(x for x in (b_dot, b_nl, len(text)) if x >= 0)
+    return text[a:b]
 _SCAN_PAGES = 400  # qualification terms sit in the ITB/instructions, not in 1,500 pages of drawings
 
 
@@ -90,15 +103,19 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
                        "detail_key": detail, "detail_vars": vars_, "evidence": evidence})
 
     if cap.get("work_types"):
-        kind = classify_kind(title) or classify_kind(body[:20000])
-        if not kind:
+        kind = classify_kind(title)
+        body_kind = None if kind else classify_kind(body[:20000])
+        if not kind and body_kind:
+            add("work_type", "Type of work", "UNCLEAR",
+                "The title does not name the type of work; the text mentions {kind} — check it.",
+                _evidence(sources, body_kind.split()[0]), kind=body_kind)
+        elif not kind:
             add("work_type", "Type of work", "UNCLEAR", "The tender does not name its type of work clearly.")
         else:
             ok = kind in cap["work_types"]
             add("work_type", "Type of work", "PASS" if ok else "FAIL",
                 "Tender: {kind}. Company: {company}.",
-                None if classify_kind(title) else _evidence(sources, kind.split()[0]),
-                kind=kind, company=", ".join(cap["work_types"]))
+                None, kind=kind, company=", ".join(cap["work_types"]))
     if cap.get("max_kv"):
         kv = main_kv(title, body)
         if not kv:
@@ -121,7 +138,8 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
     for s in sources:
         for m in _ISO.finditer(s.text or ""):
             a, b = max(0, m.start() - 160), m.end() + 160
-            if _DEMAND.search(s.text[a:b]):
+            sent = _sentence(s.text, m.start(), m.end())
+            if _DEMAND.search(sent) and _COMPANY.search(sent) and not _THIRD_PARTY.search(sent):
                 demanded.add(f"ISO {m.group(1)}")
                 demand_ev = demand_ev or {"file": s.source_document, "page": s.page_number,
                                           "quote": " ".join(s.text[a:b].split())}
@@ -141,16 +159,24 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         hit = words and any(w in reg_ev["quote"].lower() for w in words - {"the", "and", "with", "approved"})
         add("registration", "Registration / prequalification", "PASS" if hit else "UNCLEAR",
             "Tender requires a registration or prequalification — check it matches yours.", reg_ev)
-    m = None
+    m, about_company = None, False
     for s in sources:
-        m = _YEARS.search(s.text or "")
+        for cand in _YEARS.finditer(s.text or ""):
+            sent = _sentence(s.text, cand.start(), cand.end())
+            if _PERSONNEL.search(sent):
+                continue  # key-staff experience, not the company's
+            m, about_company = cand, bool(_COMPANY.search(sent))
+            years_ev = {"file": s.source_document, "page": s.page_number, "quote": " ".join(sent.split())[:300]}
+            break
         if m:
-            years_ev = {"file": s.source_document, "page": s.page_number, "quote": " ".join(m.group(0).split())}
             break
     if m:
         need = int(m.group(3))
         have = cap.get("years_experience")
-        if have is None:
+        if not about_company:
+            add("experience", "Years of experience", "UNCLEAR",
+                "Tender asks for {need} years — check whether this is about the company.", years_ev, need=need)
+        elif have is None:
             add("experience", "Years of experience", "UNCLEAR", "Tender asks for {need} years.", years_ev, need=need)
         else:
             add("experience", "Years of experience", "PASS" if have >= need else "FAIL",
@@ -208,6 +234,7 @@ def result_dict(row) -> Optional[Dict[str, Any]]:
     if row is None:
         return None
     return {"status": row.status, "checks": row.checks or [], "override_by": row.override_by,
+            "override_name": getattr(row, "override_name", None),
             "override_reason": row.override_reason,
             "overridden_at": row.overridden_at.isoformat() if row.overridden_at else None,
             "checked_at": row.created_at.isoformat() if row.created_at else None}

@@ -97,6 +97,10 @@ def init_db():
             if "outcome" not in tcols:
                 conn.execute(text("ALTER TABLE tenders ADD COLUMN outcome VARCHAR"))
                 conn.commit()
+            ecols = [row[1] for row in conn.execute(text("PRAGMA table_info(eligibility_results)")).fetchall()]
+            if ecols and "override_name" not in ecols:
+                conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN override_name VARCHAR"))
+                conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
         pass
