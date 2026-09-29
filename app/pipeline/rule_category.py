@@ -26,13 +26,13 @@ RULES = [
     ("COMMERCIAL", _W(r"\b(liquidated damages|payment|invoice|price|pricing|prices|priced|cost of|registration cost|"
                       r"currency|customs dut(y|ies)|saudi riyal|sar\b|retention|bond|guarantee|letter of credit|penalt(y|ies)|"
                       r"\btax(es)?\b|vat\b|local content|lc scorecard|in-kingdom|advance payment|bill of quantities)")),
+    ("PERSONNEL", _W(r"\b(contractor\W{0,3}s?\W{0,2} (expatriate )?personnel|removal of .{0,30}personnel|project manager|site engineer|key personnel|curriculum vitae|cvs?\b|"
+                     r"staff qualifications?|resident engineer|saudi(zation| nationals))\b")),
     ("LEGAL", _W(r"\b(terminat(e|ion) (of|for) (the |this )?(contract|agreement|work)|termination (for|at) (the )?(convenience|default)|terminate (this|the) (contract|agreement)|force majeure|indemn(ity|ify)|liabilit(y|ies)|dispute|arbitration|"
                  r"governing law|claims?\b|change order|variation|constitute a change|breach|"
                  r"assignment of|intellectual property|confidential(ity)?|warrant(y|ies)|insurance|"
                  r"power of attorney|joint venture|consortium|excusable delay|suspension of)\b")),
     ("SUBCONTRACTOR", _W(r"\b(subcontract(ing|ed)? (of |the )?(works?|limit)|approv\w* (of |the )?subcontractors?|subcontractors? (approval|qualifications?|list)|subcontract more than|percentage .{0,30}subcontract)")),
-    ("PERSONNEL", _W(r"\b(project manager|site engineer|key personnel|curriculum vitae|cvs?\b|"
-                     r"staff qualifications?|resident engineer|saudi(zation| nationals))\b")),
     ("SCHEDULE", _W(r"\b(completion (date|period|time)|delivery (period|time|date)|milestones?|"
                     r"time schedule|project schedule|programme of works|level-?\d schedule|"
                     r"within \d+ (days|weeks|months)|critical path|primavera|baseline schedule)\b")),
@@ -43,7 +43,10 @@ RULES = [
                      r"harmonic|frequency|panel|cubicle|foundation|steel|concrete|civil|drawing|layout|"
                      r"data schedule|technical data|tmss|sec standard|specification|iec|ieee|ansi|"
                      r"type test|factory test|commissioning|installation|hvac|lighting|fire alarm|"
-                     r"trench|duct|road|fence|building|terminations?|splice|osp)s?\b")),
+                     r"trench|duct|road|fence|building|terminations?|splice|osp|overload|short circuit|withstand|surge|handling|delivery and storage|trend|kvrms|mva)s?\b")),
+    # contract clause edits / references and notices between the parties
+    ("LEGAL", _W(r"\b(paragraph \d+(\.\d+)*|schedule\s*[\"\u201c]?[a-e][\"\u201d]?\s+of this contract|"
+                 r"notices? between the parties|delete in its entirety|project portions?|suspension period)\b")),
 ]
 
 

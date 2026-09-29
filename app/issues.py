@@ -20,6 +20,7 @@ from typing import Any, Dict, List
 from sqlalchemy.orm import Session
 
 from app.models import Requirement, TenderAnalysis, TenderIssue
+from app.pipeline.ambiguity import TBD_MARKER
 
 _GAP_TITLES = {
     "missing-file": "File listed but missing",
@@ -30,6 +31,13 @@ _GAP_TITLES = {
     "empty-analysis": "Tender has no documents",
 }
 _HIGH_GAPS = {"missing-file", "failed-extraction", "unsupported-type", "referenced-form-absent", "empty-analysis"}
+
+
+_MODEL_DOUBTS = {"unclear-applicability", "undefined-term"}
+_QUESTION_TITLES = {
+    "missing-value": "Value not stated (TBD) — ask the tender owner",
+    "unclear-date-anchor": "Duration without a start date — ask the tender owner",
+}
 
 
 def _key(*parts: Any) -> str:
@@ -108,14 +116,26 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                             "detail": f"{name}: {status.lower()} — its content is not part of the analysis.",
                             "source_document": name, "page": None, "priority": "HIGH",
                             "dedupe_key": _key("gap", kind, name)})
+        # Stage 6: only real clarification needs become questions, one per requirement,
+        # quoting the tender's own words. Model doubts (binding force unclear, model
+        # abstained) are internal — they were 31 of 48 Turaif "questions" and the email
+        # draft sent them to the tender owner.
+        req_by_id = {r.get("requirement_id"): r for r in a.requirements or []}
         for g in df.get("ambiguities") or []:
-            pages = g.get("pages") or []
-            out.append({"category": "question", "kind": g.get("ambiguity_type") or "ambiguity",
-                        "title": "Unclear wording — ask for clarification",
-                        "detail": g.get("description"), "source_document": g.get("source_document"),
-                        "page": ", ".join(str(p) for p in pages[:10]) or None, "priority": "MEDIUM",
-                        "dedupe_key": _key("amb", g.get("ambiguity_type"), g.get("source_document"),
-                                           g.get("description"))})
+            kind = g.get("ambiguity_type") or "ambiguity"
+            if kind in _MODEL_DOUBTS:
+                continue
+            for s in g.get("raw_signals") or []:
+                r = req_by_id.get(s.get("requirement_id")) or {}
+                quote = " ".join(str(r.get("source_text") or r.get("summary") or "").split())[:300]
+                if not quote or (kind == "missing-value" and not TBD_MARKER.search(quote)):
+                    continue  # analyses stored before Stage 6 flagged boilerplate ("as applicable")
+                out.append({"category": "question", "kind": kind,
+                            "title": _QUESTION_TITLES.get(kind, "Unclear wording — ask for clarification"),
+                            "detail": quote, "source_document": r.get("source_document") or g.get("source_document"),
+                            "page": str(r.get("page_number")) if r.get("page_number") else None,
+                            "priority": "MEDIUM",
+                            "dedupe_key": _key("amb2", kind, s.get("requirement_id"), quote)})
         by_doc = defaultdict(list)
         for p in df.get("page_quality") or []:
             by_doc[p.get("document")].append(p)
@@ -185,6 +205,8 @@ def _missing_evidence(db: Session, tender_id: str) -> List[Dict[str, Any]]:
 _SUPERSEDED = {  # Stage 5I: per-item kinds now grouped — drop their open, untouched rows
     "referenced-form-absent": "Referenced document not in the package",
     "unclassified-requirement": "Requirement could not be classified",
+    # Stage 6: grouped model-doubt "questions" replaced by per-requirement quotes
+    "unclear-applicability": "", "undefined-term": "", "missing-value": "", "unclear-date-anchor": "",
 }
 
 

@@ -1188,11 +1188,16 @@ def put_company_profile(payload: dict, db: Session = Depends(get_db), user: dict
     return _profile_dict(p)
 
 
-def _open_issues(db, tender_id, category):
+# Internal review lists the tender owner cannot act on — never put in the email.
+_EMAIL_SKIP = {"unclassified-requirement", "evidence-missing", "ineligible"}
+
+
+def _open_issues(db, tender_id, category, skip_kinds=()):
     from app.models import TenderIssue
     return [{"title": i.title, "detail": i.detail, "source_document": i.source_document, "page": i.page}
             for i in db.query(TenderIssue).filter(TenderIssue.tender_id == tender_id, TenderIssue.category == category,
-                                                  TenderIssue.status == "OPEN").all()]
+                                                  TenderIssue.status == "OPEN").all()
+            if i.kind not in skip_kinds]
 
 
 @router.get("/tenders/{tender_id}/recommendation")
@@ -1225,7 +1230,8 @@ def tender_email_draft(tender_id: str, lang: str = "en", db: Session = Depends(g
         raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
     prof = db.query(CompanyProfile).filter(CompanyProfile.id == _profile_key(user)).first()
     draft = build_email({"id": t.id, "title": t.title, "client": t.client}, _profile_dict(prof) if prof else None,
-                        _open_issues(db, tender_id, "question"), _open_issues(db, tender_id, "missing"), lang)
+                        _open_issues(db, tender_id, "question", _EMAIL_SKIP),
+                        _open_issues(db, tender_id, "missing", _EMAIL_SKIP), lang)
     return {**draft, "company_profile_complete": bool(prof and prof.name)}
 
 

@@ -12,8 +12,9 @@ from typing import Any, Dict, List
 
 from app.pipeline.contracts import ValidatedRequirement
 
-_AMBIG_MARKERS = ("tbd", "to be determined", "to be advised", "tba", "???", "as applicable",
-                  "if applicable", "as required", "as necessary", "to be agreed")
+# Stage 6: only markers that mean a value is really missing. "as applicable" /
+# "as required" are contract boilerplate and made every Turaif TBD question false.
+TBD_MARKER = re.compile(r"\b(tbd|tba|to be (determined|advised|agreed|confirmed|decided))\b|\?\?\?", re.IGNORECASE)
 _RELATIVE_DATE = re.compile(r"within\s+\d+\s+(day|days|week|weeks|month|months|year|years)\s+(from|after|of)\b", re.IGNORECASE)
 
 
@@ -49,7 +50,7 @@ def analyze_ambiguity(requirements: List[ValidatedRequirement]) -> List[Ambiguit
     for r in sorted(requirements, key=lambda x: x.requirement_id):
         text = (r.summary or "") + " " + (r.source_text or "")
         low = text.lower()
-        if any(m in low for m in _AMBIG_MARKERS):
+        if TBD_MARKER.search(text):
             add(r, "missing-value", "requirement contains an explicit TBD/applicability marker")
         if _RELATIVE_DATE.search(text) and r.category in ("SCHEDULE", "COMMERCIAL"):
             add(r, "unclear-date-anchor",

@@ -148,7 +148,8 @@ def _analysis(db, tid, **df):
     from app.models import TenderAnalysis
     db.add(TenderAnalysis(id=f"AN-{uuid.uuid4().hex[:8]}", tender_id=tid, analysis_version="t", status="COMPLETED",
                           tender={}, requirements=[{"requirement_id": "R1", "summary": "Something odd", "category": "UNKNOWN",
-                                                    "mandatory": True, "source_document": "a.pdf", "page_number": 3}],
+                                                    "mandatory": True, "source_document": "a.pdf", "page_number": 3,
+                                                    "source_text": "Bond amount TBD"}],
                           evidence=[], documents=[{"filename": "b.rar", "extraction_status": "UNSUPPORTED"}],
                           deadlines=[], commercial=None, risks=[], derived_features=df))
     db.commit()
@@ -166,7 +167,7 @@ def test_issues_built_from_analysis_and_idempotent(tmp_path, monkeypatch):
                          "description": "ANNEX X referenced but no matching document in package",
                          "evidence": ["a.pdf#p2"]}],
                   ambiguities=[{"ambiguity_type": "missing-value", "description": "Bond amount TBD",
-                                "source_document": "a.pdf", "pages": [4]}],
+                                "source_document": "a.pdf", "pages": [4], "raw_signals": [{"requirement_id": "R1"}]}],
                   page_quality=[{"document": "a.pdf", "page": 7, "confidence": 0.3, "chars": 12},
                                 {"document": "a.pdf", "page": 9, "confidence": 0.4, "chars": 40}])
         assert sync_issues(db, tid)["added"] == 5
