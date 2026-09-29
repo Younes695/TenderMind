@@ -47,3 +47,18 @@ def test_ewa_bahrain_table_parsing():
     items = fetch_ewa(html_text=html)
     assert len(items) == 1 and items[0]["external_id"] == "2026-139-DM-EPD" and items[0]["country"] == "Bahrain"
     assert items[0]["deadline_at"].strftime("%Y-%m-%d") == "2026-09-27"
+
+
+def test_oman_and_qatar_parsing():
+    from app.news import fetch_oman, fetch_qatar
+    om = ("<table><tr><td>1.</td><td>2026/12/KH</td><td>توريد محولات كهربائية.....</td><td>شركة كهرباء مجان</td>"
+          "<td>التوريدات [الأولى]</td><td>عامة [ Local]</td><td>Sales EndDate:07-10-2026-Bid Closing Date:11-10-2026</td>"
+          "<td>N/A</td><td>N/A</td></tr><tr><td>رقم التسلسل</td><td>x</td></tr></table>")
+    o = fetch_oman(html_text=om)
+    assert len(o) == 1 and o[0]["country"] == "Oman" and o[0]["deadline_at"].strftime("%Y-%m-%d") == "2026-10-11"
+    qa = ("<div>4832/2026</div><div>صيانة بطاريات في محطات شبكة التوزيع</div><div>تاريخ الطرح</div><div>29/09/2026</div>"
+          "<div>الجهة</div><div>المؤسسة العامة القطرية للكهرباء والماء</div><div>النوع</div><div>مناقصة عامة</div>"
+          "<div>تاريخ الإغلاق</div><div>28/10/2026</div>")
+    q = fetch_qatar(html_pages=[qa])
+    assert len(q) == 1 and q[0]["external_id"] == "4832/2026" and q[0]["organization"].startswith("المؤسسة العامة القطرية")
+    assert q[0]["deadline_at"].strftime("%Y-%m-%d") == "2026-10-28"

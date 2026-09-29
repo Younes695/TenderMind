@@ -29,7 +29,8 @@ WB_NOTICE_URL = "https://projects.worldbank.org/en/projects-operations/procureme
 COUNTRIES = ["EG", "SA", "AE", "OM", "KW", "BH", "QA"]
 COUNTRY_NAMES = {"Egypt", "Egypt, Arab Republic of", "Saudi Arabia", "United Arab Emirates", "Oman", "Kuwait", "Bahrain", "Qatar"}
 # Sources: World Bank notices (Egypt; the Bank rarely finances GCC projects) and the public tender
-# table of Bahrain's Electricity & Water Authority (robots.txt allows all agents).
+# table of Bahrain's Electricity & Water Authority, Oman Tender Board new tenders, and Qatar's
+# Monaqasat available tenders (robots.txt of all three permits it; fetched once per 6-hour refresh).
 RELEVANT = re.compile(  # electricity sector only (generation, transmission, distribution)
     r"substation|transformer|transmission line|transmission|switchgear|gis|kv|overhead line|"
     r"underground cable|power cable|electric|electrical|electricity|power plant|power station|power supply|"
@@ -138,6 +139,89 @@ def fetch_ewa(session=None, html_text: Optional[str] = None) -> List[Dict[str, A
     return out
 
 
+OMAN_URL = "https://etendering.tenderboard.gov.om/product/publicDash?viewFlag=NewTenders"
+QATAR_URL = "https://monaqasat.mof.gov.qa/TendersOnlineServices/AvailableMinistriesTenders/{page}"
+_UA = {"User-Agent": "TenderMind/1.0 (+tender news)"}
+
+
+_LEGACY_TLS_HOSTS = {"monaqasat.mof.gov.qa"}  # server only offers ciphers below OpenSSL's default level
+
+
+def _get(url: str, session=None) -> Optional[str]:
+    if session is None and urlparse(url).hostname in _LEGACY_TLS_HOSTS:
+        import ssl
+        import urllib.request
+        ctx = ssl.create_default_context()      # certificate and host name are still verified
+        ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=_UA), context=ctx, timeout=40) as r:
+                return r.read(MAX_BYTES).decode("utf-8", "ignore")
+        except Exception:
+            return None
+    http = session or requests
+    try:
+        r = http.get(url, timeout=40, headers=_UA)
+        r.raise_for_status()
+        return r.text[:MAX_BYTES]
+    except Exception:
+        return None
+
+
+def _cells(row_html: str) -> List[str]:
+    import html as _html
+    return [" ".join(_html.unescape(re.sub(r"<[^>]+>", " ", c)).split())
+            for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row_html, re.S)]
+
+
+def fetch_oman(session=None, html_text: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Oman Tender Board public "New Tenders" list (robots.txt does not restrict it)."""
+    html_text = html_text if html_text is not None else _get(OMAN_URL, session)
+    if not html_text:
+        return []
+    out = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html_text, re.S):
+        c = _cells(row)
+        if len(c) < 7 or not re.match(r"^\d+\.$", c[0]):
+            continue
+        closing = re.search(r"Bid Closing Date:\s*(\d{2}-\d{2}-\d{4})", c[6])
+        out.append({"source": "Oman Tender Board", "external_id": c[1][:200], "title": c[2].rstrip(". ")[:500],
+                    "description": _clean(f"{c[3]} · {c[4]} · {c[5]}"), "country": "Oman", "notice_type": "Tender",
+                    "organization": c[3][:300] or None, "url": OMAN_URL, "published_at": None,
+                    "deadline_at": _parse_date(closing.group(1), day_first=True) if closing else None})
+    return out
+
+
+def fetch_qatar(session=None, pages: int = 3, html_pages: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Qatar Ministry of Finance "Monaqasat" available tenders (robots.txt allows all)."""
+    import html as _html
+    texts = html_pages if html_pages is not None else [t for t in (_get(QATAR_URL.format(page=i), session)
+                                                                    for i in range(1, pages + 1)) if t]
+    out, seen = [], set()
+    for page in texts:
+        t = re.sub(r"<script.*?</script>|<style.*?</style>", "", page, flags=re.S)
+        lines = [ln.strip() for ln in _html.unescape(re.sub(r"<[^>]+>", "\n", t)).split("\n") if ln.strip()]
+        for i, ln in enumerate(lines):
+            if not re.fullmatch(r"\d{2,6}/20\d\d", ln) or ln in seen or i + 1 >= len(lines):
+                continue
+            seen.add(ln)
+            block = lines[i + 1:i + 30]
+
+            def after(label):
+                for k, x in enumerate(block):
+                    if x.startswith(label) and k + 1 < len(block):
+                        return block[k + 1]
+                return None
+            out.append({"source": "Qatar Monaqasat", "external_id": ln, "title": block[0][:500],
+                        "description": _clean(" · ".join(x for x in (after("الجهة"), after("النوع"),
+                                                                        after("نوع القطاع المطلوب")) if x)),
+                        "country": "Qatar", "notice_type": after("النوع") or "Tender",
+                        "organization": (after("الجهة") or "")[:300] or None,
+                        "url": QATAR_URL.format(page=1),
+                        "published_at": _parse_date((after("تاريخ الطرح") or "").replace("/", "-"), day_first=True),
+                        "deadline_at": _parse_date((after("تاريخ الإغلاق") or "").replace("/", "-"), day_first=True)})
+    return out
+
+
 def _allowed_hosts() -> set:
     return {h.strip().lower() for h in os.environ.get("TENDERMIND_NEWS_ALLOWED_HOSTS", "").split(",") if h.strip()}
 
@@ -206,7 +290,7 @@ def refresh(force: bool = False) -> Dict[str, Any]:
         if not force and now - _state["last_refresh"] < MIN_REFRESH_GAP_S and _state["last_result"]:
             return {**_state["last_result"], "skipped": True}
         from app.database import SessionLocal
-        items = fetch_world_bank() + fetch_ewa()
+        items = fetch_world_bank() + fetch_ewa() + fetch_oman() + fetch_qatar()
         feeds = [f.strip() for f in os.environ.get("TENDERMIND_NEWS_FEEDS", "").split(",") if f.strip()]
         items += fetch_rss(feeds)
         db = SessionLocal()
