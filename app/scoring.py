@@ -125,7 +125,8 @@ def _kind_from_analysis(db, tender_id: str) -> Optional[str]:
     from app.tender_facts import classify_kind
     a = (db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id)
          .order_by(TenderAnalysis.created_at.desc()).first())
-    kinds = Counter(k for k in (classify_kind(r.get("summary") or "") for r in (a.requirements or [])[:1500] if a) if k)
+    reqs = ((a.requirements if a else None) or [])[:1500]
+    kinds = Counter(k for k in (classify_kind(r.get("summary") or "") for r in reqs) if k)
     return kinds.most_common(1)[0][0] if kinds else None
 
 

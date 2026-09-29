@@ -85,3 +85,14 @@ def test_score_and_weights_endpoints():
     rec = c.get(f"/api/tenders/{tid}/recommendation").json()
     assert "score" in rec and rec["score"]["factors"]
     c.put("/api/score-weights", json=DEFAULT_WEIGHTS)
+
+
+def test_kind_from_analysis_without_an_analysis():
+    """Regression: a tender with no analysis crashed the score (and the notifications page)."""
+    from app.database import SessionLocal
+    from app.scoring import _kind_from_analysis
+    db = SessionLocal()
+    try:
+        assert _kind_from_analysis(db, "NO-ANALYSIS-EVER") is None
+    finally:
+        db.close()
