@@ -6,6 +6,7 @@ import DecisionPanel from "../components/DecisionPanel";
 import RecommendationPanel from "../components/RecommendationPanel";
 import BidTools, { EligibilityBanner } from "../components/BidTools";
 import { WorkspaceLoading } from "../components/TenderLoading";
+import { SummaryCard, SimilarCard, NotesCard } from "../components/TenderIntel";
 import { confirmRemoval } from "../utils/confirm";
 import { useT } from "../i18n";
 
@@ -332,9 +333,12 @@ function TenderWorkspace() {
           </section>
         )}
 
+        {tender && jobStatus && jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && <SummaryCard tenderId={id} />}
         {jobStatus === "INELIGIBLE" && <EligibilityBanner tenderId={id} onContinue={() => window.location.reload()} />}
         {jobStatus && jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && <RecommendationPanel tenderId={id} />}
         {tender && <BidTools tenderId={id} outcome={tender.outcome} />}
+        {tender && <SimilarCard tenderId={id} />}
+        {tender && <NotesCard tenderId={id} />}
 
         {/* Bid decision with evidence (Stage 5C) */}
         {jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && (

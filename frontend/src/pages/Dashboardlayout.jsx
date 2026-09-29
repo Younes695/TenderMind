@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/client";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebare";
+import Assistant from "../components/Assistant";
 import { useT } from "../i18n";
 
 function Dashboardlayout() {
@@ -78,6 +79,7 @@ function Dashboardlayout() {
         {/* Page Content */}
         <main className="min-h-0 flex-1 overflow-y-auto">
           <Outlet />
+          <Assistant />
         </main>
 
       </div>

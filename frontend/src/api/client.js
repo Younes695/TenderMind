@@ -321,6 +321,16 @@ export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
 export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
 export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
 export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
+// Stage 8
+export const getSummary = (id) => jsonCall(`${T(id)}/summary`);
+export const getSimilar = (id) => jsonCall(`${T(id)}/similar`);
+export const setPlan = (id, data) => jsonCall(`${T(id)}/plan`, "PUT", data);
+export const listNotes = (id) => jsonCall(`${T(id)}/notes`);
+export const addNote = (id, data) => jsonCall(`${T(id)}/notes`, "POST", data);
+export const deleteNote = (id, noteId) => jsonCall(`${T(id)}/notes/${encodeURIComponent(noteId)}`, "DELETE");
+export const getReminders = () => jsonCall(`/api/reminders`);
+export const getAttention = () => jsonCall(`/api/dashboard/attention`);
+export const askAssistant = (data) => jsonCall(`/api/assistant/ask`, "POST", data);
 
 const apiClient = {
   listTenders,
@@ -390,6 +400,15 @@ const apiClient = {
   updateChecklistItem,
   getDecisionPack,
   complianceMatrixUrl,
+  getSummary,
+  getSimilar,
+  setPlan,
+  listNotes,
+  addNote,
+  deleteNote,
+  getReminders,
+  getAttention,
+  askAssistant,
   apiUrl,
 };
 

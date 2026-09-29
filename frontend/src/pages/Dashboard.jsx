@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import AttentionPanel from "../components/Attention";
+import { WorkspaceLoading } from "../components/TenderLoading";
 import { Link } from "react-router-dom";
 import { FolderOpen, Stamp, MessageSquare, AlertTriangle, CheckSquare } from "lucide-react";
 import apiClient from "../api/client";
@@ -37,12 +39,13 @@ function Dashboard() {
     { icon: CheckSquare, label: "Tasks Due Today", value: t("Not available"), note: t("Not available"), iconBg: "bg-[#e4f1eb]", iconColor: "text-[#3c8b68]" },
   ];
 
-  if (loading) return <main className="min-h-screen bg-[#f8f7f3] p-8">{t("Loading tenders...")}</main>;
+  if (loading) return <main className="min-h-screen bg-[#f8f7f3]"><WorkspaceLoading /></main>;
 
   return (
     <main className="min-h-screen bg-[#f8f7f3] p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-[1450px]">
         {error && <div data-testid="error-banner" className="mb-4 rounded-xl border border-[#f5c6c6] bg-[#fdf0f0] px-4 py-3 text-[14px] text-[#a33a3a]">{error}</div>}
+        <AttentionPanel />
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5 xl:grid-cols-5">
           {stats.map(({ icon: Icon, label, value, note, iconBg, iconColor }) => (
             <div key={label} className="min-h-[150px] rounded-2xl border border-[#e5e1d9] bg-white p-5">

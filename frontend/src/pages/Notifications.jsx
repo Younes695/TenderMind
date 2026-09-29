@@ -3,6 +3,7 @@ import { Bell, ListTodo } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "../api/client";
 import IssueCard from "../components/IssueCard";
+import { RemindersList } from "../components/Attention";
 import { useT } from "../i18n";
 
 /** Open review items across the account's tenders: missing, unreadable or
@@ -13,11 +14,13 @@ export default function Notifications() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [groups, setGroups] = useState([]);
+  const [reminders, setReminders] = useState([]);
 
   const load = () => apiClient.getNotifications().then(setData).catch((e) => setError(e.message));
   useEffect(() => {
     load();
     apiClient.getTaskGroups().then((g) => setGroups(Array.isArray(g) ? g : [])).catch(() => {});
+    apiClient.getReminders().then((r) => setReminders(Array.isArray(r) ? r : [])).catch(() => {});
   }, []);
 
   const onChange = (updated) => {
@@ -37,6 +40,12 @@ export default function Notifications() {
           {t("Things missing or unreadable in your tenders. Check each one and mark it reviewed.")} {open} {t("open")}.
         </p>
       </div>
+      {reminders.length > 0 && (
+        <section className="rounded-2xl border border-[#f5c6c6] bg-[#fffafa] p-5">
+          <h2 className="mb-2 text-[16px] font-bold text-[#b42318]">{t("Deadlines and overdue tasks")}</h2>
+          <RemindersList items={reminders} testid="notification-reminders" />
+        </section>
+      )}
       {groups.length > 0 && (
         <section data-testid="task-groups" className="rounded-2xl border border-[#c5d3e6] bg-[#f4f7fb] p-5">
           <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#162A4C]"><ListTodo size={18} /> {t("Similar tasks — do them once")}</h2>

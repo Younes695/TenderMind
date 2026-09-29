@@ -183,7 +183,7 @@ def answer(db, user, question: str, tender_id: Optional[str] = None, lang: str =
     elif kind in ("suitable", "why"):
         sc = _score_for(db, tender.id, user)
         el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender.id).first()
-        band = {"GO": "Go", "REVIEW": "Review", "NO_GO": "No-Go"}.get(sc.get("band"), "not scored")
+        band = {"GO": "Go|band", "REVIEW": "Review|band", "NO_GO": "No-Go|band"}.get(sc.get("band"), "not scored")
         lines.append(L("Go/No-Go score: {score}/100 — {band}.", score=sc.get("score") if sc.get("score") is not None else "—",
                        band=band))
         if sc.get("hard_fail"):
