@@ -514,7 +514,7 @@ export function AnalyzeStep({ tenderId, jobId, setJobId, onNext, pollMs = 1500, 
         setStage(job.current_stage || null);
         setLastError(job.last_error || null);
         if (job.documents_total) setDocCounts({ done: job.documents_processed || 0, total: job.documents_total });
-        if (["COMPLETED", "PARTIAL", "FAILED"].includes(job.status)) {
+        if (["COMPLETED", "PARTIAL", "FAILED", "INELIGIBLE"].includes(job.status)) {
           return; // terminal
         }
         setTimeout(poll, pollMs);
@@ -529,7 +529,7 @@ export function AnalyzeStep({ tenderId, jobId, setJobId, onNext, pollMs = 1500, 
     return () => { cancelled = true; };
   }, [jobId]);
 
-  const terminal = ["COMPLETED", "PARTIAL", "FAILED"].includes(status);
+  const terminal = ["COMPLETED", "PARTIAL", "FAILED", "INELIGIBLE"].includes(status);
   const isProcessing = status === "PROCESSING" || status === "QUEUED";
 
   return (
@@ -572,6 +572,11 @@ export function AnalyzeStep({ tenderId, jobId, setJobId, onNext, pollMs = 1500, 
                   <button type="button" data-testid="retry-processing" onClick={startProcessing} disabled={starting}
                     className="rounded-lg bg-[#162A4C] px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-50">{t("Retry processing")}</button>
                 </div>
+              </div>
+            )}
+            {status === "INELIGIBLE" && (
+              <div data-testid="ineligible-note" className="mt-3 rounded-xl border border-[#f5c6c6] bg-[#fdf6f6] p-4 text-[14px] text-[#b42318]">
+                {t("This tender does not fit the company's capabilities, so the full analysis was stopped. Open the results to see why or continue anyway.")}
               </div>
             )}
             {terminal && status !== "FAILED" && (

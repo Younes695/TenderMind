@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Sparkles, Mail, Copy, X } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
+import { tx } from "./BidTools";
 
 const TONE = { BID: "border-[#bcd8c6] bg-[#e7f5ee] text-[#1f7a4d]", NO_BID: "border-[#f5c6c6] bg-[#fdf0f0] text-[#b42318]",
   REVIEW: "border-[#e6d3a3] bg-[#fdf4de] text-[#8a6a22]" };
@@ -9,6 +10,40 @@ const TONE = { BID: "border-[#bcd8c6] bg-[#e7f5ee] text-[#1f7a4d]", NO_BID: "bor
 /** Stage 5J — the rule-based decision explained in plain language, the share of
  *  mandatory requirements the company meets, and a first-draft email to the tender owner. Loaded on
  *  demand so the workspace itself stays fast. */
+const BAND = { GO: ["Go|band", "bg-[#1f7a4d]"], REVIEW: ["Review|band", "bg-[#a98238]"], NO_GO: ["No-Go|band", "bg-[#b42318]"] };
+
+function ScoreBlock({ score }) {
+  const { t } = usePrefs();
+  const [label, bg] = BAND[score.band] || ["—", "bg-[#98a2b3]"];
+  return (
+    <div data-testid="go-score" className="rounded-xl border border-[#eef0f3] p-4">
+      <div className="flex items-center gap-4">
+        <div className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full text-white ${bg}`}>
+          <span data-testid="go-score-value" className="text-[20px] font-black leading-none">{score.score ?? "—"}</span>
+          <span className="text-[10px]">/100</span>
+        </div>
+        <div>
+          <p className="text-[15px] font-bold text-[#101828]">{t("Go/No-Go score")}: {t(label)}</p>
+          {score.hard_fail && <p className="text-[13px] text-[#b42318]">{t("No-Go regardless of the score")}: {t(score.hard_fail.replace(/^\d+/, "{n}"), { n: (score.hard_fail.match(/^\d+/) || [""])[0] })}</p>}
+          {score.score == null && <p className="text-[13px] text-[#667085]">{t("Not enough data yet to score this tender.")}</p>}
+        </div>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {score.factors.map((f) => (
+          <li key={f.key} className="text-[13px] text-[#344054]">
+            <div className="flex items-center gap-2">
+              <span className="w-40 shrink-0 font-semibold">{t(f.label)}</span>
+              <span className="h-2 flex-1 overflow-hidden rounded bg-[#f2f4f7]"><span className="block h-full bg-[#162A4C]" style={{ width: `${f.value ?? 0}%` }} /></span>
+              <span className="w-24 shrink-0 text-end">{f.counted ? `${f.value}% · ${t("weight")} ${f.effective_weight}%` : t("not counted")}</span>
+            </div>
+            {f.reason && <p className="ms-40 ps-2 text-[12px] text-[#667085]">{tx(t, f.reason_key, f.reason_vars, f.reason)}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function RecommendationPanel({ tenderId }) {
   const { lang, t } = usePrefs();
   const [rec, setRec] = useState(null);
@@ -42,6 +77,7 @@ export default function RecommendationPanel({ tenderId }) {
       {rec && (
         <div className="mt-4 space-y-3">
           <p data-testid="rec-headline" className={`rounded-xl border p-3 text-[15px] font-bold ${TONE[rec.decision] || "border-[#e4e7ec] bg-[#fafaf8] text-[#344054]"}`}>{rec.headline}</p>
+          {rec.score && <ScoreBlock score={rec.score} />}
           <div className="grid gap-3">
             <div className="rounded-xl bg-[#faf9f6] p-4">
               <p className="text-[12px] font-bold text-[#667085]">{t("Company match to mandatory requirements")}</p>

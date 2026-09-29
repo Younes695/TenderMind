@@ -84,8 +84,10 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
     body = "\n".join(s.text or "" for s in sources)
     checks: List[Dict[str, Any]] = []
 
-    def add(key, label, result, detail, evidence=None):
-        checks.append({"key": key, "label": label, "result": result, "detail": detail, "evidence": evidence})
+    def add(key, label, result, detail, evidence=None, **vars_):
+        """detail is an English template; vars fill it (the UI translates the template)."""
+        checks.append({"key": key, "label": label, "result": result, "detail": detail.format(**vars_),
+                       "detail_key": detail, "detail_vars": vars_, "evidence": evidence})
 
     if cap.get("work_types"):
         kind = classify_kind(title) or classify_kind(body[:20000])
@@ -94,8 +96,9 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         else:
             ok = kind in cap["work_types"]
             add("work_type", "Type of work", "PASS" if ok else "FAIL",
-                f"Tender: {kind}. Company: {', '.join(cap['work_types'])}.",
-                None if classify_kind(title) else _evidence(sources, kind.split()[0]))
+                "Tender: {kind}. Company: {company}.",
+                None if classify_kind(title) else _evidence(sources, kind.split()[0]),
+                kind=kind, company=", ".join(cap["work_types"]))
     if cap.get("max_kv"):
         kv = main_kv(title, body)
         if not kv:
@@ -103,8 +106,8 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         else:
             ok = kv <= float(cap["max_kv"])
             add("voltage", "Voltage", "PASS" if ok else "FAIL",
-                f"Tender: {kv} kV. Company works up to {cap['max_kv']:g} kV.",
-                _evidence(sources, re.compile(rf"\b{kv}\s?kV", re.IGNORECASE)))
+                "Tender: {kv} kV. Company works up to {max} kV.",
+                _evidence(sources, re.compile(rf"\b{kv}\s?kV", re.IGNORECASE)), kv=kv, max=f"{cap['max_kv']:g}")
     if cap.get("countries"):
         country = detect_country([title, body[:200000]])
         if not country:
@@ -112,7 +115,7 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         else:
             ok = country in cap["countries"]
             add("country", "Country", "PASS" if ok else "FAIL",
-                f"Tender: {country}. Company works in: {', '.join(cap['countries'])}.")
+                "Tender: {country}. Company works in: {company}.", country=country, company=", ".join(cap["countries"]))
     demanded = set()
     demand_ev = None
     for s in sources:
@@ -127,11 +130,11 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         missing = sorted(demanded - held)
         if not cap.get("certifications"):
             add("certifications", "Certifications", "UNCLEAR",
-                f"Tender asks for {', '.join(sorted(demanded))}; add your certifications in Settings.", demand_ev)
+                "Tender asks for {need}; add your certifications in Settings.", demand_ev, need=", ".join(sorted(demanded)))
         else:
             add("certifications", "Certifications", "FAIL" if missing else "PASS",
-                (f"Tender asks for {', '.join(sorted(demanded))}; company lacks {', '.join(missing)}." if missing
-                 else f"Tender asks for {', '.join(sorted(demanded))}; company holds them."), demand_ev)
+                ("Tender asks for {need}; company lacks {missing}." if missing else "Tender asks for {need}; company holds them."),
+                demand_ev, need=", ".join(sorted(demanded)), missing=", ".join(missing))
     reg_ev = _evidence(sources, _REG)
     if reg_ev:
         words = {w.lower() for r in cap.get("registrations") or [] for w in re.findall(r"[A-Za-z]{3,}", r)}
@@ -148,10 +151,10 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
         need = int(m.group(3))
         have = cap.get("years_experience")
         if have is None:
-            add("experience", "Years of experience", "UNCLEAR", f"Tender asks for {need} years.", years_ev)
+            add("experience", "Years of experience", "UNCLEAR", "Tender asks for {need} years.", years_ev, need=need)
         else:
             add("experience", "Years of experience", "PASS" if have >= need else "FAIL",
-                f"Tender asks for {need} years; company has {have:g}.", years_ev)
+                "Tender asks for {need} years; company has {have}.", years_ev, need=need, have=f"{have:g}")
     t = None
     for s in sources:
         t = _TURNOVER.search(s.text or "")
@@ -167,7 +170,8 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
                 "Tender sets a minimum turnover — compare it with yours (currency or amount not comparable).", turn_ev)
         else:
             add("turnover", "Annual turnover", "PASS" if have >= need else "FAIL",
-                f"Tender asks for {need:,.0f} {cur}; company {have:,.0f} {have_cur}.", turn_ev)
+                "Tender asks for {need} {cur}; company {have} {cur}.", turn_ev, need=f"{need:,.0f}", cur=cur,
+                have=f"{have:,.0f}")
     status = "INELIGIBLE" if any(c["result"] == "FAIL" for c in checks) else "ELIGIBLE"
     return {"status": status, "checks": checks}
 

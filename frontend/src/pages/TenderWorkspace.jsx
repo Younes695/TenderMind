@@ -4,6 +4,7 @@ import { CheckCircle2, Trash2, RefreshCw, Layers, FolderOpen, ListChecks, Users,
 import apiClient from "../api/client";
 import DecisionPanel from "../components/DecisionPanel";
 import RecommendationPanel from "../components/RecommendationPanel";
+import BidTools, { EligibilityBanner } from "../components/BidTools";
 import { confirmRemoval } from "../utils/confirm";
 import { useT } from "../i18n";
 
@@ -15,9 +16,10 @@ function StatusBadge({ status }) {
     FAILED: "bg-[#fdf0f0] text-[#a33a3a] border-[#f5c6c6]",
     PROCESSING: "bg-[#eef2f8] text-[#162A4C] border-[#c5d3e6]",
     QUEUED: "bg-[#eef2f8] text-[#162A4C] border-[#c5d3e6]",
+    INELIGIBLE: "bg-[#fdf0f0] text-[#b42318] border-[#f5c6c6]",
   };
   const cls = map[status] || "bg-[#f3f3f3] text-[#667085] border-[#e8e4dc]";
-  return <span className={`inline-flex rounded-lg border px-3 py-1 text-[12px] font-bold ${cls}`}>{status || t("Not available")}</span>;
+  return <span className={`inline-flex rounded-lg border px-3 py-1 text-[12px] font-bold ${cls}`}>{status ? t(status) : t("Not available")}</span>;
 }
 
 function DocStatusBadge({ status }) {
@@ -329,7 +331,9 @@ function TenderWorkspace() {
           </section>
         )}
 
+        {jobStatus === "INELIGIBLE" && <EligibilityBanner tenderId={id} onContinue={() => window.location.reload()} />}
         {jobStatus && jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && <RecommendationPanel tenderId={id} />}
+        {tender && <BidTools tenderId={id} outcome={tender.outcome} />}
 
         {/* Bid decision with evidence (Stage 5C) */}
         {jobStatus !== "PROCESSING" && jobStatus !== "QUEUED" && (

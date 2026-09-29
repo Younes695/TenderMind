@@ -49,7 +49,8 @@ def compute(factors: Dict[str, Dict[str, Any]], weights: Dict[str, float], hard_
         v = f.get("value")
         counted = v is not None and weights.get(k, 0) > 0
         rows.append({"key": k, "label": LABELS[k], "value": None if v is None else round(float(v)),
-                     "weight": weights.get(k, 0), "counted": counted, "reason": f.get("reason")})
+                     "weight": weights.get(k, 0), "counted": counted, "reason": f.get("reason"),
+                     "reason_key": f.get("reason_key"), "reason_vars": f.get("reason_vars") or {}})
         if counted:
             total_w += weights[k]
             acc += weights[k] * float(v)
@@ -63,47 +64,51 @@ def compute(factors: Dict[str, Dict[str, Any]], weights: Dict[str, float], hard_
             "not_counted": [r["label"] for r in rows if not r["counted"]]}
 
 
-# ---- factor builders (each returns {"value", "reason"})
+# ---- factor builders (each returns {"value", "reason", "reason_key", "reason_vars"})
+def _r(value, key, **vars_):
+    """reason in English + its template and vars, so the UI can translate it."""
+    return {"value": value, "reason": key.format(**vars_), "reason_key": key, "reason_vars": vars_}
+
+
 def fit_factor(match_percent: Optional[float], eligibility_checks: List[Dict[str, Any]]) -> Dict[str, Any]:
     if match_percent is not None:
-        return {"value": match_percent, "reason": "Mandatory requirements met with evidence."}
+        return _r(match_percent, "Mandatory requirements met with evidence.")
     decided = [c for c in eligibility_checks or [] if c.get("result") in ("PASS", "FAIL")]
     if decided:
         ok = sum(1 for c in decided if c["result"] == "PASS")
-        return {"value": 100 * ok / len(decided),
-                "reason": f"Not evaluated yet — {ok} of {len(decided)} eligibility checks passed."}
-    return {"value": None, "reason": "No evaluation or eligibility check yet."}
+        return _r(100 * ok / len(decided), "Not evaluated yet — {ok} of {n} eligibility checks passed.",
+                  ok=ok, n=len(decided))
+    return _r(None, "No evaluation or eligibility check yet.")
 
 
 def history_factor(kind: Optional[str], past: List[Dict[str, Any]]) -> Dict[str, Any]:
     """past: [{"kind", "outcome"}] of the account's other tenders."""
     same = [p for p in past if kind and p.get("kind") == kind and p.get("outcome") in ("WON", "LOST")]
     if not same:
-        return {"value": None, "reason": "No won/lost tenders of the same type recorded yet."
-                if kind else "Tender type not recognised."}
+        return _r(None, "No won/lost tenders of the same type recorded yet." if kind else "Tender type not recognised.")
     won = sum(1 for p in same if p["outcome"] == "WON")
-    return {"value": 100 * won / len(same), "reason": f"Won {won} of {len(same)} past {kind} tenders."}
+    return _r(100 * won / len(same), "Won {won} of {n} past {kind} tenders.", won=won, n=len(same), kind=kind)
 
 
 def partners_factor(disciplines: List[str], suppliers: Dict[str, List[Any]]) -> Dict[str, Any]:
     tech = sorted({d for d in disciplines if d not in NON_TECHNICAL})
     if not tech:
-        return {"value": None, "reason": "No technical parts identified in the RFP yet."}
+        return _r(None, "No technical parts identified in the RFP yet.")
     if not suppliers:
-        return {"value": None, "reason": "No past quotations recorded yet."}
+        return _r(None, "No past quotations recorded yet.")
     covered = [d for d in tech if suppliers.get(d)]
     missing = [d for d in tech if d not in covered]
-    return {"value": 100 * len(covered) / len(tech),
-            "reason": f"{len(covered)} of {len(tech)} technical parts have a past supplier"
-                      + (f"; none yet for: {', '.join(missing)}." if missing else ".")}
+    if missing:
+        return _r(100 * len(covered) / len(tech), "{c} of {n} technical parts have a past supplier; none yet for: {missing}.",
+                  c=len(covered), n=len(tech), missing=", ".join(missing))
+    return _r(100.0, "{c} of {n} technical parts have a past supplier.", c=len(covered), n=len(tech))
 
 
 def votes_factor(summary: Dict[str, Any]) -> Dict[str, Any]:
     o = (summary or {}).get("overall") or {}
     if o.get("approve_pct") is None:
-        return {"value": None, "reason": "No department votes yet."}
-    return {"value": o["approve_pct"],
-            "reason": f"{o['approve']} approve, {o['reject']} reject, {o['abstain']} abstain."}
+        return _r(None, "No department votes yet.")
+    return _r(o["approve_pct"], "{a} approve, {r} reject, {x} abstain.", a=o["approve"], r=o["reject"], x=o["abstain"])
 
 
 def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_count: int = 0) -> Dict[str, Any]:
@@ -134,7 +139,7 @@ def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_cou
     st = db.query(ScoreSettings).filter(ScoreSettings.id == key).first()
     hard = None
     if hard_fail_count:
-        hard = f"{hard_fail_count} mandatory requirement(s) contradicted by your documents."
+        hard = f"{hard_fail_count} mandatory requirement(s) contradicted by your documents."  # shown with t()
     elif el is not None and el.status == "INELIGIBLE" and not el.override_by:
         hard = "Blocked by the eligibility check."
     return compute({"fit": fit_factor(match_percent, checks), "history": history_factor(kind, past),

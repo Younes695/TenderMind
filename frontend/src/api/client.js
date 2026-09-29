@@ -225,7 +225,7 @@ export async function pollProcessingJob(jobId, { intervalMs = 1500, maxAttempts 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const job = await getProcessingJob(jobId);
     if (onUpdate) onUpdate(job);
-    if (["COMPLETED", "PARTIAL", "FAILED"].includes(job.status)) {
+    if (["COMPLETED", "PARTIAL", "FAILED", "INELIGIBLE"].includes(job.status)) {
       return job;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
@@ -294,6 +294,28 @@ export const getRecommendation = (id, lang = "en") => jsonCall(`/api/tenders/${e
 export const getEmailDraft = (id, lang = "en") => jsonCall(`/api/tenders/${encodeURIComponent(id)}/email-draft?lang=${lang}`);
 export const getCompanyProfile = () => jsonCall(`/api/company-profile`);
 export const saveCompanyProfile = (data) => jsonCall(`/api/company-profile`, "PUT", data);
+// Stage 6
+const T = (id) => `/api/tenders/${encodeURIComponent(id)}`;
+export const getCapability = () => jsonCall(`/api/company-capability`);
+export const saveCapability = (data) => jsonCall(`/api/company-capability`, "PUT", data);
+export const getEligibility = (id) => jsonCall(`${T(id)}/eligibility`);
+export const overrideEligibility = (id, data) => jsonCall(`${T(id)}/eligibility/override`, "POST", data);
+export const getSections = (id) => jsonCall(`${T(id)}/sections`);
+export const listTeam = () => jsonCall(`/api/team`);
+export const addTeamMember = (data) => jsonCall(`/api/team`, "POST", data);
+export const deleteTeamMember = (mid) => jsonCall(`/api/team/${encodeURIComponent(mid)}`, "DELETE");
+export const listTasks = (id) => jsonCall(`${T(id)}/tasks`);
+export const addTask = (id, data) => jsonCall(`${T(id)}/tasks`, "POST", data);
+export const updateTask = (id, taskId, data) => jsonCall(`${T(id)}/tasks/${encodeURIComponent(taskId)}`, "PUT", data);
+export const deleteTask = (id, taskId) => jsonCall(`${T(id)}/tasks/${encodeURIComponent(taskId)}`, "DELETE");
+export const getTaskGroups = () => jsonCall(`/api/tasks/groups`);
+export const getVotes = (id) => jsonCall(`${T(id)}/votes`);
+export const putVote = (id, data) => jsonCall(`${T(id)}/votes`, "PUT", data);
+export const deleteVote = (id, name) => jsonCall(`${T(id)}/votes/${encodeURIComponent(name)}`, "DELETE");
+export const setOutcome = (id, outcome) => jsonCall(`${T(id)}/outcome`, "PUT", { outcome });
+export const getScore = (id) => jsonCall(`${T(id)}/score`);
+export const getScoreWeights = () => jsonCall(`/api/score-weights`);
+export const saveScoreWeights = (data) => jsonCall(`/api/score-weights`, "PUT", data);
 
 const apiClient = {
   listTenders,
@@ -339,6 +361,26 @@ const apiClient = {
   getEmailDraft,
   getCompanyProfile,
   saveCompanyProfile,
+  getCapability,
+  saveCapability,
+  getEligibility,
+  overrideEligibility,
+  getSections,
+  listTeam,
+  addTeamMember,
+  deleteTeamMember,
+  listTasks,
+  addTask,
+  updateTask,
+  deleteTask,
+  getTaskGroups,
+  getVotes,
+  putVote,
+  deleteVote,
+  setOutcome,
+  getScore,
+  getScoreWeights,
+  saveScoreWeights,
   apiUrl,
 };
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
+import { CapabilityCard, TeamCard, WeightsCard } from "../components/SettingsStage6";
 
 const PLANS = [
   { id: "Starter", features: ["A few tenders a month", "Requirement extraction with page references", "Missing-item alerts and Q&A"] },
@@ -137,6 +138,10 @@ export default function Settings() {
         </form>
         <Notice msg={companyMsg} />
       </Card>
+
+      <CapabilityCard />
+      <TeamCard />
+      <WeightsCard />
 
       <Card icon={KeyRound} title={t("Change password")}>
         <form onSubmit={savePassword} className="grid gap-3 sm:grid-cols-3">
