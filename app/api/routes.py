@@ -1308,3 +1308,29 @@ def tender_eligibility_override(tender_id: str, payload: dict, background_tasks:
         raise HTTPException(status_code=409, detail=str(e))
     background_tasks.add_task(process_tender, tender_id, job.id)
     return {"job_id": job.id, "status": job.status}
+
+
+# ---- Stage 6: RFP sections and past suppliers
+def _account_tender_ids(db, user) -> list:
+    q = db.query(Tender.id)
+    f = owner_filter(Tender.owner_email, user)
+    if f is not None:
+        q = q.filter(f)
+    return [tid for (tid,) in q.all()]
+
+
+@router.get("/tenders/{tender_id}/sections")
+def tender_sections_endpoint(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.sections import suppliers_by_discipline, tender_sections
+    if db.query(Tender).filter(Tender.id == tender_id).first() is None:
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    secs = tender_sections(tender_id)
+    sup = suppliers_by_discipline(db, [t for t in _account_tender_ids(db, user) if t != tender_id])
+    disciplines = {}
+    for s in secs:
+        d = disciplines.setdefault(s["discipline"], {"discipline": s["discipline"], "sections": 0, "pages": 0,
+                                                     "suppliers": sup.get(s["discipline"], [])})
+        d["sections"] += 1
+        d["pages"] += s["page_to"] - s["page_from"] + 1
+    return {"sections": [dict(s, suppliers=sup.get(s["discipline"], [])) for s in secs],
+            "disciplines": sorted(disciplines.values(), key=lambda d: -d["pages"])}
