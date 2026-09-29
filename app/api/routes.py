@@ -1872,7 +1872,48 @@ def decision_pack(tender_id: str, lang: str = "en", db: Session = Depends(get_db
         "votes": {"votes": votes, "summary": vote_summary(votes)},
         "tasks": tasks,
         "audit": events(db, tender_id),
+        **_pack_extras(db, t, user),
     }
+
+
+def _pack_extras(db, t, user):
+    """Material cost estimate, similar past tenders and key dates for the decision pack / summary."""
+    from app.materials import cost_view, price_index, tender_boq
+    from app.sections import sources_from_cache
+    from app.similarity import for_tender
+    from app.summary import key_dates
+    try:
+        mv = cost_view(tender_boq(t.id), price_index(_price_items(db, user)), None)
+        materials = {"totals": mv["totals"], "priced": mv["priced"], "unavailable": mv["unavailable"],
+                     "lines": len(mv["lines"])}
+    except Exception:
+        materials = {"totals": [], "priced": 0, "unavailable": 0, "lines": 0}
+    try:
+        similar = for_tender(db, t, user)["similar"][:3]
+    except Exception:
+        similar = []
+    try:
+        dates = [{"label": d["label"], "date": d["date"] or d["raw"], "file": d["file"], "page": d["page"]}
+                 for d in key_dates(sources_from_cache(t.id))]
+    except Exception:
+        dates = []
+    if t.submission_deadline:
+        dates = [d for d in dates if d["label"] != "Submission deadline"]
+        dates.insert(0, {"label": "Submission deadline", "date": t.submission_deadline.date().isoformat(),
+                         "file": None, "page": None})
+    final = {"decision": t.final_decision, "reason": t.final_reason, "by": t.final_by} if t.final_decision else None
+    return {"materials": materials, "similar": similar, "dates": dates, "final": final}
+
+
+@router.get("/tenders/{tender_id}/decision-summary")
+def decision_summary(tender_id: str, lang: str = "en", to: str = "", db: Session = Depends(get_db),
+                     user: dict = Depends(require_auth)):
+    """A short email-ready summary for the decision maker, from the decision pack's facts only."""
+    from app.decision_summary import build
+    pack = decision_pack(tender_id, lang, db, user)
+    m = pack["materials"]
+    mat = {"lines": [None] * m["lines"], "totals": m["totals"], "priced": m["priced"]}
+    return build(pack, mat, pack["similar"], pack["dates"], pack["final"], lang, to[:120])
 
 
 # ---- Stage 8: quick summary, similar tenders, stage/deadline, notes, reminders, dashboard

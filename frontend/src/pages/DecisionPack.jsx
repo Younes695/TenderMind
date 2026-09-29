@@ -6,6 +6,8 @@ import { usePrefs } from "../i18n";
 import { ScoreBlock } from "../components/RecommendationPanel";
 import { LABEL, tx } from "../components/BidTools";
 import { WorkspaceLoading } from "../components/TenderLoading";
+import { EligibilityScore } from "../components/BidTools";
+import DecisionSummaryMail from "../components/DecisionSummaryMail";
 
 /** Stage 7 — decision pack: everything the authorised team needs, in one printable page.
  *  Certificates and approvals come first (do we need a partner?). Every fact shows its source;
@@ -90,14 +92,41 @@ export default function DecisionPack() {
       <Section n={n()} testid="pack-eligibility" title={t("Eligibility check")} tags={["FACT"]}>
         {!p.eligibility || p.eligibility.status === "SKIPPED" || !p.eligibility.checks?.length
           ? <p className="text-[13px] text-[#667085]">{t("Not checked — fill Company capabilities in Settings.")}</p>
-          : <ul className="space-y-1.5">{p.eligibility.checks.map((k) => (
-            <li key={k.key} className="text-[13px] text-[#344054]"><b>{t(LABEL[k.result] || k.result)}</b> · {t(k.label)}: {tx(t, k.detail_key, k.detail_vars, k.detail)}<Src e={k.evidence} /></li>))}</ul>}
+          : <><EligibilityScore score={p.eligibility.score} /><ul className="space-y-1.5">{p.eligibility.checks.map((k) => (
+            <li key={k.key} className="text-[13px] text-[#344054]"><b>{t(LABEL[k.result] || k.result)}</b> · {t(k.label)}: {tx(t, k.detail_key, k.detail_vars, k.detail)}<Src e={k.evidence} /></li>))}</ul></>}
         {p.eligibility?.override_by && <p className="mt-2 text-[12px] text-[#8a6a22]">{t("Continued by {by}: {reason}", { by: p.eligibility.override_name || p.eligibility.override_by, reason: p.eligibility.override_reason || "" })}</p>}
       </Section>
 
       <Section n={n()} testid="pack-score" title={t("Go/No-Go score")} tags={["CALCULATION"]}>
         {p.score ? <ScoreBlock score={p.score} /> : <p className="text-[13px] text-[#667085]">{t("Not enough data yet to score this tender.")}</p>}
         {p.recommendation?.headline && <p className="mt-3 text-[14px] font-semibold text-[#101828]">{p.recommendation.headline}</p>}
+      </Section>
+
+      <Section n={n()} testid="pack-materials" title={t("Estimated material cost")} tags={["CALCULATION"]}>
+        {!p.materials?.lines
+          ? <p className="text-[13px] text-[#667085]">{t("No BOQ table with quantities found in this tender — INSUFFICIENT DATA.")}</p>
+          : <p className="text-[14px] text-[#344054]">
+              {p.materials.totals.length
+                ? p.materials.totals.map((x) => <b key={x.currency} className="me-3 text-[18px] text-[#101828]">{x.currency} {Number(x.amount).toLocaleString("en-US", { maximumFractionDigits: 0 })}</b>)
+                : <b className="me-3 text-[#667085]">{t("PRICE UNAVAILABLE")}</b>}
+              <span className="rounded bg-[#f2f4f7] px-1 text-[11px] font-bold">{t("ESTIMATE")}</span>{" "}
+              {t("{p} priced · {u} price unavailable", { p: p.materials.priced, u: p.materials.unavailable })}
+            </p>}
+      </Section>
+
+      <Section n={n()} testid="pack-similar" title={t("Similar past tenders")} tags={["CALCULATION"]}>
+        {!p.similar?.length ? <p className="text-[13px] text-[#667085]">{t("No similar past tenders yet.")}</p> : (
+          <ul className="space-y-1.5 text-[13px] text-[#344054]">
+            {p.similar.map((x) => <li key={x.id}><b>{x.title || x.id}</b> — {x.score}%{x.outcome === "WON" ? ` · ${t("Won|outcome")}` : x.outcome === "LOST" ? ` · ${t("Lost|outcome")}` : ""}
+              <span className="block text-[12px] text-[#667085]">{x.reasons.map((r) => t(r.key, { ...r.vars, kind: r.vars.kind ? t(r.vars.kind) : undefined })).join(" · ")}</span></li>)}
+          </ul>)}
+      </Section>
+
+      <Section n={n()} testid="pack-dates" title={t("Important dates")} tags={["FACT"]}>
+        {!p.dates?.length ? <p className="text-[13px] text-[#667085]">{t("No dates found in the documents.")}</p> : (
+          <ul className="space-y-1 text-[13px] text-[#344054]">
+            {p.dates.map((d, i) => <li key={i}><b>{t(d.label)}:</b> {d.date}{d.file ? <span className="text-[12px] text-[#667085]"> — {d.file} · {t("page")} {d.page}</span> : <span className="text-[12px] text-[#1f7a4d]"> ({t("set by the team")})</span>}</li>)}
+          </ul>)}
       </Section>
 
       <Section n={n()} testid="pack-compliance" title={t("Compliance with mandatory requirements")} tags={["CALCULATION"]}>
@@ -144,6 +173,10 @@ export default function DecisionPack() {
       <Section n={n()} testid="pack-tasks" title={t("Team tasks")} tags={["FACT"]}>
         {p.tasks.length === 0 ? <p className="text-[13px] text-[#667085]">{t("No tasks yet.")}</p> : (
           <ul className="text-[13px] text-[#344054]">{p.tasks.map((x) => <li key={x.id}>{x.status === "DONE" ? "✓" : "○"} {x.title}{x.assignee ? ` — ${x.assignee}` : ""}{x.due_date ? ` · ${x.due_date}` : ""}</li>)}</ul>)}
+      </Section>
+
+      <Section n={n()} testid="pack-summary-mail" title={t("Send the summary to the decision maker")} tags={["REVIEW"]}>
+        <DecisionSummaryMail tenderId={id} />
       </Section>
 
       <Section n={n()} testid="pack-audit" title={t("Audit trail")} tags={["FACT"]}>

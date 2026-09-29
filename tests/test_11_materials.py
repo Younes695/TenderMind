@@ -147,3 +147,17 @@ def test_eligibility_percent_counts_missing_information_as_not_met():
     checks = [{"result": "PASS"}, {"result": "PASS"}, {"result": "PASS"}, {"result": "UNCLEAR"}]
     assert score(checks) == {"percent": 75, "met": 3, "failed": 0, "unclear": 1, "total": 4}
     assert score([]) is None
+
+
+def test_decision_summary_states_unknowns(client):
+    tid = f"S11-{uuid.uuid4().hex[:6]}"
+    client.post("/api/tenders", json={"id": tid, "title": "Summary test 132kV", "client": "SEC"})
+    r = client.get(f"/api/tenders/{tid}/decision-summary", params={"to": "Eng. Omar"}).json()
+    assert r["subject"] == "Tender decision summary — Summary test 132kV"
+    body = r["body"]
+    assert body.startswith("Dear Eng. Omar,") and "INSUFFICIENT DATA" in body and "not taken yet" in body
+    ar = client.get(f"/api/tenders/{tid}/decision-summary", params={"lang": "ar"}).json()
+    assert ar["subject"].startswith("ملخص قرار المناقصة") and "بيانات غير كافية" in ar["body"]
+    pack = client.get(f"/api/tenders/{tid}/decision-pack").json()
+    assert {"materials", "similar", "dates", "final"} <= set(pack)
+    client.delete(f"/api/tenders/{tid}")

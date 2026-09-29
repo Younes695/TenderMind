@@ -28,6 +28,20 @@ export default {
   "{n} with information missing": "{n} بمعلومات ناقصة",
   "{n} not met": "{n} غير متحقق",
 
+  // Decision summary
+  "Similar past tenders": "مناقصات سابقة مشابهة",
+  "No similar past tenders yet.": "لا توجد مناقصات سابقة مشابهة بعد.",
+  "Important dates": "التواريخ المهمة",
+  "No dates found in the documents.": "لم يُعثر على تواريخ في المستندات.",
+  "Send the summary to the decision maker": "إرسال الملخص إلى صاحب القرار",
+  "Decision maker's name": "اسم صاحب القرار",
+  "Decision maker's name (e.g. General Manager)": "اسم صاحب القرار (مثل المدير العام)",
+  "Email": "البريد الإلكتروني",
+  "Send by email": "إرسال بالبريد",
+  "Copy": "نسخ",
+  "Copied": "تم النسخ",
+  "Opens your own email app — nothing is sent until you press Send there.": "يفتح تطبيق البريد لديك — لن يُرسل شيء حتى تضغط إرسال هناك.",
+
   // Materials & prices
   "Materials & prices": "المواد والأسعار",
   "PRICE UNAVAILABLE": "السعر غير متاح",

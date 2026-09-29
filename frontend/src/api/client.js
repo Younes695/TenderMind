@@ -321,6 +321,7 @@ export const saveScoreWeights = (data) => jsonCall(`/api/score-weights`, "PUT", 
 export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
 export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
 export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
+export const getDecisionSummary = (id, lang = "en", to = "") => jsonCall(`${T(id)}/decision-summary?lang=${lang}&to=${encodeURIComponent(to)}`);
 export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
 // Materials: BOQ, supplier price lists, bulk opportunities
 export const getTenderMaterials = (id) => jsonCall(`${T(id)}/materials`);
@@ -426,6 +427,7 @@ const apiClient = {
   getChecklist,
   updateChecklistItem,
   getDecisionPack,
+  getDecisionSummary,
   complianceMatrixUrl,
   getRfqPackages,
   getTenderMaterials,
