@@ -1,49 +1,65 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
 
+// Initial pricing hypothesis (same as the financial model) — being validated with pilot customers.
 const plans = [
   {
     name: "Starter",
-    tagline: "For smaller teams",
-    price: "Talk to Sales",
+    tagline: "Individual / small business",
+    price: "EGP 1,200",
+    per: "/ month",
     features: [
-      "Tender Intelligence",
-      "RFP Summaries",
-      "Basic Matching",
-      "Document Analysis",
+      "5 tender analyses / month",
+      "Tender Radar with match % and reasons",
+      "AI RFP analysis — every fact with file and page",
+      "Eligibility check against your profile",
+      "Ask TenderMind",
     ],
     cta: "Start Trial",
     highlighted: false,
   },
   {
-    name: "Professional",
-    tagline: "For growing tender teams",
-    price: "Talk to Sales",
+    name: "Growth",
+    tagline: "Tender team / growing company",
+    price: "EGP 3,000",
+    per: "/ month",
     badge: "Most Popular",
     features: [
+      "15 tender analyses / month",
       "Everything in Starter",
-      "Go / No-Go",
-      "Financial Analysis",
-      "Risk Analysis",
-      "Team Workflow",
-      "Approvals",
-      "Company Knowledge",
+      "Team tasks, votes and approvals",
+      "BOQ materials with your supplier price lists",
+      "RFQ packages per equipment",
     ],
     cta: "Book a Demo",
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    tagline: "For large organizations",
-    price: "Custom",
+    name: "Business",
+    tagline: "Larger company / multiple users",
+    price: "EGP 9,000",
+    per: "/ month",
     features: [
-      "Everything in Professional",
-      "Advanced Workflows",
-      "Subcontractor RFQs",
-      "Advanced Security",
-      "Custom Integrations",
-      "Multiple Teams",
-      "Advanced Analytics",
+      "60 tender analyses / month",
+      "Everything in Growth",
+      "Same materials across all active tenders",
+      "Decision pack, compliance matrix and analytics",
+      "Multiple teams",
+    ],
+    cta: "Book a Demo",
+    highlighted: false,
+  },
+  {
+    name: "Enterprise",
+    tagline: "Dedicated cloud / private deployment",
+    price: "From EGP 30,000",
+    per: "/ month",
+    features: [
+      "Dedicated cloud hosted by us",
+      "On-premise option (quoted separately)",
+      "Your own AI keys and data residency",
+      "Custom tender sources and integrations",
+      "Priority support",
     ],
     cta: "Talk to Sales",
     highlighted: false,
@@ -66,13 +82,13 @@ function Pricing() {
         </div>
 
         {/* Plans */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {plans.map(({ name, tagline, price, features, cta, highlighted, badge }) => (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          {plans.map(({ name, tagline, price, per, features, cta, highlighted, badge }) => (
             <article
               key={name}
               className={`relative flex flex-col rounded-2xl border p-6 sm:p-7 ${
                 highlighted
-                  ? "border-[#C8A96B] bg-[#162A4C] lg:-my-4 lg:py-10"
+                  ? "border-[#C8A96B] bg-[#162A4C] xl:-my-4 xl:py-10"
                   : "border-[#ebe8e1] bg-white"
               }`}
             >
@@ -103,6 +119,7 @@ function Pricing() {
                 }`}
               >
                 {t(price)}
+                {per && <span className={`ms-1 text-[13px] font-medium ${highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"}`}>{t(per)}</span>}
               </p>
 
               <ul className="mb-8 flex-1 space-y-3">
@@ -141,7 +158,7 @@ function Pricing() {
 
         {/* Footnote */}
         <p className="mt-10 text-center text-[13px] text-[#4b5f86]">
-          {t("Annual tenders volume and average tender value shape every quote. Pricing in SAR / AED available from sales.")}
+          {t("Introductory pricing, excluding VAT — being validated with our first pilot customers. SAR / AED pricing on request.")}
         </p>
       </div>
     </section>

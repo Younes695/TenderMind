@@ -147,7 +147,7 @@ const auditLog = [
 ];
 
 const features = [
-  { icon: FileSearch, title: "AI RFP Analysis", text: "248 requirements extracted in minutes, every clause linked to its page." },
+  { icon: FileSearch, title: "AI RFP Analysis", text: "Every requirement extracted and linked to its file and page." },
   { icon: Scale, title: "Go / No-Go Intelligence", text: "Weighted scoring across technical, financial, risk and capacity." },
   { icon: TrendingUp, title: "Financial & Cash Flow Analysis", text: "Payment terms, retention and bonds modelled before you bid." },
   { icon: AlertTriangle, title: "Risk Analysis", text: "Contractual and commercial risks flagged with evidence." },
@@ -377,6 +377,7 @@ function Home() {
             </div>
 
             <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#a9b8d4]">{t("Illustrative example — not a real tender")}</p>
               <ul className="space-y-4">
                 {scores.map(({ label, value }) => (
                   <li key={label}>
@@ -442,6 +443,7 @@ function Home() {
               Give Finance the information they need before the commercial decision.
             </p>
 
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#a9b8d4]">{t("Illustrative example — not a real tender")}</p>
             <div className="mb-4 grid grid-cols-2 gap-3">
               {finStats.map(({ label, value }) => (
                 <div key={label} className="rounded-xl border border-white/15 px-4 py-4">
