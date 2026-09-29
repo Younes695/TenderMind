@@ -169,6 +169,19 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                                   + (f"\n… and {len(rs) - 30} more" if len(rs) > 30 else ""),
                         "source_document": doc, "page": None, "priority": "LOW",
                         "dedupe_key": _key("unknown-doc", doc, len(rs))})
+    try:  # Stage 7: the package contradicts itself -> ask, never pick one silently
+        from app.conflicts import tender_conflicts
+        for c in tender_conflicts(tender_id):
+            lines = [f"- {v['value']}: {v['file']}, p. {v['page']} — “{v['quote'][:200]}”" for v in c["values"]]
+            first = c["values"][0]
+            out.append({"category": "question", "kind": "conflict",
+                        "title": f"Documents disagree: {c['label']}",
+                        "detail": "Which value applies?\n" + "\n".join(lines),
+                        "source_document": first["file"], "page": str(first["page"]), "priority": "HIGH",
+                        "dedupe_key": _key("conflict", c["fact"], [v["value"] for v in c["values"]],
+                                           [v["quote"][:80] for v in c["values"]])})
+    except Exception:
+        pass
     from app.models import EligibilityResult  # Stage 6 gate
     el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()
     if el is not None and el.status == "INELIGIBLE" and not el.override_by:
