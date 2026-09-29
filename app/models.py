@@ -328,17 +328,3 @@ class CompanyProfile(Base):
     address = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
-
-class MarketAward(Base):
-    """Stage 5J — awarded power-sector contracts with their signed price (World Bank notices)."""
-    __tablename__ = "market_awards"
-    id = Column(String, primary_key=True)
-    external_id = Column(String, unique=True, nullable=False)
-    title = Column(Text, nullable=False)
-    country = Column(String, nullable=True)
-    kind = Column(String, index=True, nullable=False)
-    kv = Column(Float, nullable=True)
-    amount_usd = Column(Float, nullable=False)
-    awarded_at = Column(DateTime, nullable=True)
-    url = Column(String, nullable=True)
-    fetched_at = Column(DateTime, default=datetime.utcnow)

@@ -192,10 +192,5 @@ def start_refresher(interval_s: int = 6 * 3600, first_delay_s: int = 30) -> None
                 refresh(force=True)
             except Exception:
                 pass
-            try:
-                from app.market import refresh_awards
-                refresh_awards()  # comparable contract values (Stage 5J)
-            except Exception:
-                pass
             time.sleep(interval_s)
     threading.Thread(target=_loop, name="news-refresher", daemon=True).start()

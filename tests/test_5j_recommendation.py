@@ -50,7 +50,6 @@ def test_email_draft_uses_company_profile_and_open_questions():
 def test_profile_recommendation_email_and_estimate_endpoints():
     from app.database import SessionLocal
     from app.main import app
-    from app.models import MarketAward
     c = TestClient(app)
     tid = f"REC-{uuid.uuid4().hex[:6]}"
     c.post("/api/tenders", json={"id": tid, "title": "Sample 132kV Substation", "client": "SEC"})
@@ -60,56 +59,19 @@ def test_profile_recommendation_email_and_estimate_endpoints():
     assert rec["decision"] is None and "process the tender" in rec["headline"]
     mail = c.get(f"/api/tenders/{tid}/email-draft").json()
     assert mail["company_profile_complete"] and "Nile Power" in mail["body"]
-    db = SessionLocal()
-    for i, (kv, amt) in enumerate([(110, 6e6), (132, 9e6), (132, 12e6), (220, 30e6), (33, 1e6)]):
-        db.add(MarketAward(id=f"MA-{uuid.uuid4().hex[:8]}", external_id=f"T5J-{uuid.uuid4().hex}", title=f"{kv}kV substation {i}",
-                           country="X", kind="substation", kv=kv, amount_usd=amt, awarded_at=dt.datetime(2026, 1, 1)))
-    db.commit(); db.close()
-    est = c.get(f"/api/tenders/{tid}/value-estimate").json()
-    assert est["available"] and est["kind"] == "substation" and est["kv"] == 132
-    assert est["low"] <= est["median"] <= est["high"] and est["comparables"] >= 3 and est["examples"]
+    assert c.get(f"/api/tenders/{tid}/value-estimate").status_code == 404  # removed in Stage 6
 
 
-def test_estimate_refuses_without_enough_comparables():
-    from app.database import SessionLocal
-    from app.market import estimate
-    db = SessionLocal()
-    try:
-        assert estimate(db, "Supply of office furniture")["available"] is False
-        r = estimate(db, "765kV transmission line interconnector")
-        assert r["available"] is False or r["comparables"] >= 3
-    finally:
-        db.close()
-
-
-def test_award_price_parsing():
-    from app.market import _PRICE, classify_kind, max_kv
-    assert _PRICE.search("Signed Contract Price: USD 7,052,665.00 and more").group(1) == "7,052,665.00"
-    assert classify_kind("Construction of 330kV Transmission Lines") == "transmission line"
+def test_tender_kind_and_voltage():
+    from app.tender_facts import classify_kind, max_kv
+    assert classify_kind("Construction of 330kV Transmission Lines") == "overhead line"
     assert max_kv("110/35/10 kV Shari substation and 220kV line") == 220
 
 
 def test_tender_voltage_comes_from_title_and_unevaluated_match_is_not_zero():
-    from app.market import main_kv
+    from app.tender_facts import main_kv
     from app.recommendation import build_recommendation
     assert main_kv("Turaif 132kV Substation", "connection to the 500kV grid; 132kV bays; 132 kV GIS") == 132
     assert main_kv("New substation", "13.8kV aux; 132kV bays; 132 kV GIS; 380kV line") == 132
     r = build_recommendation(_detail(["MISSING_EVIDENCE", "MISSING_EVIDENCE"]), None, None)
     assert r["match_percent"] is None and "not measured yet" in r["notes"][0]
-
-
-def test_epc_tenders_compare_with_epc_awards_not_equipment_supply():
-    from app.market import scope_of
-    assert scope_of("Design, Supply & installation of 132/33kV substations") == "epc"
-    assert scope_of("Supplying 36 and 11 KV Switchgear and Equipment") == "supply"
-    assert scope_of("LSTK power transformer foundation and substation") == "epc"
-
-
-def test_form_references_are_normalised_and_words_are_not_identifiers():
-    from app.pipeline.gaps import normalize_form_ref
-    assert normalize_form_ref("Appendix\nV") == "APPENDIX V"
-    assert normalize_form_ref("Annexure  XII.") == "ANNEXURE XII"
-    assert normalize_form_ref("Form 15109") == "FORM 15109"
-    assert normalize_form_ref("Exhibit B-2") == "EXHIBIT B-2"
-    for word in ("Appendix shall", "Annexure to", "Form of", "Appendix \nDescribe", "Appendix Vie", "Format"):
-        assert normalize_form_ref(word) is None, word

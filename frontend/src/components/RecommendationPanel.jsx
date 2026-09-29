@@ -1,24 +1,17 @@
 import { useState } from "react";
-import { Sparkles, Mail, Copy, X, ExternalLink } from "lucide-react";
+import { Sparkles, Mail, Copy, X } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
-
-function usd(v) {
-  if (v == null) return "—";
-  return v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`;
-}
 
 const TONE = { BID: "border-[#bcd8c6] bg-[#e7f5ee] text-[#1f7a4d]", NO_BID: "border-[#f5c6c6] bg-[#fdf0f0] text-[#b42318]",
   REVIEW: "border-[#e6d3a3] bg-[#fdf4de] text-[#8a6a22]" };
 
 /** Stage 5J — the rule-based decision explained in plain language, the share of
- *  mandatory requirements the company meets, an expected contract value from
- *  comparable awards, and a first-draft email to the tender owner. Loaded on
+ *  mandatory requirements the company meets, and a first-draft email to the tender owner. Loaded on
  *  demand so the workspace itself stays fast. */
 export default function RecommendationPanel({ tenderId }) {
   const { lang, t } = usePrefs();
   const [rec, setRec] = useState(null);
-  const [est, setEst] = useState(null);
   const [mail, setMail] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -26,8 +19,7 @@ export default function RecommendationPanel({ tenderId }) {
   const load = async () => {
     setBusy(true); setError(null);
     try {
-      const [r, e] = await Promise.all([apiClient.getRecommendation(tenderId, lang), apiClient.getValueEstimate(tenderId)]);
-      setRec(r); setEst(e);
+      setRec(await apiClient.getRecommendation(tenderId, lang));
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   const draft = async () => {
@@ -50,27 +42,11 @@ export default function RecommendationPanel({ tenderId }) {
       {rec && (
         <div className="mt-4 space-y-3">
           <p data-testid="rec-headline" className={`rounded-xl border p-3 text-[15px] font-bold ${TONE[rec.decision] || "border-[#e4e7ec] bg-[#fafaf8] text-[#344054]"}`}>{rec.headline}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3">
             <div className="rounded-xl bg-[#faf9f6] p-4">
               <p className="text-[12px] font-bold text-[#667085]">{t("Company match to mandatory requirements")}</p>
               <p data-testid="match-percent" className="mt-1 text-[26px] font-black text-[#101828]">{rec.match_percent != null ? `${rec.match_percent}%` : "—"}</p>
               {rec.mandatory_total ? <p className="text-[12px] text-[#667085]">{t("{m} of {n} met with evidence", { m: rec.mandatory_met, n: rec.mandatory_total })}</p> : null}
-            </div>
-            <div className="rounded-xl bg-[#faf9f6] p-4">
-              <p className="text-[12px] font-bold text-[#667085]">{t("Expected contract value")}</p>
-              {est?.available ? (
-                <>
-                  <p data-testid="value-range" className="mt-1 text-[22px] font-black text-[#101828]">{usd(est.low)} – {usd(est.high)}</p>
-                  <p className="text-[12px] text-[#667085]">{t("Median {m} from {n} similar awarded contracts ({kind}{kv})", { m: usd(est.median), n: est.comparables, kind: t(est.kind), kv: est.kv ? `, ~${est.kv} kV` : "" })}</p>
-                  <p className="mt-1 text-[11px] text-[#98a2b3]">{t("Based on World Bank-financed contracts; scope and country conditions differ — use as a sanity check.")}</p>
-                  {est.mixed_scope && <p className="text-[11px] text-[#8a6a22]">{t("Few contracts of the same scope — equipment-only and full EPC contracts are mixed, so the range is wider.")}</p>}
-                  <details className="mt-2 text-[12px] text-[#475467]"><summary className="cursor-pointer">{t("Contracts used")}</summary>
-                    <ul className="mt-1 space-y-1">{est.examples.map((x) => (
-                      <li key={x.url}><a className="underline" href={x.url} target="_blank" rel="noopener noreferrer">{x.title}</a> · {x.country} · {usd(x.amount_usd)} <ExternalLink size={10} className="inline" /></li>))}
-                    </ul>
-                  </details>
-                </>
-              ) : <p className="mt-1 text-[13px] text-[#667085]">{t("Not enough comparable awarded contracts yet.")}</p>}
             </div>
           </div>
           {(rec.notes || []).map((n) => <p key={n} className="text-[13px] text-[#475467]">{n}</p>)}

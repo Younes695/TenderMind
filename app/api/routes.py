@@ -1233,15 +1233,3 @@ def tender_email_draft(tender_id: str, lang: str = "en", db: Session = Depends(g
                         _open_issues(db, tender_id, "question", _EMAIL_SKIP),
                         _open_issues(db, tender_id, "missing", _EMAIL_SKIP), lang)
     return {**draft, "company_profile_complete": bool(prof and prof.name)}
-
-
-@router.get("/tenders/{tender_id}/value-estimate")
-def tender_value_estimate(tender_id: str, db: Session = Depends(get_db)):
-    """Expected contract value from comparable awarded contracts (Stage 5J)."""
-    from app.market import estimate
-    t = db.query(Tender).filter(Tender.id == tender_id).first()
-    if not t:
-        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
-    a = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id).order_by(TenderAnalysis.created_at.desc()).first()
-    reqs = " ".join(str(r.get("summary") or "") for r in ((a.requirements if a else None) or [])[:400])
-    return estimate(db, reqs, title=f"{t.title or ''} {t.id}")
