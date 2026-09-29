@@ -42,6 +42,20 @@ export default {
   "Copied": "تم النسخ",
   "Opens your own email app — nothing is sent until you press Send there.": "يفتح تطبيق البريد لديك — لن يُرسل شيء حتى تضغط إرسال هناك.",
 
+  // Assistant
+  "Hello! I am TenderMind's assistant.": "أهلًا! أنا مساعد TenderMind.",
+  "I answer from your own tenders only: deadlines, tasks, eligibility, certificates, similar tenders, clients, materials, and any clause in the tender documents — always with the file and page.": "أجيب من مناقصاتكم فقط: المواعيد، والمهام، والأهلية، والشهادات، والمناقصات المشابهة، والعملاء، والمواد، وأي بند في مستندات المناقصة — دائمًا مع اسم الملف ورقم الصفحة.",
+  "Try for example:": "جرّب مثلًا:",
+  "The closest passages below do not answer this directly:": "أقرب المقاطع أدناه لا تجيب عن هذا مباشرة:",
+  "I answer questions about your tenders, for example:": "أجيب عن أسئلة تخص مناقصاتكم، مثل:",
+  "This tender: {title} ({id}){client}": "هذه المناقصة: {title} ({id}){client}",
+  "You have no tenders yet — add one with New Tender.": "لا توجد لديكم مناقصات بعد — أضف واحدة من «مناقصة جديدة».",
+  "You have {n} tender(s):": "لديكم {n} مناقصة:",
+  "{id}: {title}": "{id}: {title}",
+  "{name}: {qty} {unit} in {n} tenders": "{name}: {qty} {unit} في {n} مناقصات",
+  "What is the bid bond?": "ما قيمة الضمان الابتدائي؟",
+  "Which materials repeat across our tenders?": "ما المواد المتكررة في مناقصاتنا؟",
+
   // Materials & prices
   "Materials & prices": "المواد والأسعار",
   "PRICE UNAVAILABLE": "السعر غير متاح",

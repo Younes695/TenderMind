@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useMatch } from "react-router-dom";
 import { MessageCircleQuestion, X, Send } from "lucide-react";
 import apiClient from "../api/client";
-import { usePrefs } from "../i18n";
+import { usePrefs, translate } from "../i18n";
 import { tx } from "./BidTools";
 
 /** Stage 8 — assistant panel. Answers come from the company's own records, with sources.
@@ -13,11 +13,16 @@ const ASK_TENDER = ["Is this tender suitable for us?", "Why is the recommendatio
   "Do we need a partner or certificates?", "Have we done something similar before?", "Did we work with this client before?",
   "What is still missing on the submission checklist?"];
 
-function Answer({ a }) {
-  const { t } = usePrefs();
+function Answer({ a, onAsk }) {
+  const prefs = usePrefs();
+  // the answer follows the language of the question, not only the interface language
+  const t = a.lang ? (key, vars) => translate(a.lang, key, vars) : prefs.t;
   return (
-    <div className="space-y-1.5 text-[13px] text-[#344054]">
-      {a.lines.map((l, i) => (
+    <div dir={a.lang === "ar" ? "rtl" : a.lang === "en" ? "ltr" : undefined} className="space-y-1.5 text-[13px] text-[#344054]">
+      {a.lines.map((l, i) => l.example ? (
+        <button key={i} type="button" onClick={() => onAsk?.(t(l.key))}
+          className="me-1.5 mt-1 inline-block rounded-full border border-[#d0d5dd] px-3 py-1 text-start text-[12px] text-[#162A4C] hover:border-[#162A4C]">{t(l.key)}</button>
+      ) : (
         <p key={i} className="whitespace-pre-line">
           {l.text ? l.text : tx(t, l.key, l.vars)}
           {l.reason?.key && <span className="block text-[12px] text-[#667085]">{tx(t, l.reason.key, l.reason.vars)}</span>}
@@ -86,7 +91,7 @@ export default function Assistant() {
             )}
             {chat.map((m2, i) => m2.role === "user"
               ? <p key={i} className="ms-auto w-fit max-w-[85%] rounded-2xl bg-[#162A4C] px-3 py-2 text-[13px] text-white">{m2.text}</p>
-              : <div key={i} className="max-w-[95%] rounded-2xl bg-[#faf9f6] px-3 py-2"><Answer a={m2.a} /></div>)}
+              : <div key={i} className="max-w-[95%] rounded-2xl bg-[#faf9f6] px-3 py-2"><Answer a={m2.a} onAsk={ask} /></div>)}
             {busy && <p data-testid="assistant-busy" className="text-[12px] text-[#667085]">{t("Looking through your records…")}</p>}
             <span ref={end} />
           </div>
