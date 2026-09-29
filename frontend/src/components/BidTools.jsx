@@ -17,6 +17,13 @@ export const tx = (t, key, vars, fallback) => {
   return t(key, v);
 };
 
+export const LABEL = {
+  PASS: "Met|check", FAIL: "Not met|check", UNCLEAR: "Unclear|check",
+  APPROVE: "Approve|vote", REJECT: "Reject|vote", ABSTAIN: "Abstain|vote",
+  SUBMITTED: "Submitted|outcome", WON: "Won|outcome", LOST: "Lost|outcome", NOT_SUBMITTED: "Not submitted|outcome",
+};
+const L = (t, v) => t(LABEL[v] || v);
+
 const RESULT_STYLE = { PASS: "bg-[#e7f5ee] text-[#1f7a4d]", FAIL: "bg-[#fdf0f0] text-[#b42318]", UNCLEAR: "bg-[#f2f4f7] text-[#475467]" };
 
 function Block({ icon: Icon, title, children, testid }) {
@@ -34,7 +41,7 @@ function Checks({ checks }) {
     <ul className="space-y-2">
       {checks.map((c) => (
         <li key={c.key} className="text-[13px] text-[#344054]">
-          <span className={`me-2 rounded px-2 py-0.5 text-[11px] font-bold ${RESULT_STYLE[c.result] || ""}`}>{t(c.result)}</span>
+          <span className={`me-2 rounded px-2 py-0.5 text-[11px] font-bold ${RESULT_STYLE[c.result] || ""}`}>{L(t, c.result)}</span>
           <b>{t(c.label)}:</b> {tx(t, c.detail_key, c.detail_vars, c.detail)}
           {c.evidence && <span className="block text-[12px] text-[#667085]">{c.evidence.file} · {t("page")} {c.evidence.page} — “{c.evidence.quote}”</span>}
         </li>
@@ -185,7 +192,7 @@ function Votes({ tenderId, team }) {
             ))}
           </ul>
           <ul className="mt-2 space-y-0.5 text-[12px] text-[#667085]">
-            {data.votes.map((v) => <li key={v.member_name}>{v.member_name} ({t(v.department)}): {t(v.vote)}{v.comment ? ` — ${v.comment}` : ""}</li>)}
+            {data.votes.map((v) => <li key={v.member_name}>{v.member_name} ({t(v.department)}): {L(t, v.vote)}{v.comment ? ` — ${v.comment}` : ""}</li>)}
           </ul>
         </div>
       )}
@@ -200,7 +207,7 @@ function Votes({ tenderId, team }) {
           {DEPARTMENTS.map((d) => <option key={d} value={d}>{t(d)}</option>)}
         </select>
         <select className={input} value={form.vote} onChange={(e) => setForm({ ...form, vote: e.target.value })} aria-label={t("Vote")}>
-          {["APPROVE", "REJECT", "ABSTAIN"].map((v) => <option key={v} value={v}>{t(v)}</option>)}
+          {["APPROVE", "REJECT", "ABSTAIN"].map((v) => <option key={v} value={v}>{L(t, v)}</option>)}
         </select>
         <input className={input} placeholder={t("Comment (optional)")} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} maxLength={1000} />
         <button type="submit" className={primary}>{t("Save vote")}</button>
@@ -224,7 +231,7 @@ function Outcome({ tenderId, initial }) {
     <div className="flex flex-wrap items-center gap-2">
       <select className={`${input} w-auto`} value={value} onChange={(e) => save(e.target.value)} aria-label={t("Outcome")}>
         <option value="">{t("Not set")}</option>
-        {OUTCOMES.map((o) => <option key={o} value={o}>{t(o)}</option>)}
+        {OUTCOMES.map((o) => <option key={o} value={o}>{L(t, o)}</option>)}
       </select>
       <span className="text-[12px] text-[#667085]">{t("Won/lost results feed the “similar past tenders” part of the score.")}</span>
       {msg && <span className="text-[12px] text-[#1f7a4d]">{msg}</span>}

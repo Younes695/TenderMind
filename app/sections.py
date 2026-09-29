@@ -32,7 +32,7 @@ DISCIPLINES = {
     "SCADA & telecom": r"scada|telecom|\brtu\b|fib(er|re)|communication|opgw",
     "Protection & control": r"protection|relay|control panel|interlock|\bscheme",
     "Cables": r"\bcables?\b|termination|cable joint|trench",
-    "LV, DC & lighting": r"lighting|\blv\b|dc system|batter(y|ies)|charger|\bups\b",
+    "LV / DC & lighting": r"lighting|\blv\b|dc system|batter(y|ies)|charger|\bups\b",
     "Quality": r"quality|inspection and test|\bitp\b",
     "HSE": r"safety|health|environment",
     "Commercial": r"pric(e|ing)|payment|bond|guarantee|invoice|local content",
