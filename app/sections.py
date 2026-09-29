@@ -40,6 +40,7 @@ DISCIPLINES = {
     "Primary electrical (GIS / transformers)": r"switchgear|\bgis\b|transformer|busbar|circuit breaker|disconnector|\d+\s?kv",
     "Civil & structural": r"civil|concrete|foundation|building|excavation|steel structure|fence|road|drainage|gatehouse",
 }
+NON_TECHNICAL_DISCIPLINES = {"Commercial", "Legal / contract terms", "HSE", "Quality", "General"}
 _DISC_RX = {k: re.compile(v, re.IGNORECASE) for k, v in DISCIPLINES.items()}
 
 

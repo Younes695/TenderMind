@@ -2002,3 +2002,57 @@ def assistant_ask(payload: dict, db: Session = Depends(get_db), user: dict = Dep
         if not can_read_tender(t, user):
             raise HTTPException(status_code=404, detail="Tender not found")
     return answer(db, user, q, tid, "ar" if payload.get("lang") == "ar" else "en")
+
+
+# ---- Stage 9: portfolio pages
+@router.get("/portfolio/board")
+def portfolio_board(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.portfolio import board
+    return board(db, user, _account_tenders(db, user))
+
+
+@router.get("/portfolio/approvals")
+def portfolio_approvals(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.portfolio import approvals
+    return approvals(db, _account_tenders(db, user))
+
+
+@router.put("/tenders/{tender_id}/final-decision")
+def set_final_decision(tender_id: str, payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """The authorised team records the bid decision (GO / NO_GO), with a reason; audited."""
+    from app.audit import log as _audit
+    t = _tender_or_404(db, tender_id)
+    d = str(payload.get("decision") or "").upper() or None
+    if d is not None and d not in ("GO", "NO_GO"):
+        raise HTTPException(status_code=422, detail="decision must be GO or NO_GO")
+    reason = _clean(payload, "reason", 2000)
+    if d and not reason:
+        raise HTTPException(status_code=422, detail="reason is required")
+    previous = t.final_decision
+    t.final_decision, t.final_reason = d, reason if d else None
+    t.final_by, t.final_at = (_clean(payload, "by") if d else None), (datetime.utcnow() if d else None)
+    if d == "GO" and t.stage in (None, "ELIGIBILITY", "STUDY"):
+        t.stage = "PRICING"
+    if d == "NO_GO":
+        t.stage, t.outcome = "CLOSED", t.outcome or "NOT_SUBMITTED"
+    db.commit()
+    _audit(db, tender_id, "final_decision", {"previous": previous, "new": d, "reason": reason}, user, t.final_by)
+    return {"final_decision": t.final_decision, "stage": t.stage, "outcome": t.outcome}
+
+
+@router.get("/portfolio/work-packages")
+def portfolio_work_packages(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.portfolio import work_packages
+    return work_packages(db, user, _account_tenders(db, user))
+
+
+@router.get("/portfolio/documents")
+def portfolio_documents(q: str = "", db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.portfolio import documents
+    return documents(db, user, _account_tenders(db, user), q[:200])
+
+
+@router.get("/portfolio/analytics")
+def portfolio_analytics(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.portfolio import analytics
+    return analytics(db, user, _account_tenders(db, user))

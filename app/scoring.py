@@ -19,7 +19,7 @@ DEFAULT_WEIGHTS = {"fit": 40, "history": 20, "partners": 15, "votes": 25}
 LABELS = {"fit": "Company fit", "history": "Similar past tenders", "partners": "Past partners",
           "votes": "Department votes"}
 GO, REVIEW = 70, 50
-NON_TECHNICAL = {"Commercial", "Legal / contract terms", "HSE", "Quality", "General"}
+from app.sections import NON_TECHNICAL_DISCIPLINES as NON_TECHNICAL
 
 
 def clean_weights(w: Optional[Dict[str, Any]]) -> Dict[str, float]:

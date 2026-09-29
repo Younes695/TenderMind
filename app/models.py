@@ -36,6 +36,10 @@ class Tender(Base):
     outcome = Column(String, nullable=True)  # Stage 6: WON | LOST | SUBMITTED | NOT_SUBMITTED
     stage = Column(String, nullable=True)  # Stage 8: ELIGIBILITY | STUDY | PRICING | SUBMISSION | SUBMITTED | CLOSED
     submission_deadline = Column(DateTime, nullable=True)  # Stage 8: set by the team
+    final_decision = Column(String, nullable=True)  # Stage 9: GO | NO_GO — the authorised team's decision
+    final_reason = Column(Text, nullable=True)
+    final_by = Column(String, nullable=True)
+    final_at = Column(DateTime, nullable=True)
 
 class TenderDocument(Base):
     __tablename__ = "tender_documents"

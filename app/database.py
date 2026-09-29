@@ -97,7 +97,9 @@ def init_db():
             if "outcome" not in tcols:
                 conn.execute(text("ALTER TABLE tenders ADD COLUMN outcome VARCHAR"))
                 conn.commit()
-            for col, typ in (("stage", "VARCHAR"), ("submission_deadline", "DATETIME")):  # Stage 8
+            for col, typ in (("stage", "VARCHAR"), ("submission_deadline", "DATETIME"),  # Stage 8
+                             ("final_decision", "VARCHAR"), ("final_reason", "TEXT"), ("final_by", "VARCHAR"),
+                             ("final_at", "DATETIME")):  # Stage 9
                 if col not in tcols:
                     conn.execute(text(f"ALTER TABLE tenders ADD COLUMN {col} {typ}"))
                     conn.commit()
