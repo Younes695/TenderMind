@@ -92,6 +92,11 @@ def init_db():
                 if "owner_email" not in tcols:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_email VARCHAR"))
                     conn.commit()
+            # Stage 6: tender outcome (feeds the similar-past-tenders score factor)
+            tcols = [row[1] for row in conn.execute(text("PRAGMA table_info(tenders)")).fetchall()]
+            if "outcome" not in tcols:
+                conn.execute(text("ALTER TABLE tenders ADD COLUMN outcome VARCHAR"))
+                conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
         pass

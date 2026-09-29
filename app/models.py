@@ -33,6 +33,7 @@ class Tender(Base):
     location = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner_email = Column(String, nullable=True, index=True)  # app/access.py
+    outcome = Column(String, nullable=True)  # Stage 6: WON | LOST | SUBMITTED | NOT_SUBMITTED
 
 class TenderDocument(Base):
     __tablename__ = "tender_documents"
@@ -355,3 +356,42 @@ class EligibilityResult(Base):
     override_reason = Column(Text, nullable=True)
     overridden_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TeamMember(Base):
+    """Stage 6 — people who work on the company's tenders (one shared login)."""
+    __tablename__ = "team_members"
+    id = Column(String, primary_key=True)
+    owner_email = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    department = Column(String, nullable=True)
+    role = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TenderTask(Base):
+    """Stage 6 — a task of the tender team on one tender."""
+    __tablename__ = "tender_tasks"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    title = Column(String, nullable=False)
+    assignee = Column(String, nullable=True)          # team member name
+    department = Column(String, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String, default="OPEN")           # OPEN | DONE
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    done_at = Column(DateTime, nullable=True)
+
+
+class DepartmentVote(Base):
+    """Stage 6 — one team member's go/no-go opinion, entered by the tender manager."""
+    __tablename__ = "department_votes"
+    __table_args__ = (UniqueConstraint("tender_id", "member_name", name="uq_vote_tender_member"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    member_name = Column(String, nullable=False)
+    department = Column(String, nullable=False)
+    vote = Column(String, nullable=False)             # APPROVE | REJECT | ABSTAIN
+    comment = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)

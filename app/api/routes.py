@@ -1334,3 +1334,210 @@ def tender_sections_endpoint(tender_id: str, db: Session = Depends(get_db), user
         d["pages"] += s["page_to"] - s["page_from"] + 1
     return {"sections": [dict(s, suppliers=sup.get(s["discipline"], [])) for s in secs],
             "disciplines": sorted(disciplines.values(), key=lambda d: -d["pages"])}
+
+
+# ---- Stage 6: team (one shared login), tasks, department votes, outcome
+def _owned(q, column, user):
+    f = owner_filter(column, user)
+    return q.filter(f) if f is not None else q
+
+
+def _member_dict(m):
+    return {"id": m.id, "name": m.name, "department": m.department, "role": m.role}
+
+
+def _clean(payload, key, limit=120, required=False):
+    v = str(payload.get(key) or "").strip()[:limit]
+    if required and not v:
+        raise HTTPException(status_code=422, detail=f"{key} is required")
+    return v or None
+
+
+@router.get("/team")
+def list_team(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import TeamMember
+    rows = _owned(db.query(TeamMember), TeamMember.owner_email, user).order_by(TeamMember.name).all()
+    return [_member_dict(m) for m in rows]
+
+
+@router.post("/team")
+def add_team_member(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import TeamMember
+    m = TeamMember(id=f"TM-{uuid.uuid4().hex[:8].upper()}", owner_email=owner_for_new_rows(user),
+                   name=_clean(payload, "name", required=True), department=_clean(payload, "department"),
+                   role=_clean(payload, "role"))
+    db.add(m)
+    db.commit()
+    return _member_dict(m)
+
+
+def _get_member(db, member_id, user):
+    from app.models import TeamMember
+    m = _owned(db.query(TeamMember).filter(TeamMember.id == member_id), TeamMember.owner_email, user).first()
+    if m is None:
+        raise HTTPException(status_code=404, detail="Team member not found")
+    return m
+
+
+@router.put("/team/{member_id}")
+def update_team_member(member_id: str, payload: dict, db: Session = Depends(get_db),
+                       user: dict = Depends(require_auth)):
+    m = _get_member(db, member_id, user)
+    for k in ("name", "department", "role"):
+        if k in payload:
+            setattr(m, k, _clean(payload, k, required=(k == "name")))
+    db.commit()
+    return _member_dict(m)
+
+
+@router.delete("/team/{member_id}")
+def delete_team_member(member_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    db.delete(_get_member(db, member_id, user))
+    db.commit()
+    return {"deleted": member_id}
+
+
+def _task_dict(t):
+    return {"id": t.id, "tender_id": t.tender_id, "title": t.title, "assignee": t.assignee,
+            "department": t.department, "due_date": t.due_date.date().isoformat() if t.due_date else None,
+            "status": t.status, "notes": t.notes}
+
+
+def _parse_due(v):
+    if not v:
+        return None
+    try:
+        return datetime.strptime(str(v)[:10], "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=422, detail="due_date must be YYYY-MM-DD")
+
+
+def _tender_or_404(db, tender_id):
+    t = db.query(Tender).filter(Tender.id == tender_id).first()
+    if t is None:
+        raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    return t
+
+
+@router.get("/tenders/{tender_id}/tasks")
+def list_tasks(tender_id: str, db: Session = Depends(get_db)):
+    from app.models import TenderTask
+    _tender_or_404(db, tender_id)
+    rows = db.query(TenderTask).filter(TenderTask.tender_id == tender_id).order_by(TenderTask.created_at).all()
+    return [_task_dict(t) for t in rows]
+
+
+@router.post("/tenders/{tender_id}/tasks")
+def add_task(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+    from app.models import TenderTask
+    _tender_or_404(db, tender_id)
+    t = TenderTask(id=f"TT-{uuid.uuid4().hex[:8].upper()}", tender_id=tender_id,
+                   title=_clean(payload, "title", 300, required=True), assignee=_clean(payload, "assignee"),
+                   department=_clean(payload, "department"), due_date=_parse_due(payload.get("due_date")),
+                   notes=_clean(payload, "notes", 2000), status="OPEN")
+    db.add(t)
+    db.commit()
+    return _task_dict(t)
+
+
+@router.put("/tenders/{tender_id}/tasks/{task_id}")
+def update_task(tender_id: str, task_id: str, payload: dict, db: Session = Depends(get_db)):
+    from app.models import TenderTask
+    t = db.query(TenderTask).filter(TenderTask.id == task_id, TenderTask.tender_id == tender_id).first()
+    if t is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    for k in ("title", "assignee", "department", "notes"):
+        if k in payload:
+            setattr(t, k, _clean(payload, k, 2000 if k == "notes" else 300, required=(k == "title")))
+    if "due_date" in payload:
+        t.due_date = _parse_due(payload.get("due_date"))
+    if "status" in payload:
+        st = str(payload.get("status") or "").upper()
+        if st not in ("OPEN", "DONE"):
+            raise HTTPException(status_code=422, detail="status must be OPEN or DONE")
+        t.status, t.done_at = st, (datetime.utcnow() if st == "DONE" else None)
+    db.commit()
+    return _task_dict(t)
+
+
+@router.delete("/tenders/{tender_id}/tasks/{task_id}")
+def delete_task(tender_id: str, task_id: str, db: Session = Depends(get_db)):
+    from app.models import TenderTask
+    n = db.query(TenderTask).filter(TenderTask.id == task_id, TenderTask.tender_id == tender_id).delete()
+    db.commit()
+    if not n:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"deleted": task_id}
+
+
+@router.get("/tasks/groups")
+def task_groups(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Similar open tasks across the account's tenders — do them once."""
+    from app.models import TenderTask
+    from app.team import similar_groups
+    ids = _account_tender_ids(db, user)
+    rows = (db.query(TenderTask).filter(TenderTask.tender_id.in_(ids), TenderTask.status == "OPEN").all()
+            if ids else [])
+    return similar_groups([_task_dict(t) for t in rows])
+
+
+def _vote_dict(v):
+    return {"member_name": v.member_name, "department": v.department, "vote": v.vote, "comment": v.comment,
+            "updated_at": v.updated_at.isoformat() if v.updated_at else None}
+
+
+def _votes_payload(db, tender_id):
+    from app.models import DepartmentVote
+    from app.team import vote_summary
+    votes = [_vote_dict(v) for v in db.query(DepartmentVote).filter(DepartmentVote.tender_id == tender_id)
+             .order_by(DepartmentVote.department, DepartmentVote.member_name).all()]
+    return {"votes": votes, "summary": vote_summary(votes)}
+
+
+@router.get("/tenders/{tender_id}/votes")
+def list_votes(tender_id: str, db: Session = Depends(get_db)):
+    _tender_or_404(db, tender_id)
+    return _votes_payload(db, tender_id)
+
+
+@router.put("/tenders/{tender_id}/votes")
+def put_vote(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+    """The tender manager records one member's vote (insert or update)."""
+    from app.models import DepartmentVote
+    from app.team import VOTES
+    _tender_or_404(db, tender_id)
+    name = _clean(payload, "member_name", required=True)
+    vote = str(payload.get("vote") or "").upper()
+    if vote not in VOTES:
+        raise HTTPException(status_code=422, detail="vote must be APPROVE, REJECT or ABSTAIN")
+    v = db.query(DepartmentVote).filter(DepartmentVote.tender_id == tender_id,
+                                        DepartmentVote.member_name == name).first()
+    if v is None:
+        v = DepartmentVote(id=f"DV-{uuid.uuid4().hex[:8].upper()}", tender_id=tender_id, member_name=name)
+        db.add(v)
+    v.department = _clean(payload, "department", required=True)
+    v.vote, v.comment, v.updated_at = vote, _clean(payload, "comment", 1000), datetime.utcnow()
+    db.commit()
+    return _votes_payload(db, tender_id)
+
+
+@router.delete("/tenders/{tender_id}/votes/{member_name}")
+def delete_vote(tender_id: str, member_name: str, db: Session = Depends(get_db)):
+    from app.models import DepartmentVote
+    db.query(DepartmentVote).filter(DepartmentVote.tender_id == tender_id,
+                                    DepartmentVote.member_name == member_name).delete()
+    db.commit()
+    return _votes_payload(db, tender_id)
+
+
+@router.put("/tenders/{tender_id}/outcome")
+def set_outcome(tender_id: str, payload: dict, db: Session = Depends(get_db)):
+    from app.team import OUTCOMES
+    t = _tender_or_404(db, tender_id)
+    o = payload.get("outcome")
+    o = str(o).upper() if o else None
+    if o is not None and o not in OUTCOMES:
+        raise HTTPException(status_code=422, detail=f"outcome must be one of {', '.join(OUTCOMES)}")
+    t.outcome = o
+    db.commit()
+    return {"tender_id": t.id, "outcome": t.outcome}
