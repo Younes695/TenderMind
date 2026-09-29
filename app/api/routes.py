@@ -1201,7 +1201,8 @@ def _open_issues(db, tender_id, category, skip_kinds=()):
 
 
 @router.get("/tenders/{tender_id}/recommendation")
-def tender_recommendation(tender_id: str, lang: str = "en", db: Session = Depends(get_db)):
+def tender_recommendation(tender_id: str, lang: str = "en", db: Session = Depends(get_db),
+                          user: dict = Depends(require_auth)):
     from app.recommendation import build_recommendation
     from app.issues import sync_issues
     if not db.query(Tender).filter(Tender.id == tender_id).first():
@@ -1218,7 +1219,9 @@ def tender_recommendation(tender_id: str, lang: str = "en", db: Session = Depend
         db.rollback()
     review = {"missing_open": len(_open_issues(db, tender_id, "missing")),
               "question_open": len(_open_issues(db, tender_id, "question"))}
-    return build_recommendation(detail, analysis, review, lang)
+    rec = build_recommendation(detail, analysis, review, lang)
+    rec["score"] = _score_for(db, tender_id, user, rec, detail)
+    return rec
 
 
 @router.get("/tenders/{tender_id}/email-draft")
@@ -1541,3 +1544,54 @@ def set_outcome(tender_id: str, payload: dict, db: Session = Depends(get_db)):
     t.outcome = o
     db.commit()
     return {"tender_id": t.id, "outcome": t.outcome}
+
+
+# ---- Stage 6: Go/No-Go score
+def _score_for(db, tender_id, user, rec=None, detail=None):
+    from app.scoring import tender_score
+    t = _tender_or_404(db, tender_id)
+    if rec is None:
+        from app.recommendation import build_recommendation
+        try:
+            detail = get_decision_detail(tender_id, db)
+        except HTTPException:
+            detail = None
+        rec = build_recommendation(detail, None, None)
+    hard = int(((detail or {}).get("decision") or {}).get("hard_fail_count") or 0)
+    return tender_score(db, t, user, rec.get("match_percent"), hard)
+
+
+@router.get("/tenders/{tender_id}/score")
+def tender_score_endpoint(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    return _score_for(db, tender_id, user)
+
+
+@router.get("/score-weights")
+def get_score_weights(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import ScoreSettings
+    from app.scoring import clean_weights
+    st = db.query(ScoreSettings).filter(ScoreSettings.id == _profile_key(user)).first()
+    return clean_weights(st.weights if st else None)
+
+
+@router.put("/score-weights")
+def put_score_weights(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import ScoreSettings
+    from app.scoring import DEFAULT_WEIGHTS, clean_weights
+    for k, v in payload.items():
+        if k not in DEFAULT_WEIGHTS:
+            raise HTTPException(status_code=422, detail=f"Unknown factor: {k}")
+        try:
+            if not 0 <= float(v) <= 100:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail=f"{k} must be a number from 0 to 100")
+    if sum(float(payload.get(k, d)) for k, d in DEFAULT_WEIGHTS.items()) <= 0:
+        raise HTTPException(status_code=422, detail="At least one weight must be above 0")
+    w = clean_weights(payload)
+    st = db.query(ScoreSettings).filter(ScoreSettings.id == _profile_key(user)).first() \
+        or ScoreSettings(id=_profile_key(user))
+    st.weights, st.updated_at = w, datetime.utcnow()
+    db.merge(st)
+    db.commit()
+    return w

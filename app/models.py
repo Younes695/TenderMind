@@ -395,3 +395,11 @@ class DepartmentVote(Base):
     vote = Column(String, nullable=False)             # APPROVE | REJECT | ABSTAIN
     comment = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScoreSettings(Base):
+    """Stage 6 — per-account Go/No-Go factor weights."""
+    __tablename__ = "score_settings"
+    id = Column(String, primary_key=True)             # account email or "local"
+    weights = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow)
