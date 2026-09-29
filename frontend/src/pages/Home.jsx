@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import HeroHome from "../components/HeroHome";
+import { useT } from "../i18n";
 import {
   FileWarning,
   LayoutGrid,
@@ -165,6 +166,7 @@ const features = [
 
 
 function Home() {
+  const t = useT();
   const [showTop, setShowTop] = useState(false);
 
   useEffect(() => {
