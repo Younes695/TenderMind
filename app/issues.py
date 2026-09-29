@@ -177,7 +177,7 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
             out.append({"category": "question", "kind": "conflict",
                         "title": f"Documents disagree: {c['label']}",
                         "detail": "Which value applies?\n" + "\n".join(lines),
-                        "source_document": first["file"], "page": str(first["page"]), "priority": "HIGH",
+                        "source_document": first["file"], "page": str(first["page"]), "priority": "MEDIUM",
                         "dedupe_key": _key("conflict", c["fact"], [v["value"] for v in c["values"]],
                                            [v["quote"][:80] for v in c["values"]])})
     except Exception:

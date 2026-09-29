@@ -125,8 +125,25 @@ def split_sections(sources) -> List[Dict[str, Any]]:
     return out
 
 
+_SRC: Dict[str, Any] = {}
+
+
 def sources_from_cache(tender_id: str):
-    """Page texts saved by the extraction checkpoint (no re-extraction)."""
+    """Page texts saved by the extraction checkpoint, parsed once per cache state."""
+    from app.pipeline.checkpoint import cache_dir
+    d = cache_dir(tender_id)
+    stamp = tuple(sorted((f.name, f.stat().st_mtime) for f in d.glob("extract-v*.json"))) if d.is_dir() else ()
+    hit = _SRC.get(tender_id)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    res = _read_sources(tender_id)
+    if len(_SRC) > 16:
+        _SRC.clear()
+    _SRC[tender_id] = (stamp, res)
+    return res
+
+
+def _read_sources(tender_id: str):
     from app.pipeline.checkpoint import cache_dir
     from app.pipeline.two_stage_runner import adapt_doc_results
     d = cache_dir(tender_id)

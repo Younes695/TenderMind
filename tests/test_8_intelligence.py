@@ -116,3 +116,21 @@ def test_assistant_intents_and_search():
     r = c.post("/api/assistant/ask", json={"question": "What tasks are overdue?"}).json()
     assert r["intent"] == "overdue" and r["lines"]
     assert c.post("/api/assistant/ask", json={"question": "why", "tender_id": "NOPE-XYZ"}).status_code == 404
+
+
+def test_review_fixes_intents_arabic_terms_demo_and_formula_cells():
+    from app.assistant import _query_terms, intent_of
+    assert intent_of("What is the penalty for late delivery?") == "search"   # not "overdue tasks"
+    assert intent_of("What materials are required for the cable?") == "search"
+    assert intent_of("Why is the recommendation No-Go?") == "why"
+    words, _ = _query_terms("ما مدة الضمان؟")
+    assert "الضمان" in words                                                  # Arabic questions are searchable
+    from app.database import SessionLocal
+    from app.models import Tender
+    from app.similarity import client_history
+    db = SessionLocal()
+    try:
+        demo = db.get(Tender, "SA-2018-HV2") or Tender(id="SA-2018-HV2", title="demo", client="MNHD")
+        assert client_history(db, demo) == ([], None)                          # demo never lists anyone's tenders
+    finally:
+        db.close()

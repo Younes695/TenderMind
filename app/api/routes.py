@@ -1593,7 +1593,12 @@ def _score_for(db, tender_id, user, rec=None, detail=None):
             detail = None
         rec = build_recommendation(detail, None, None)
     hard = int(((detail or {}).get("decision") or {}).get("hard_fail_count") or 0)
-    return tender_score(db, t, user, rec.get("match_percent"), hard)
+    res = tender_score(db, t, user, rec.get("match_percent"), hard)
+    _LAST_SCORE[tender_id] = res  # the dashboard shows this same number
+    return res
+
+
+_LAST_SCORE: dict = {}
 
 
 @router.get("/tenders/{tender_id}/score")
@@ -1766,15 +1771,16 @@ def compliance_matrix(tender_id: str, lang: str = "en", db: Session = Depends(ge
     for c in m[1]:
         c.font, c.fill = Font(bold=True, color="FFFFFF"), head_fill
     fills = {"PASS": "E7F5EE", "FAIL": "FDF0F0", "REVIEW": "FDF4DE", "MISSING_EVIDENCE": "F2F4F7"}
+    safe_cell = lambda v: ("'" + v) if isinstance(v, str) and v[:1] in "=+-@" else v  # no formulas from tender text
     for r in reqs:
         ev = r.get("evidence") or []
         ev_txt = "\n".join(f"{e.get('source_document') or ''} {e.get('page_or_section') or ''}: "
                            f"{str(e.get('quote') or e.get('fact') or '')[:200]}".strip() for e in ev[:3])
         st = r.get("status")
-        m.append([r.get("requirement_id"), r.get("source_quote") or r.get("requirement"), r.get("category"),
+        m.append([safe_cell(x) for x in [r.get("requirement_id"), r.get("source_quote") or r.get("requirement"), r.get("category"),
                   ("Yes" if not ar else "نعم") if r.get("mandatory") else ("No" if not ar else "لا"),
                   r.get("source_document"), r.get("page_or_section"), ev_txt,
-                  _STATUS_TEXT[lang].get(st, st), _GAP_TEXT[lang].get(st, ""), ""])
+                  _STATUS_TEXT[lang].get(st, st), _GAP_TEXT[lang].get(st, ""), ""]])
         if st in fills:
             m.cell(row=m.max_row, column=8).fill = PatternFill("solid", fgColor=fills[st])
     for col, w in zip("ABCDEFGHIJ", (10, 70, 14, 10, 30, 8, 50, 16, 34, 30)):
@@ -1969,11 +1975,7 @@ def dashboard_attention(db: Session = Depends(get_db), user: dict = Depends(requ
             blocked.append({"id": t.id, "title": t.title})
             continue
         if t.id in analysed and not t.outcome and t.stage not in CLOSED_STAGES:
-            try:
-                sc = tender_score(db, t, user, None, 0)
-            except Exception:
-                db.rollback()
-                sc = None
+            sc = _LAST_SCORE.get(t.id)  # computed when the tender's score was last shown
             awaiting.append({"id": t.id, "title": t.title, "stage": t.stage,
                              "deadline": t.submission_deadline.date().isoformat() if t.submission_deadline else None,
                              "score": sc.get("score") if sc else None, "band": sc.get("band") if sc else None})

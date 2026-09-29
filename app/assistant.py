@@ -11,17 +11,18 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-INTENTS = [
-    ("overdue", r"overdue|late\b|behind|متأخر|متاخر|فات ميعاد"),
-    ("deadlines", r"deadline|due\b|dates?\b|when .* submit|موعد|مواعيد|ميعاد|امتى"),
-    ("why", r"\bwhy\b|reason|explain|ليه|لماذا|سبب|اشرح"),
-    ("suitable", r"suitable|fit\b|eligib|should we|go\s*/?\s*no|worth|مناسب|ندخل|أهلية|اهلية|نقدم"),
+INTENTS = [  # narrow phrases only; anything unsure goes to the search
+    ("overdue", r"overdue|متأخر|متاخر|فات ميعاد"),
+    ("deadlines", r"\bdeadlines?\b|submission date|when .* submit|مواعيد|موعد التقديم|ميعاد التقديم|امتى .*نقدم"),
+    ("why", r"\bwhy\b.{0,40}(recommend|score|go\b|no-?go|decision)|reason for the (recommendation|score|decision)|"
+            r"(ليه|لماذا|سبب).{0,20}(التوصية|الدرجة|القرار|نو جو|راجع)"),
+    ("suitable", r"suitable|eligib|should we (bid|go)|worth (it|bidding)|مناسب|ندخل|أهلية|اهلية"),
     ("certificates", r"certif|partner|iso\b|prequal|approved|شهاد|شريك|تأهيل|تاهيل|اعتماد"),
     ("client", r"client|customer|owner|worked with|العميل|عميل"),
-    ("similar", r"similar|before|previous|past|مشابه|شبه|قبل كده|سابق|قبل كدا"),
+    ("similar", r"similar|participated|done .{0,20} before|مشابه|شبه|قبل كده|قبل كدا"),
     ("checklist", r"checklist|submission (items|documents)|what .* submit|مستندات التقديم|قائمة|قايمة"),
     ("conflicts", r"conflict|contradict|disagree|تعارض|اختلاف"),
-    ("bulk", r"bulk|same material|materials?\b|شراء مجمع|نفس الماد|خامات|مواد"),
+    ("bulk", r"bulk|same materials?|شراء مجمع|نفس الماد|نفس الخامات"),
 ]
 _RX = [(k, re.compile(p, re.IGNORECASE)) for k, p in INTENTS]
 
@@ -49,7 +50,8 @@ _QSTOP = {"what", "which", "does", "the", "this", "that", "tender", "with", "hav
 
 
 def _query_terms(question: str):
-    words = [w for w in re.findall(r"[a-z0-9]{3,}", question.lower()) if w not in _QSTOP]
+    # Latin and Arabic words (the packages mix both; Arabic documents are searched too)
+    words = [w for w in re.findall(r"[a-z0-9]{3,}|[\u0621-\u064a]{3,}", question.lower()) if w not in _QSTOP]
     phrases = [f"{a} {b}" for a, b in zip(words, words[1:])]
     return set(words), phrases
 
@@ -113,8 +115,9 @@ def _llm_answer(question: str, sources: List[Dict[str, Any]], lang: str) -> Opti
         try:
             import os
             import requests
-            base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
-            model = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+            base = (os.environ.get("TENDERMIND_OLLAMA_ENDPOINT") or os.environ.get("OLLAMA_BASE_URL")
+                    or "http://localhost:11434").rstrip("/")
+            model = os.environ.get("TENDERMIND_OLLAMA_MODEL") or os.environ.get("OLLAMA_MODEL") or "qwen2.5:3b"
         except Exception:
             return None
     else:
@@ -139,7 +142,7 @@ def answer(db, user, question: str, tender_id: Optional[str] = None, lang: str =
     from app.models import EligibilityResult, TenderTask
     from app.reminders import for_tenders
     tenders = _account_tenders(db, user)
-    by_id = {t.id: t for t in tenders}
+    by_id = {t.id: t for t in _account_tenders(db, user, include_demo=True)}  # the route checked read access
     tender = by_id.get(tender_id) if tender_id else None
     kind = intent_of(question)
     lines: List[Dict[str, Any]] = []
@@ -161,6 +164,8 @@ def answer(db, user, question: str, tender_id: Optional[str] = None, lang: str =
         dated = sorted([t for t in tenders if t.submission_deadline], key=lambda t: t.submission_deadline)
         if not dated and not rs:
             lines.append(L("No submission deadlines are set yet — set them on each tender page."))
+        for r in [r for r in rs if r["kind"].startswith("task")][:5]:
+            lines.append(L("{tender}: " + r["key"], tender=r["tender_id"], **r["vars"]))
         for t in dated[:10]:
             lines.append(L("{tender}: submission {date}", tender=t.id, date=t.submission_deadline.date().isoformat()))
             link(t.id)

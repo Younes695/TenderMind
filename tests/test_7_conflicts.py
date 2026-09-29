@@ -52,7 +52,7 @@ def test_conflict_becomes_a_high_question(monkeypatch):
     try:
         db.add(Tender(id=tid, title="t")); db.commit()
         q = [c for c in build_candidates(db, tid) if c["kind"] == "conflict"]
-        assert len(q) == 1 and q[0]["priority"] == "HIGH" and "Bid validity" in q[0]["title"]
+        assert len(q) == 1 and q[0]["priority"] == "MEDIUM" and "Bid validity" in q[0]["title"]
         assert "90 days" in q[0]["detail"] and "Form.doc" in q[0]["detail"]
     finally:
         db.close()

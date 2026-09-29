@@ -129,6 +129,8 @@ def client_history(db, tender):
     """Earlier tenders of the same owner account with the same client (for the notification)."""
     from app.access import DEMO_TENDER_ID
     from app.models import Tender
+    if tender.id == DEMO_TENDER_ID:
+        return [], None  # shared demo: never list anybody's own tenders
     target = profile(db, tender)
     if not target["client_key"]:
         return [], None
