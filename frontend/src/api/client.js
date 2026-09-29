@@ -316,6 +316,11 @@ export const setOutcome = (id, outcome) => jsonCall(`${T(id)}/outcome`, "PUT", {
 export const getScore = (id) => jsonCall(`${T(id)}/score`);
 export const getScoreWeights = () => jsonCall(`/api/score-weights`);
 export const saveScoreWeights = (data) => jsonCall(`/api/score-weights`, "PUT", data);
+// Stage 7
+export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
+export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
+export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
+export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
 
 const apiClient = {
   listTenders,
@@ -381,6 +386,10 @@ const apiClient = {
   getScore,
   getScoreWeights,
   saveScoreWeights,
+  getChecklist,
+  updateChecklistItem,
+  getDecisionPack,
+  complianceMatrixUrl,
   apiUrl,
 };
 

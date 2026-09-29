@@ -718,11 +718,22 @@ def get_decision_detail(tender_id: str, db: Session = Depends(get_db)):
         dec, _ = get_or_create_decision(db, tender_id)
     status_results = evaluate_all(db, tender_id)
     items = []
+    # Two queries for all evidence instead of two per requirement (Turaif: 2,387 requirements).
+    req_ids = [r.id for r in reqs]
+    matches: dict = {}
+    for i in range(0, len(req_ids), 800):  # SQLite parameter limit
+        for m in db.query(EvidenceMatch).filter(EvidenceMatch.requirement_id.in_(req_ids[i:i + 800])).all():
+            matches.setdefault(m.requirement_id, []).append(m.evidence_id)
+    ev_ids = list({e for lst in matches.values() for e in lst})
+    evidence_by_id = {}
+    for i in range(0, len(ev_ids), 800):
+        for ev in db.query(Evidence).filter(Evidence.id.in_(ev_ids[i:i + 800])).all():
+            evidence_by_id[ev.id] = ev
     for r in reqs:
         sr = status_results.get(r.id, {})
         evs = []
-        for m in db.query(EvidenceMatch).filter(EvidenceMatch.requirement_id == r.id).all():
-            ev = db.query(Evidence).filter(Evidence.id == m.evidence_id).first()
+        for eid in matches.get(r.id, []):
+            ev = evidence_by_id.get(eid)
             if ev:
                 evs.append({"evidence_id": ev.id, "status": ev.status, "fact": ev.fact,
                             "source_document": ev.source_document, "page_or_section": ev.page_or_section,
@@ -1810,8 +1821,9 @@ def decision_pack(tender_id: str, lang: str = "en", db: Session = Depends(get_db
         score = None
     others = [x for x in _account_tender_ids(db, user) if x != tender_id]
     try:
-        certs = find_certs(sources_from_cache(tender_id), capability_dict(capability_for(db, t)),
-                           suppliers_by_discipline(db, others))
+        from app.certifications import tender_certifications
+        certs = tender_certifications(tender_id, capability_dict(capability_for(db, t)),
+                                      suppliers_by_discipline(db, others))
     except Exception:
         certs = []
     reqs = (detail or {}).get("requirements") or []

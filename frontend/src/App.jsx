@@ -8,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import GoNoGo from "./pages/GoNoGo";
 import NewTender from "./pages/NewTender";
 import TenderWorkspace from "./pages/TenderWorkspace";
+import DecisionPack from "./pages/DecisionPack";
 import Solutions from "./pages/Solution";
 import Industries from "./pages/Industries";
 import Security from "./pages/Security";
@@ -56,6 +57,7 @@ function App() {
             existed in the codebase but was never wired into the router. */}
         <Route element={<ProtectedRoute/>}>
           <Route path="/tenders/new" element={<NewTender/>}/>
+          <Route path="/tenders/:tender_id/pack" element={<DecisionPack/>}/>
           <Route element={<Dashboardlayout/>}>
             <Route path="/dashboard" element={<Dashboard/>}/>
             <Route path="/go-no-go" element={<GoNoGo/>}/>

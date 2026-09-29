@@ -27,7 +27,8 @@ _TYPE_TEST = re.compile(r"\btype\W{0,3}(?:\(design\)\s*)?test(?:ed)?\s+(certific
                         re.IGNORECASE)
 _COMPETENCY = re.compile(r"\bcertificates?\s+of\s+competency\b|\bcertified\s+(?:terminator|jointer|welder|splicer|"
                          r"operator|electrician)s?\b", re.IGNORECASE)
-_PRODUCT = re.compile(r"\bSASO\s+certifi\w*|\bSABER\b|\blocal content certificate\b", re.IGNORECASE)
+_PRODUCT = re.compile(r"\bSASO\s+certifi\w*|\bSABER\b", re.IGNORECASE)
+_LOCAL_CONTENT = re.compile(r"\blocal content certificate\b", re.IGNORECASE)
 _CLASSIFICATION = re.compile(r"\bcontractors?\W{0,2}\s*classification\b|\bclassification\s+(grade|certificate)\b",
                              re.IGNORECASE)
 _SUBCONTRACT_RULE = re.compile(r"not\s+pre-?qualified.{0,120}\bsub-?contract", re.IGNORECASE)
@@ -41,7 +42,8 @@ NAMES = {
     "approved_list": "Approved / prequalified manufacturers and vendors",
     "type_test": "Type-test certificates (KEMA / CESI / IEC) of the equipment",
     "competency": "Certificates of competency for staff (welders, jointers, operators)",
-    "product": "Product / local content certificates (SASO, local content)",
+    "product": "Product certificates of the equipment (SASO / SABER)",
+    "local_content": "Local content certificates of suppliers",
     "classification": "Contractor classification certificate",
 }
 
@@ -60,12 +62,13 @@ def _demands_in(text: str):
         else:
             yield (NAMES["prequal"], "prequal", m.start(), m.end())
     for kind, rx in (("approved_list", _APPROVED_LIST), ("type_test", _TYPE_TEST), ("competency", _COMPETENCY),
-                     ("product", _PRODUCT), ("classification", _CLASSIFICATION)):
+                     ("product", _PRODUCT), ("local_content", _LOCAL_CONTENT),
+                     ("classification", _CLASSIFICATION)):
         for m in rx.finditer(text):
             yield (NAMES[kind], kind, m.start(), m.end())
 
 
-_PARTNER_KINDS = {"prequal_partner", "approved_list", "type_test", "product"}
+_PARTNER_KINDS = {"prequal_partner", "approved_list", "type_test", "product", "local_content"}
 
 
 def _who(sentence: str, kind: str) -> str:
@@ -136,3 +139,22 @@ def summary(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     c = {k: sum(1 for i in items if i["status"] == k) for k in ("MISSING", "PARTNER_NEEDED", "CHECK", "HELD")}
     c["needs_partner"] = c["PARTNER_NEEDED"] > 0 or c["MISSING"] > 0
     return c
+
+
+_CACHE: Dict[str, Any] = {}
+
+
+def tender_certifications(tender_id: str, cap: Optional[Dict[str, Any]], suppliers: Optional[Dict[str, list]]):
+    """Memoised on the extraction cache + the inputs (profile, suppliers) — the pack loads fast."""
+    import json
+    from app.pipeline.checkpoint import cache_dir
+    from app.sections import sources_from_cache
+    d = cache_dir(tender_id)
+    stamp = (tuple(sorted((f.name, f.stat().st_mtime) for f in d.glob("extract-v*.json"))) if d.is_dir() else (),
+             json.dumps([cap, suppliers], sort_keys=True, default=str))
+    hit = _CACHE.get(tender_id)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    res = find(sources_from_cache(tender_id), cap, suppliers) if stamp[0] else []
+    _CACHE[tender_id] = (stamp, res)
+    return res

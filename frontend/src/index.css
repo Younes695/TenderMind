@@ -63,3 +63,12 @@ html.dark .tm-read-page, html.dark .tm-read-fold, html.dark .tm-read-line { stro
   .tm-skel::after { animation: none; }
   .tm-read-line { animation: none; stroke-dashoffset: 0; opacity: 0.6; }
 }
+
+/* Stage 7 — decision pack printing */
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff !important; }
+  .decision-pack { max-width: none; padding: 0; }
+  .pack-section { break-inside: avoid; box-shadow: none; }
+  header.pack-section { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

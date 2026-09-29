@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { ShieldAlert, ShieldCheck, Layers, ListTodo, Vote, Trophy, Trash2, CheckCircle2, Circle } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Layers, ListTodo, Vote, Trophy, Trash2, CheckCircle2, Circle, ClipboardCheck, FileSpreadsheet, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
+import { usePrefs } from "../i18n";
 import apiClient from "../api/client";
 import { useT } from "../i18n";
 import { DEPARTMENTS } from "./SettingsStage6";
@@ -222,6 +224,53 @@ function Votes({ tenderId, team }) {
   );
 }
 
+const CL = { TODO: "To do|cl", READY: "Ready|cl", NOT_APPLICABLE: "Not applicable|cl" };
+
+function Checklist({ tenderId, team }) {
+  const t = useT();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    apiClient.getChecklist(tenderId)
+      .then((d) => setData({ items: Array.isArray(d?.items) ? d.items : [], progress: d?.progress || { TODO: 0, READY: 0, NOT_APPLICABLE: 0, total: 0 } }))
+      .catch((e) => setError(e.message));
+  }, [tenderId]);
+  const save = async (it, patch) => {
+    try {
+      const upd = await apiClient.updateChecklistItem(tenderId, it.key, patch);
+      const items = data.items.map((x) => (x.key === it.key ? { ...x, ...upd } : x));
+      const count = (s) => items.filter((x) => x.status === s).length;
+      setData({ items, progress: { TODO: count("TODO"), READY: count("READY"), NOT_APPLICABLE: count("NOT_APPLICABLE"), total: items.length } });
+    } catch (err) { setError(err.message); }
+  };
+  if (!data) return error ? <p className="text-[13px] text-[#b42318]">{error}</p> : null;
+  if (!data.items.length) return <p className="text-[13px] text-[#667085]">{t("No bid submission items found in the tender yet.")}</p>;
+  const pr = data.progress;
+  return (
+    <div>
+      <p data-testid="checklist-progress" className="mb-2 text-[14px] text-[#101828]">{t("{r} of {n} ready, {x} not applicable.", { r: pr.READY, n: pr.total, x: pr.NOT_APPLICABLE })}</p>
+      <ul className="space-y-2">
+        {data.items.map((it) => (
+          <li key={it.key} className="rounded-lg border border-[#eef0f3] p-2.5 text-[13px] text-[#344054]">
+            <p>{it.quote}</p>
+            <p className="mt-0.5 text-[12px] text-[#667085]">{it.file} · {t("page")} {it.page}</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <select className={input} value={it.status} onChange={(e) => save(it, { status: e.target.value })} aria-label={t("Status")}>
+                {Object.keys(CL).map((k) => <option key={k} value={k}>{t(CL[k])}</option>)}
+              </select>
+              <select className={input} value={it.assignee || ""} onChange={(e) => save(it, { assignee: e.target.value })} aria-label={t("Assignee")}>
+                <option value="">{t("Assignee")}</option>
+                {team.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+              </select>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-2 text-[13px] text-[#b42318]">{error}</p>}
+    </div>
+  );
+}
+
 const OUTCOMES = ["SUBMITTED", "WON", "LOST", "NOT_SUBMITTED"];
 
 function Outcome({ tenderId, initial }) {
@@ -247,6 +296,7 @@ function Outcome({ tenderId, initial }) {
 /** Loaded on demand (the workspace itself stays fast). */
 export default function BidTools({ tenderId, outcome }) {
   const t = useT();
+  const { lang } = usePrefs();
   const [open, setOpen] = useState(false);
   const [team, setTeam] = useState([]);
   const [sections, setSections] = useState(null);
@@ -261,7 +311,13 @@ export default function BidTools({ tenderId, outcome }) {
     <section data-testid="bid-tools" className="rounded-2xl border border-[#e8e4dc] bg-white p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-[16px] font-bold text-[#101828]"><Layers size={18} /> {t("Tender team & tools")}</h2>
-        <button type="button" data-testid="open-bid-tools" onClick={() => setOpen(!open)} className={primary}>{open ? t("Hide") : t("Open")}</button>
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/tenders/${encodeURIComponent(tenderId)}/pack`} data-testid="open-decision-pack"
+            className="flex items-center gap-1.5 rounded-lg border border-[#162A4C] px-4 py-2 text-[14px] font-semibold text-[#162A4C]"><FileText size={15} /> {t("Decision pack")}</Link>
+          <a href={apiClient.complianceMatrixUrl(tenderId, lang)} data-testid="download-matrix"
+            className="flex items-center gap-1.5 rounded-lg border border-[#162A4C] px-4 py-2 text-[14px] font-semibold text-[#162A4C]"><FileSpreadsheet size={15} /> {t("Compliance matrix (Excel)")}</a>
+          <button type="button" data-testid="open-bid-tools" onClick={() => setOpen(!open)} className={primary}>{open ? t("Hide") : t("Open")}</button>
+        </div>
       </div>
       {open && (
         <div className="mt-4 space-y-4">
@@ -275,6 +331,7 @@ export default function BidTools({ tenderId, outcome }) {
             </Block>
           )}
           <Block icon={Layers} title={t("RFP parts and suggested suppliers")} testid="rfp-sections"><Sections data={sections} /></Block>
+          <Block icon={ClipboardCheck} title={t("Submission checklist")} testid="submission-checklist"><Checklist tenderId={tenderId} team={team} /></Block>
           <Block icon={ListTodo} title={t("Team tasks")} testid="tender-tasks"><Tasks tenderId={tenderId} team={team} /></Block>
           <Block icon={Vote} title={t("Department votes")} testid="department-votes"><Votes tenderId={tenderId} team={team} /></Block>
           <Block icon={Trophy} title={t("Tender outcome")} testid="tender-outcome"><Outcome tenderId={tenderId} initial={outcome} /></Block>

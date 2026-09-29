@@ -12,7 +12,7 @@ const TONE = { BID: "border-[#bcd8c6] bg-[#e7f5ee] text-[#1f7a4d]", NO_BID: "bor
  *  demand so the workspace itself stays fast. */
 const BAND = { GO: ["Go|band", "bg-[#1f7a4d]"], REVIEW: ["Review|band", "bg-[#a98238]"], NO_GO: ["No-Go|band", "bg-[#b42318]"] };
 
-function ScoreBlock({ score }) {
+export function ScoreBlock({ score }) {
   const { t } = usePrefs();
   const [label, bg] = BAND[score.band] || ["—", "bg-[#98a2b3]"];
   return (

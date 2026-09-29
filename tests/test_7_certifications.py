@@ -49,7 +49,7 @@ def test_staff_certificates_and_optional_flag():
                       "Local content certificate"), {}, {})
     b = {i["name"]: i for i in items}
     assert b["Certificates of competency for staff (welders, jointers, operators)"]["who"] == "staff"
-    assert "Product / local content certificates (SASO, local content)" in b
+    assert "Local content certificates of suppliers" in b
 
 
 def test_no_demands_no_items():
