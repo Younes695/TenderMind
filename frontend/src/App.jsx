@@ -75,6 +75,7 @@ function App() {
           </Route>
         </Route>
 
+        <Route path="*" element={<ComingSoon title="Page not found" description="This address does not exist. Use the menu or go back to the dashboard."/>}/>
       </Routes>
     </BrowserRouter>
   );

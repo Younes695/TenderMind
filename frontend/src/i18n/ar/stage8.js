@@ -40,6 +40,8 @@ export default {
   "Overdue tasks": "مهام متأخرة",
   "Past their due date": "تجاوزت موعدها",
   "Analysed, no outcome yet": "تم تحليلها ولم تُحدد نتيجتها",
+  "Page not found": "الصفحة غير موجودة",
+  "This address does not exist. Use the menu or go back to the dashboard.": "هذا العنوان غير موجود. استخدم القائمة أو ارجع إلى لوحة التحكم.",
   // Similar / client history
   "Similar tenders and client history": "مناقصات مشابهة وتاريخ العميل",
   "Show": "عرض",
