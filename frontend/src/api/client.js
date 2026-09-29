@@ -321,6 +321,11 @@ export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
 export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
 export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
 export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
+// RFQ packages
+export const getRfqPackages = (id) => jsonCall(`${T(id)}/rfq-packages`);
+export const createRfqPackages = (id, data) => jsonCall(`${T(id)}/rfq-packages`, "POST", data);
+export const rfqPackagesZipUrl = (id, keys = [], closesAt = "") =>
+  apiUrl(`${T(id)}/rfq-packages.zip?keys=${encodeURIComponent(keys.join(","))}${closesAt ? `&closes_at=${closesAt}` : ""}`);
 // Stage 8
 export const getSummary = (id) => jsonCall(`${T(id)}/summary`);
 export const getSimilar = (id) => jsonCall(`${T(id)}/similar`);
@@ -407,6 +412,9 @@ const apiClient = {
   updateChecklistItem,
   getDecisionPack,
   complianceMatrixUrl,
+  getRfqPackages,
+  createRfqPackages,
+  rfqPackagesZipUrl,
   getSummary,
   getSimilar,
   setPlan,

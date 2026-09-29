@@ -2058,3 +2058,83 @@ def portfolio_documents(q: str = "", db: Session = Depends(get_db), user: dict =
 def portfolio_analytics(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
     from app.portfolio import analytics
     return analytics(db, user, _account_tenders(db, user))
+
+
+# ---- RFQ packages: one supplier RFQ per equipment package, built from the tender's own pages
+def _rfq_package_list(db, tender_id, user):
+    from app.models import Rfq
+    from app.rfq_packages import tender_packages
+    from app.sections import suppliers_by_discipline
+    pkgs = tender_packages(tender_id)
+    sup = suppliers_by_discipline(db, [t for t in _account_tender_ids(db, user) if t != tender_id])
+    made = {r.package_name: r.id for r in db.query(Rfq).filter(Rfq.tender_id == tender_id).all()}
+    return [dict(p, suppliers=sup.get(p["discipline"], []), rfq_id=made.get(p["name"])) for p in pkgs]
+
+
+@router.get("/tenders/{tender_id}/rfq-packages")
+def rfq_packages_list(tender_id: str, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    _tender_or_404(db, tender_id)
+    return {"packages": _rfq_package_list(db, tender_id, user)}
+
+
+def _closes_at(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)[:10])
+    except ValueError:
+        raise HTTPException(status_code=400, detail="closes_at must be a date (YYYY-MM-DD)")
+
+
+@router.post("/tenders/{tender_id}/rfq-packages")
+def rfq_packages_create(tender_id: str, payload: dict, db: Session = Depends(get_db),
+                        user: dict = Depends(require_auth)):
+    """Register the chosen packages as RFQs (skips packages already registered)."""
+    from app.models import Rfq
+    from app.rfq_packages import scope_text
+    _tender_or_404(db, tender_id)
+    keys = set(payload.get("keys") or [])
+    closes = _closes_at(payload.get("closes_at"))
+    pkgs = [p for p in _rfq_package_list(db, tender_id, user) if not keys or p["key"] in keys]
+    n = db.query(Rfq).filter(Rfq.tender_id == tender_id).count()
+    created = []
+    for p in pkgs:
+        if p["rfq_id"]:
+            continue
+        n += 1
+        r = Rfq(id=f"RFQ-{uuid.uuid4().hex[:10].upper()}", tender_id=tender_id, reference=f"RFQ-{n:02d}",
+                package_name=p["name"][:200], discipline=p["discipline"], scope=scope_text(p), closes_at=closes,
+                currency=str(payload.get("currency") or "SAR").upper()[:3])
+        db.add(r)
+        created.append(r.id)
+    db.commit()
+    return {"created": len(created), "packages": _rfq_package_list(db, tender_id, user)}
+
+
+@router.get("/tenders/{tender_id}/rfq-packages.zip")
+def rfq_packages_zip(tender_id: str, keys: Optional[str] = None, closes_at: Optional[str] = None,
+                     db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Folders per package: brief, scope pages, design criteria, drawings, data schedules to fill."""
+    from fastapi.responses import Response
+    from app.models import CompanyProfile
+    from app.rfq_packages import build_zip, tender_packages
+    from app.sections import sources_from_cache
+    from app.summary import key_dates
+    t = _tender_or_404(db, tender_id)
+    wanted = {k for k in (keys or "").split(",") if k}
+    pkgs = [p for p in tender_packages(tender_id) if not wanted or p["key"] in wanted]
+    if not pkgs:
+        raise HTTPException(status_code=404, detail="No RFQ packages found for this tender")
+    files = {}
+    for d in db.query(TenderDocument).filter(TenderDocument.tender_id == tender_id).all():
+        if d.source_path and Path(d.source_path).is_file():
+            for name in {d.original_filename, d.title}:
+                if name:
+                    files[name] = d.source_path
+    prof = db.query(CompanyProfile).filter(CompanyProfile.id == _profile_key(user)).first()
+    data = build_zip(pkgs, files, {"id": t.id, "title": t.title, "client": t.client, "location": t.location},
+                     key_dates(sources_from_cache(tender_id)), _profile_dict(prof),
+                     str(_closes_at(closes_at).date()) if closes_at else None)
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "-", tender_id)[:60]
+    return Response(data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="RFQs-{safe}.zip"'})
