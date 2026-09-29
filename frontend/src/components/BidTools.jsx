@@ -6,6 +6,7 @@ import apiClient from "../api/client";
 import { useT } from "../i18n";
 import { DEPARTMENTS } from "./SettingsStage6";
 import RfqPackages from "./RfqPackages";
+import { useAccountType } from "../account";
 import TenderMaterials from "./TenderMaterials";
 
 /** Stage 6 — tender workspace tools: the eligibility result (and override),
@@ -311,6 +312,15 @@ function Outcome({ tenderId, initial }) {
 }
 
 /** Loaded on demand (the workspace itself stays fast). */
+/** Department votes belong to company accounts; an individual decides alone. Rendered only when the
+ *  tools are open, so the account type is fetched on demand like everything else here. */
+function VotesBlock({ tenderId, team }) {
+  const t = useT();
+  const accountType = useAccountType();
+  if (accountType === "individual") return null;
+  return <Block icon={Vote} title={t("Department votes")} testid="department-votes"><Votes tenderId={tenderId} team={team} /></Block>;
+}
+
 export default function BidTools({ tenderId, outcome }) {
   const t = useT();
   const { lang } = usePrefs();
@@ -352,7 +362,7 @@ export default function BidTools({ tenderId, outcome }) {
           <Block icon={PackageOpen} title={t("RFQ packages")} testid="rfq-packages"><RfqPackages tenderId={tenderId} /></Block>
           <Block icon={ClipboardCheck} title={t("Submission checklist")} testid="submission-checklist"><Checklist tenderId={tenderId} team={team} /></Block>
           <Block icon={ListTodo} title={t("Team tasks")} testid="tender-tasks"><Tasks tenderId={tenderId} team={team} /></Block>
-          <Block icon={Vote} title={t("Department votes")} testid="department-votes"><Votes tenderId={tenderId} team={team} /></Block>
+          <VotesBlock tenderId={tenderId} team={team} />
           <Block icon={Trophy} title={t("Tender outcome")} testid="tender-outcome"><Outcome tenderId={tenderId} initial={outcome} /></Block>
         </div>
       )}

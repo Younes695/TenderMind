@@ -255,3 +255,18 @@ def test_password_account_linked_by_google_keeps_working(client, google):
         assert r.headers["location"] == "/tenders"
         client.post("/api/auth/logout")
     assert client.post("/api/auth/login", json={"email": email, "password": "Tender2026"}).status_code == 200
+
+
+def test_signup_records_individual_account_type(client):
+    from app.database import SessionLocal
+    from app.models import CompanyProfile
+    email = _email()
+    r = client.post("/api/auth/signup", json={"email": email, "password": "Tender2026", "name": "Mona",
+                                               "account_type": "individual"})
+    assert r.status_code == 200
+    db = SessionLocal()
+    try:
+        p = db.query(CompanyProfile).filter(CompanyProfile.id == email).first()
+        assert p.account_type == "individual" and p.name == "Mona"
+    finally:
+        db.close()

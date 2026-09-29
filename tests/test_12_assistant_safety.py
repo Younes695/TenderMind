@@ -70,3 +70,12 @@ def test_arabic_question_finds_english_clause():
     assert "bid bond" in phrases
     assert _score("The bid bond shall be 2% of the bid price.", words, phrases) >= 2
     assert "المناقصة" not in _query_terms("اسم المناقصة؟")[0]
+
+
+def test_account_type_company_or_individual(c):
+    assert c.get("/api/account").json()["account_type"] in ("company", "individual")
+    before = c.get("/api/account").json()["account_type"]
+    assert c.put("/api/account", json={"account_type": "individual"}).json() == {"account_type": "individual"}
+    assert c.get("/api/account").json()["account_type"] == "individual"
+    assert c.put("/api/account", json={"account_type": "freelancer"}).status_code == 422
+    c.put("/api/account", json={"account_type": before})

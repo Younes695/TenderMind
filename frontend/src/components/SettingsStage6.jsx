@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ShieldCheck, Users, Scale, Trash2 } from "lucide-react";
 import apiClient from "../api/client";
 import { useT } from "../i18n";
+import { useAccountType } from "../account";
 
 /** Stage 6 settings cards: company capabilities (eligibility gate), the tender
  *  team (one shared login, named members) and the Go/No-Go factor weights. */
@@ -48,6 +49,7 @@ function Toggles({ options, value, onChange, label }) {
 const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
 export function CapabilityCard() {
+  const accountType = useAccountType();
   const t = useT();
   const [cap, setCap] = useState(null);
   const [text, setText] = useState({ registrations: "", certifications: "" });
@@ -73,7 +75,7 @@ export function CapabilityCard() {
     } catch (err) { setMsg(`err:${err.message}`); }
   };
   return (
-    <Shell icon={ShieldCheck} testid="capability-card" title={t("Company capabilities")}
+    <Shell icon={ShieldCheck} testid="capability-card" title={accountType === "individual" ? t("My capabilities & certificates") : t("Company capabilities")}
       hint={t("Each new tender is checked against these before the full analysis. Leave empty to skip the check.")}>
       <form onSubmit={save} className="space-y-4">
         <div><p className="mb-2 text-[13px] font-semibold text-[#344054]">{t("Types of work")}</p>

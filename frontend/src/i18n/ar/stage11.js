@@ -89,6 +89,17 @@ export default {
   "Illustrative example — not a real tender": "مثال توضيحي — ليس مناقصة حقيقية",
   "Every requirement extracted and linked to its file and page.": "كل متطلب يُستخرج ويُربط بملفه وصفحته.",
 
+  // Individual accounts
+  "Account type": "نوع الحساب",
+  "Individual professional": "محترف فرد",
+  "A tender team with members, votes and approvals": "فريق مناقصات بأعضاء وتصويت وموافقات",
+  "Your own profile, certificates and tenders": "ملفك وشهاداتك ومناقصاتك الخاصة",
+  "Individual: your own profile, certificates and tender history. Team members, department votes and approvals are hidden.": "فرد: ملفك وشهاداتك وسجل مناقصاتك. أعضاء الفريق وتصويت الإدارات والموافقات مخفية.",
+  "Company: a tender team with members, department votes and approvals.": "شركة: فريق مناقصات بأعضاء وتصويت إدارات وموافقات.",
+  "My profile": "ملفي",
+  "My capabilities & certificates": "قدراتي وشهاداتي",
+  "Name / trading name": "الاسم / الاسم التجاري",
+
   // Materials & prices
   "Materials & prices": "المواد والأسعار",
   "PRICE UNAVAILABLE": "السعر غير متاح",

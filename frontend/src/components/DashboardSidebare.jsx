@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import apiClient from "../api/client";
 import { useT } from "../i18n";
+import { useAccountType } from "../account";
 
 import logo from "../assets/logo.jpg";
 
@@ -69,6 +70,7 @@ const mainNav = [
     to: "/approvals",
     label: "Approvals",
     icon: Stamp,
+    companyOnly: true,  // team sign-off; an individual decides alone
   },
   {
     to: "/documents",
@@ -169,6 +171,7 @@ function initialsFor(email) {
 
 function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
   const t = useT();
+  const accountType = useAccountType();
   const initials = initialsFor(user.email);
 
   return (
@@ -214,7 +217,7 @@ function SidebarContent({ user, onNavigate, onClose, onSignOut }) {
         className="sidebar-scroll space-y-1 overflow-y-auto pr-1"
         aria-label="Main"
       >
-        {mainNav.map((item) => (
+        {mainNav.filter((item) => !(item.companyOnly && accountType === "individual")).map(({ companyOnly, ...item }) => (
           <NavItem
             key={item.to}
             {...item}

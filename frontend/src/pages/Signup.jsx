@@ -24,6 +24,7 @@ function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accountType, setAccountType] = useState("company");
 
   const rulesOk = RULES.every((r) => r.test(password));
   const matches = confirm.length > 0 && confirm === password;
@@ -35,7 +36,7 @@ function Signup() {
     if (!matches) return setError(t("Passwords do not match."));
     setLoading(true);
     try {
-      await apiClient.signup({ name: name.trim(), email: email.trim(), password });
+      await apiClient.signup({ name: name.trim(), email: email.trim(), password, account_type: accountType });
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(t(err?.message || "Sign-up failed"));
@@ -58,6 +59,19 @@ function Signup() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <fieldset data-testid="account-type">
+          <legend className="mb-2 block text-[13px] font-semibold text-[#162A4C]">{t("Account type")}</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {[["company", "Company", "A tender team with members, votes and approvals"],
+              ["individual", "Individual professional", "Your own profile, certificates and tenders"]].map(([v, label, hint]) => (
+              <label key={v} className={`cursor-pointer rounded-xl border p-3 text-[13px] ${accountType === v ? "border-[#162A4C] bg-[#eef2f8]" : "border-[#e2e6ee]"}`}>
+                <input type="radio" name="account_type" value={v} checked={accountType === v} onChange={() => setAccountType(v)} className="me-2" />
+                <b className="text-[#162A4C]">{t(label)}</b>
+                <span className="mt-1 block text-[12px] text-[#4b5f86]">{t(hint)}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div>
           <label htmlFor="name" className="mb-2 block text-[13px] font-semibold text-[#162A4C]">{t("Full name")} <span className="font-normal text-[#98a2b3]">{t("(optional)")}</span></label>
           <div className="relative">

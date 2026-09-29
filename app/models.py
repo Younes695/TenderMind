@@ -333,6 +333,7 @@ class CompanyProfile(Base):
     phone = Column(String, nullable=True)
     website = Column(String, nullable=True)
     address = Column(String, nullable=True)
+    account_type = Column(String, nullable=True)  # company (default) | individual professional
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check } from "lucide-react";
+import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check, UserRound } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
+import { useAccountType, setAccountType } from "../account";
 import { CapabilityCard, TeamCard, WeightsCard } from "../components/SettingsStage6";
 
 const PLANS = [
@@ -36,6 +37,9 @@ function Notice({ msg }) {
 
 export default function Settings() {
   const { lang, setLang, theme, setTheme, t } = usePrefs();
+  const accountType = useAccountType();
+  const [typeMsg, setTypeMsg] = useState(null);
+  const individual = accountType === "individual";
   const [me, setMe] = useState(null);
   const [name, setName] = useState("");
   const [nameMsg, setNameMsg] = useState(null);
@@ -123,9 +127,22 @@ export default function Settings() {
         <Notice msg={nameMsg} />
       </Card>
 
-      <Card icon={Building2} title={t("Company profile")}>
+      <Card icon={Building2} title={t("Account type")}>
+        <div data-testid="account-type-setting" className="flex flex-wrap gap-2">
+          <Choice active={!individual} onClick={async () => { await setAccountType("company"); setTypeMsg(`ok:${t("Saved")}`); }}
+            icon={Building2} label={t("Company")} testid="account-company" />
+          <Choice active={individual} onClick={async () => { await setAccountType("individual"); setTypeMsg(`ok:${t("Saved")}`); }}
+            icon={UserRound} label={t("Individual professional")} testid="account-individual" />
+        </div>
+        <p className="mt-2 text-[12px] text-[#667085]">{individual
+          ? t("Individual: your own profile, certificates and tender history. Team members, department votes and approvals are hidden.")
+          : t("Company: a tender team with members, department votes and approvals.")}</p>
+        <Notice msg={typeMsg} />
+      </Card>
+
+      <Card icon={Building2} title={individual ? t("My profile") : t("Company profile")}>
         <form onSubmit={saveCompany} data-testid="company-profile" className="grid gap-3 sm:grid-cols-2">
-          {[["name", "Company name"], ["contact_name", "Contact person"], ["contact_title", "Job title"], ["email", "Email"],
+          {[["name", individual ? "Name / trading name" : "Company name"], ["contact_name", "Contact person"], ["contact_title", "Job title"], ["email", "Email"],
             ["phone", "Phone"], ["website", "Website"], ["address", "Address"]].map(([k, label]) => (
             <label key={k} className="text-[13px] text-[#344054]">{t(label)}
               <input className={input} value={company[k] || ""} onChange={(e) => setCompany({ ...company, [k]: e.target.value })} maxLength={k === "address" ? 400 : 200} />
@@ -140,7 +157,7 @@ export default function Settings() {
       </Card>
 
       <CapabilityCard />
-      <TeamCard />
+      {!individual && <TeamCard />}
       <WeightsCard />
 
       <Card icon={KeyRound} title={t("Change password")}>

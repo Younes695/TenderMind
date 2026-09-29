@@ -182,11 +182,11 @@ export async function overrideDecision(tenderId, { reviewer, new_decision, reaso
   return handleResponse(resp);
 }
 
-export async function signup({ name, email, password }) {
+export async function signup({ name, email, password, account_type }) {
   const resp = await apiFetch("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, account_type }),
   });
   return handleResponse(resp);
 }
@@ -337,6 +337,9 @@ export async function uploadPriceList({ file, supplier, currency, price_date }) 
   const resp = await apiFetch(`/api/price-lists`, { method: "POST", body: fd });
   return handleResponse(resp);
 }
+// Account type (company / individual professional)
+export const getAccount = () => jsonCall(`/api/account`);
+export const setAccount = (data) => jsonCall(`/api/account`, "PUT", data);
 // RFQ packages
 export const getRfqPackages = (id) => jsonCall(`${T(id)}/rfq-packages`);
 export const createRfqPackages = (id, data) => jsonCall(`${T(id)}/rfq-packages`, "POST", data);
@@ -430,6 +433,8 @@ const apiClient = {
   getDecisionSummary,
   complianceMatrixUrl,
   getRfqPackages,
+  getAccount,
+  setAccount,
   getTenderMaterials,
   getPortfolioMaterials,
   listPriceLists,

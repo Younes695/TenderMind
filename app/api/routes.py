@@ -1210,6 +1210,32 @@ def put_company_profile(payload: dict, db: Session = Depends(get_db), user: dict
     return _profile_dict(p)
 
 
+# ---- Account type: a company (team, votes, approvals) or an individual professional
+ACCOUNT_TYPES = ("company", "individual")
+
+
+@router.get("/account")
+def get_account(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import CompanyProfile
+    p = db.query(CompanyProfile).filter(CompanyProfile.id == _profile_key(user)).first()
+    return {"account_type": (p.account_type if p and p.account_type in ACCOUNT_TYPES else "company")}
+
+
+@router.put("/account")
+def put_account(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.models import CompanyProfile
+    kind = str(payload.get("account_type") or "").strip().lower()
+    if kind not in ACCOUNT_TYPES:
+        raise HTTPException(status_code=422, detail="account_type must be company or individual")
+    key = _profile_key(user)
+    p = db.query(CompanyProfile).filter(CompanyProfile.id == key).first() or CompanyProfile(id=key)
+    p.account_type = kind
+    p.updated_at = datetime.utcnow()
+    db.merge(p)
+    db.commit()
+    return {"account_type": kind}
+
+
 # Internal review lists the tender owner cannot act on — never put in the email.
 _EMAIL_SKIP = {"unclassified-requirement", "evidence-missing", "ineligible"}
 

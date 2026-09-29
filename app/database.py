@@ -103,6 +103,10 @@ def init_db():
                 if col not in tcols:
                     conn.execute(text(f"ALTER TABLE tenders ADD COLUMN {col} {typ}"))
                     conn.commit()
+            pcols = [row[1] for row in conn.execute(text("PRAGMA table_info(company_profiles)")).fetchall()]
+            if pcols and "account_type" not in pcols:
+                conn.execute(text("ALTER TABLE company_profiles ADD COLUMN account_type VARCHAR"))
+                conn.commit()
             ecols = [row[1] for row in conn.execute(text("PRAGMA table_info(eligibility_results)")).fetchall()]
             if ecols and "override_name" not in ecols:
                 conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN override_name VARCHAR"))

@@ -206,6 +206,10 @@ def signup(payload: dict, request: Request):
         db.add(User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email, name=name,
                     password_hash=hash_password(password), provider="password",
                     last_login_at=datetime.utcnow()))
+        kind = str(payload.get("account_type") or "company").strip().lower()
+        if kind in ("company", "individual"):
+            from app.models import CompanyProfile
+            db.merge(CompanyProfile(id=email, account_type=kind, name=name if kind == "individual" else None))
         db.commit()
     finally:
         db.close()
