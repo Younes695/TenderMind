@@ -6,7 +6,8 @@ const plans = [
   {
     name: "Starter",
     tagline: "Individual / small business",
-    price: "EGP 1,200",
+    price: "EGP 1,500",
+    gcc: "SAR 299",
     per: "/ month",
     features: [
       "5 tender analyses / month",
@@ -21,7 +22,8 @@ const plans = [
   {
     name: "Growth",
     tagline: "Tender team / growing company",
-    price: "EGP 3,000",
+    price: "EGP 4,900",
+    gcc: "SAR 899",
     per: "/ month",
     badge: "Most Popular",
     features: [
@@ -37,7 +39,8 @@ const plans = [
   {
     name: "Business",
     tagline: "Larger company / multiple users",
-    price: "EGP 9,000",
+    price: "EGP 14,900",
+    gcc: "SAR 2,900",
     per: "/ month",
     features: [
       "60 tender analyses / month",
@@ -52,7 +55,8 @@ const plans = [
   {
     name: "Enterprise",
     tagline: "Dedicated cloud / private deployment",
-    price: "From EGP 30,000",
+    price: "From EGP 45,000",
+    gcc: "From SAR 9,500",
     per: "/ month",
     features: [
       "Dedicated cloud hosted by us",
@@ -83,7 +87,7 @@ function Pricing() {
 
         {/* Plans */}
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {plans.map(({ name, tagline, price, per, features, cta, highlighted, badge }) => (
+          {plans.map(({ name, tagline, price, gcc, per, features, cta, highlighted, badge }) => (
             <article
               key={name}
               className={`relative flex flex-col rounded-2xl border p-6 sm:p-7 ${
@@ -121,6 +125,7 @@ function Pricing() {
                 {t(price)}
                 {per && <span className={`ms-1 text-[13px] font-medium ${highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"}`}>{t(per)}</span>}
               </p>
+              {gcc && <p className={`-mt-5 mb-6 text-[12px] ${highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"}`}>{t("GCC: {p} / month", { p: t(gcc) })}</p>}
 
               <ul className="mb-8 flex-1 space-y-3">
                 {features.map((f) => (
@@ -158,7 +163,7 @@ function Pricing() {
 
         {/* Footnote */}
         <p className="mt-10 text-center text-[13px] text-[#4b5f86]">
-          {t("Introductory pricing, excluding VAT — being validated with our first pilot customers. SAR / AED pricing on request.")}
+          {t("Prices exclude VAT. Egypt prices in EGP, GCC prices in SAR.")}
         </p>
       </div>
     </section>
