@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TendersListLoading } from "../components/TenderLoading";
 import { Link } from "react-router-dom";
 import { FolderOpen, Plus, Search, ChevronRight } from "lucide-react";
 import apiClient from "../api/client";
@@ -41,7 +42,7 @@ function TendersList() {
       </div>
 
       {error && <div className="mt-4 rounded-xl border border-[#f5c6c6] bg-[#fdf0f0] p-3 text-[14px] text-[#a33a3a]">{error}</div>}
-      {!tenders && !error && <p className="mt-6 text-[14px] text-[#667085]">{t("Loading tenders...")}</p>}
+      {!tenders && !error && <TendersListLoading />}
       {tenders && shown.length === 0 && (
         <div className="mt-6 rounded-2xl border border-[#e8e4dc] bg-white p-8 text-center text-[14px] text-[#667085]">
           {q ? t("No tenders match your search.") : t("No tenders yet — create your first tender.")}

@@ -5,6 +5,7 @@ import apiClient from "../api/client";
 import DecisionPanel from "../components/DecisionPanel";
 import RecommendationPanel from "../components/RecommendationPanel";
 import BidTools, { EligibilityBanner } from "../components/BidTools";
+import { WorkspaceLoading } from "../components/TenderLoading";
 import { confirmRemoval } from "../utils/confirm";
 import { useT } from "../i18n";
 
@@ -214,7 +215,7 @@ function TenderWorkspace() {
   };
 
   if (!id) return <div className="p-8 text-center" data-testid="empty-state">{t("No tender selected")}</div>;
-  if (loading) return <div className="p-8">{t("Loading workspace...")}</div>;
+  if (loading) return <WorkspaceLoading />;
   if (notFound) return (
     <div data-testid="tender-not-found" className="m-8 rounded-xl border border-[#e8e4dc] bg-white p-6">
       <p className="text-[16px] font-bold text-[#101828]">{t("Tender not found")}</p>
