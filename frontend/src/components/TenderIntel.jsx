@@ -12,7 +12,8 @@ const input = "w-full min-w-0 rounded-lg border border-[#d0d5dd] px-3 py-2 text-
 const primary = "rounded-lg bg-[#162A4C] px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-50";
 export const STAGES = ["ELIGIBILITY", "STUDY", "PRICING", "SUBMISSION", "SUBMITTED", "CLOSED"];
 export const STAGE_LABEL = { ELIGIBILITY: "Eligibility|stage", STUDY: "Study|stage", PRICING: "Pricing|stage",
-  SUBMISSION: "Submission|stage", SUBMITTED: "Submitted|stage", CLOSED: "Closed|stage" };
+  SUBMISSION: "Submission|stage", SUBMITTED: "Submitted|stage", CLOSED: "Closed|stage",
+  NEW: "New|stage", ANALYSED: "Analysed|stage" };
 
 function Fact({ label, value, source }) {
   const t = useT();
