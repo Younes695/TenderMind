@@ -111,6 +111,17 @@ def votes_factor(summary: Dict[str, Any]) -> Dict[str, Any]:
     return _r(o["approve_pct"], "{a} approve, {r} reject, {x} abstain.", a=o["approve"], r=o["reject"], x=o["abstain"])
 
 
+def _kind_from_analysis(db, tender_id: str) -> Optional[str]:
+    """Title does not say it (e.g. "TURAIF"): use the most common type in the requirements."""
+    from collections import Counter
+    from app.models import TenderAnalysis
+    from app.tender_facts import classify_kind
+    a = (db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id)
+         .order_by(TenderAnalysis.created_at.desc()).first())
+    kinds = Counter(k for k in (classify_kind(r.get("summary") or "") for r in (a.requirements or [])[:1500] if a) if k)
+    return kinds.most_common(1)[0][0] if kinds else None
+
+
 def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_count: int = 0) -> Dict[str, Any]:
     """Collects the four factors for one tender of the account and computes the score."""
     from app.access import owner_filter
@@ -121,13 +132,14 @@ def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_cou
 
     el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender.id).first()
     checks = (el.checks or []) if el else []
-    kind = classify_kind(f"{tender.title or ''} {tender.id}")
+    kind = classify_kind(f"{tender.title or ''} {tender.id}") or _kind_from_analysis(db, tender.id)
     q = db.query(Tender).filter(Tender.id != tender.id)
     f = owner_filter(Tender.owner_email, user)
     if f is not None:
         q = q.filter(f)
     others = q.all()
-    past = [{"kind": classify_kind(f"{t.title or ''} {t.id}"), "outcome": t.outcome} for t in others]
+    past = [{"kind": classify_kind(f"{t.title or ''} {t.id}") or _kind_from_analysis(db, t.id), "outcome": t.outcome}
+            for t in others if t.outcome in ("WON", "LOST")]
     try:
         disciplines = [s["discipline"] for s in tender_sections(tender.id)]
     except Exception:

@@ -259,7 +259,8 @@
               "deterministic",
               "hybrid",
               "llm",
-              "two-stage"
+              "two-stage",
+              "two-stage+rule"
             ]
           }
         }

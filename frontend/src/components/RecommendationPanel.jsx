@@ -34,7 +34,7 @@ function ScoreBlock({ score }) {
             <div className="flex items-center gap-2">
               <span className="w-40 shrink-0 font-semibold">{t(f.label)}</span>
               <span className="h-2 flex-1 overflow-hidden rounded bg-[#f2f4f7]"><span className="block h-full bg-[#162A4C]" style={{ width: `${f.value ?? 0}%` }} /></span>
-              <span className="w-24 shrink-0 text-end">{f.counted ? `${f.value}% · ${t("weight")} ${f.effective_weight}%` : t("not counted")}</span>
+              <span className="w-32 shrink-0 whitespace-nowrap text-end">{f.counted ? `${f.value}% · ${t("weight")} ${f.effective_weight}%` : t("not counted")}</span>
             </div>
             {f.reason && <p className="ms-40 ps-2 text-[12px] text-[#667085]">{tx(t, f.reason_key, f.reason_vars, f.reason)}</p>}
           </li>

@@ -82,8 +82,8 @@ export function CapabilityCard() {
           <Toggles label={t("Countries you work in")} options={COUNTRIES} value={cap.countries || []} onChange={(v) => setCap({ ...cap, countries: v })} /></div>
         <div className="grid gap-3 sm:grid-cols-3">
           {num("max_kv")}{num("years_experience")}
-          <div className="flex gap-2">{num("annual_turnover")}
-            <label className="w-24 text-[13px] text-[#344054]">{t("Currency")}
+          <div className="flex gap-2"><div className="min-w-0 flex-1">{num("annual_turnover")}</div>
+            <label className="w-20 shrink-0 text-[13px] text-[#344054]">{t("Currency")}
               <input className={input} maxLength={3} value={cap.turnover_currency || ""} placeholder="SAR" onChange={(e) => setCap({ ...cap, turnover_currency: e.target.value })} />
             </label>
           </div>

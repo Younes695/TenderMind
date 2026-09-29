@@ -21,6 +21,7 @@ _HEAD = re.compile(r"^\s*((?i:SECTION|PART|CHAPTER|SCHEDULE|APPENDIX|ANNEX(?:URE
                    r"\s*[-\u2013]?\s*(?:(?i:NO)\.?\s*)?[\"\u201c\u2018']?(?:\d{1,3}(?:\.\d{1,2})?|[IVXL]{1,6}|[A-Z])[\"\u201d\u2019']?"
                    r"(?![\-\u2013][A-Z]\b)(?=[\s:.,\-\u2013\u2014]|$).{0,90})$")
 _NUM_HEAD = re.compile(r"^\s*(\d{1,2})(?:\.0)?\.?\s+([A-Z][A-Z0-9 &/,()\-]{5,70})\s*$")
+_NOTE = re.compile(r"\b(shall|must|will|should|is|are|be|refer|provided|see)\b", re.IGNORECASE)
 _TOC = re.compile(r"(\.{3,}|\t|\s{3,})\s*[A-Z]?-?\d{1,4}\s*$")
 MAX_SECTIONS_PER_DOC = 40
 
@@ -51,7 +52,7 @@ def discipline_of(title: str, body: str = "") -> str:
     return best
 
 
-def _headings(text: str):
+def _headings(text: str, numbered: bool = True):
     for line in (text or "").splitlines()[:80]:
         if len(line) > 120 or _TOC.search(line):
             continue
@@ -59,8 +60,10 @@ def _headings(text: str):
         if m:
             yield " ".join(m.group(1).split())
             continue
-        n = _NUM_HEAD.match(line)
-        if n and sum(ch.isalpha() for ch in n.group(2)) >= 5:
+        n = _NUM_HEAD.match(line) if numbered else None
+        # a numbered heading is a short title, not a drawing note ("3. CONTRACTOR SHALL REFER TO ...")
+        if (n and int(n.group(1)) <= 30 and sum(ch.isalpha() for ch in n.group(2)) >= 5 and len(n.group(2).split()) <= 8
+                and not _NOTE.search(n.group(2))):
             yield f"{n.group(1)}. {' '.join(n.group(2).split()).title()}\u200b"  # marker: level-1 numbered
 
 
@@ -75,18 +78,26 @@ def split_sections(sources) -> List[Dict[str, Any]]:
         secs: List[Dict[str, Any]] = []
         seen = set()
         for p in pages:
-            for h in _headings(p.text):
+            # numbered titles on scanned (OCR) pages are drawing notes / labels, not document parts
+            for h in _headings(p.text, numbered=not getattr(p, "ocr_applied", False)):
                 key = " ".join(h.lower().replace(",", " ").split()[:2]) if _HEAD.match(h) else h.lower()
                 if key in seen:
                     continue
                 seen.add(key)
                 if secs and secs[-1]["page_from"] == p.page_number and not secs[-1]["_body"]:
-                    secs[-1]["title"] = f"{secs[-1]['title']} — {h}"[:160]  # heading + subtitle on one page
+                    secs[-1]["_more"] = secs[-1].get("_more", 0) + 1  # more headings on the same page
                     continue
                 secs.append({"document": doc, "title": h.rstrip("\u200b")[:160], "page_from": p.page_number,
                              "_body": "", "_level1": h.endswith("\u200b")})
             if secs:
                 secs[-1]["_body"] += (p.text or "")[:3000] if len(secs[-1]["_body"]) < 6000 else ""
+        # a numbered title that repeats with other numbers ("6. Data Schedule", "7. Data Schedule")
+        # is a table header, not a part of the document
+        rep = defaultdict(int)
+        for x in secs:
+            if x.get("_level1"):
+                rep[x["title"].split(". ", 1)[-1].lower()] += 1
+        secs = [x for x in secs if not (x.get("_level1") and rep[x["title"].split(". ", 1)[-1].lower()] > 1)]
         if not secs:
             secs = [{"document": doc, "title": doc.rsplit(".", 1)[0], "page_from": pages[0].page_number,
                      "_body": " ".join((p.text or "")[:1500] for p in pages[:4])}]
@@ -99,11 +110,16 @@ def split_sections(sources) -> List[Dict[str, Any]]:
             if len(top) > MAX_SECTIONS_PER_DOC:
                 top = [secs[0]] + [s for s in secs[1:] if _HEAD.match(s["title"])]
             secs = top[:MAX_SECTIONS_PER_DOC]
+        if len(pages) == 1 and len(secs) == 1:  # a one-page file (Word/Excel): its name says more
+            secs[0]["title"], secs[0]["_more"] = doc.rsplit(".", 1)[0], 0
         last = pages[-1].page_number
         for i, s in enumerate(secs):
             s["page_to"] = (secs[i + 1]["page_from"] - 1) if i + 1 < len(secs) else last
             s["page_to"] = max(s["page_to"], s["page_from"])
             s["discipline"] = discipline_of(s["title"], s.pop("_body"))
+            more = s.pop("_more", 0)
+            if more:
+                s["title"] = f"{s['title']} (+{more})"
             s.pop("_level1", None)
         out.extend(secs)
     return out

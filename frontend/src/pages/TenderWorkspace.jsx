@@ -272,7 +272,7 @@ function TenderWorkspace() {
           <div className="mt-4 flex flex-wrap gap-2 text-[13px]">
             <span className="rounded-lg bg-[#eef2f8] px-2.5 py-1">{t("Documents")}: {tenderDocs?.length ?? t("Not available")}</span>
             <span className="rounded-lg bg-[#eef2f8] px-2.5 py-1">{t("Requirements")}: {requirements.length || t("Not available")}</span>
-            <span className="rounded-lg bg-[#eef2f8] px-2.5 py-1">{t("Processing")}: {jobStatus || t("Not available")}</span>
+            <span className="rounded-lg bg-[#eef2f8] px-2.5 py-1">{t("Processing")}: {jobStatus ? t(jobStatus) : t("Not available")}</span>
             <span className="rounded-lg bg-[#eef2f8] px-2.5 py-1">{t("Analysis")}: {hasAnalysis ? t("Available") : t("Not available")}</span>
           </div>
         </section>
@@ -310,7 +310,7 @@ function TenderWorkspace() {
           </div>
           {(processing?.analysis_coverage || processing?.document_status_counts) && (
             <div className="mt-2 text-[12px] text-[#667085]" data-testid="coverage-line">
-              <span>{t("Processing")}: {jobStatus || t("Not available")} • {t("Analysis coverage")}: {processing.analysis_coverage || t("Not available")}</span>
+              <span>{t("Processing")}: {jobStatus ? t(jobStatus) : t("Not available")} • {t("Analysis coverage")}: {processing.analysis_coverage || t("Not available")}</span>
               {processing?.document_status_counts && <span> • {t("Complete")}: {processing.document_status_counts.complete ?? "—"} • {t("Failed")}: {processing.document_status_counts.failed ?? "—"} • {t("Unsupported")}: {processing.document_status_counts.unsupported ?? "—"}</span>}
             </div>
           )}

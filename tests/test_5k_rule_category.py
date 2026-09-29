@@ -43,3 +43,23 @@ def test_fallback_only_replaces_unknown_in_binding():
     assert unk.category == "TECHNICAL" and unk.extraction_method == "two-stage+rule"
     kept = bind_requirement(LLMNormalizationResult(summary="GIS bay", category="EXPERIENCE"), cand)
     assert kept.category == "EXPERIENCE" and kept.extraction_method == "two-stage"
+
+
+def test_rule_classified_requirement_passes_the_persistence_schema():
+    """Regression: 'two-stage+rule' was missing from the schema enum, so every new
+    tender with a rule-classified row failed PERSISTENCE (found live, Stage 6)."""
+    import json
+    from dataclasses import asdict
+    from pathlib import Path
+    import jsonschema
+    from app.pipeline.contracts import LLMNormalizationResult, RequirementCandidate
+    from app.pipeline.postprocessing import bind_requirement
+    cand = RequirementCandidate(candidate_id="C1", parent_chunk_id="K1", source_document="SOW.pdf", page=3,
+                                source_text="132 kV GIS switchgear bay")
+    row = asdict(bind_requirement(LLMNormalizationResult(summary="GIS bay", category="UNKNOWN"), cand))
+    schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" /
+                         "tender_agnostic_schema_2stage.json").read_text(encoding="utf-8"))
+    props = schema["properties"]["requirements"]["items"]["properties"]
+    assert row["extraction_method"] == "two-stage+rule"
+    jsonschema.validate(row["extraction_method"], props["extraction_method"])
+    jsonschema.validate(row["category"], props["category"])

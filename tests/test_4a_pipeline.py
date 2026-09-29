@@ -451,6 +451,8 @@ def test_two_stage_schema_permits_unknown_only_additively():
     b, n = json.loads(base), json.loads(new)
     b["properties"]["requirements"]["items"]["properties"]["category"]["enum"].append("UNKNOWN")
     b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].append("two-stage")
+    # Stage 5K: requirements classified by the rule fallback are marked as such
+    b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].append("two-stage+rule")
     b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].sort()
     # Stage 5A: two-stage never fabricates confidence -> null permitted on
     # requirements/evidence (live E2E failed persistence without this).
