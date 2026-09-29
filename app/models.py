@@ -328,3 +328,30 @@ class CompanyProfile(Base):
     address = Column(String, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
+
+
+class CompanyCapability(Base):
+    """Stage 6 — what the company can bid for (one row per account, like CompanyProfile)."""
+    __tablename__ = "company_capabilities"
+    id = Column(String, primary_key=True)             # account email or "local"
+    work_types = Column(JSON, default=list)           # app/tender_facts.WORK_TYPES
+    max_kv = Column(Float, nullable=True)
+    countries = Column(JSON, default=list)
+    registrations = Column(JSON, default=list)        # e.g. "SEC approved contractor"
+    certifications = Column(JSON, default=list)       # e.g. "ISO 9001"
+    years_experience = Column(Float, nullable=True)
+    annual_turnover = Column(Float, nullable=True)
+    turnover_currency = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EligibilityResult(Base):
+    """Stage 6 — outcome of the eligibility gate for a tender, and any override."""
+    __tablename__ = "eligibility_results"
+    tender_id = Column(String, ForeignKey("tenders.id"), primary_key=True)
+    status = Column(String, nullable=False)           # ELIGIBLE | INELIGIBLE | SKIPPED
+    checks = Column(JSON, default=list)
+    override_by = Column(String, nullable=True)
+    override_reason = Column(Text, nullable=True)
+    overridden_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

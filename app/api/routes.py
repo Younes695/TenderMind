@@ -1233,3 +1233,78 @@ def tender_email_draft(tender_id: str, lang: str = "en", db: Session = Depends(g
                         _open_issues(db, tender_id, "question", _EMAIL_SKIP),
                         _open_issues(db, tender_id, "missing", _EMAIL_SKIP), lang)
     return {**draft, "company_profile_complete": bool(prof and prof.name)}
+
+
+# ---- Stage 6: company capabilities + eligibility gate
+_CAP_LISTS = ("work_types", "countries", "registrations", "certifications")
+_CAP_NUMS = ("max_kv", "years_experience", "annual_turnover")
+
+
+@router.get("/company-capability")
+def get_company_capability(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.eligibility import capability_dict
+    from app.models import CompanyCapability
+    cap = db.query(CompanyCapability).filter(CompanyCapability.id == _profile_key(user)).first()
+    return capability_dict(cap) or {k: [] for k in _CAP_LISTS} | {k: None for k in _CAP_NUMS + ("turnover_currency",)}
+
+
+@router.put("/company-capability")
+def put_company_capability(payload: dict, db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    from app.eligibility import capability_dict
+    from app.models import CompanyCapability
+    from app.tender_facts import WORK_TYPES
+    key = _profile_key(user)
+    cap = db.query(CompanyCapability).filter(CompanyCapability.id == key).first() or CompanyCapability(id=key)
+    for k in _CAP_LISTS:
+        if k in payload:
+            items = [str(x).strip()[:120] for x in (payload.get(k) or []) if str(x).strip()][:30]
+            if k == "work_types":
+                bad = [x for x in items if x not in WORK_TYPES]
+                if bad:
+                    raise HTTPException(status_code=422, detail=f"Unknown work type(s): {', '.join(bad)}")
+            setattr(cap, k, items)
+    for k in _CAP_NUMS:
+        if k in payload:
+            v = payload.get(k)
+            try:
+                v = None if v in (None, "") else float(v)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail=f"{k} must be a number")
+            if v is not None and v < 0:
+                raise HTTPException(status_code=422, detail=f"{k} must not be negative")
+            setattr(cap, k, v)
+    if "turnover_currency" in payload:
+        cap.turnover_currency = (str(payload.get("turnover_currency") or "").strip().upper()[:3]) or None
+    cap.updated_at = datetime.utcnow()
+    db.merge(cap)
+    db.commit()
+    return capability_dict(cap)
+
+
+@router.get("/tenders/{tender_id}/eligibility")
+def tender_eligibility(tender_id: str, db: Session = Depends(get_db)):
+    from app.eligibility import result_dict
+    from app.models import EligibilityResult
+    return result_dict(db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()) \
+        or {"status": None, "checks": []}
+
+
+@router.post("/tenders/{tender_id}/eligibility/override")
+def tender_eligibility_override(tender_id: str, payload: dict, background_tasks: BackgroundTasks,
+                                db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """The manager continues with an ineligible tender: record who/why, then run the full analysis
+    (extracted text is cached, so only the AI part is new work)."""
+    from app.models import EligibilityResult
+    row = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()
+    if row is None or row.status != "INELIGIBLE":
+        raise HTTPException(status_code=409, detail="Tender is not blocked by the eligibility check")
+    reason = str(payload.get("reason") or "").strip()[:1000]
+    by = str(payload.get("by") or "").strip()[:120] or user.get("email") or "local"
+    row.override_by, row.override_reason, row.overridden_at = by, reason or None, datetime.utcnow()
+    db.commit()
+    try:
+        job = create_processing_job(db, tender_id)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    background_tasks.add_task(process_tender, tender_id, job.id)
+    return {"job_id": job.id, "status": job.status}

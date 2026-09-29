@@ -428,6 +428,12 @@ def _process_tender(tender_id: str, job_id: str):
                      {"total": documents_total, "processed": documents_processed,
                       "failed": documents_failed, "unsupported": documents_unsupported})
 
+        # Stage 6: eligibility gate — seconds, before any AI. An unsuitable tender stops here.
+        from app.eligibility import run_gate
+        if run_gate(db, tender_id, job, doc_results):
+            record_stage(db, job.id, "ELIGIBILITY", "INELIGIBLE", {})
+            return
+
         # Stages 3-6 are quick bookkeeping; the AI itself runs later
         # (AI_ANALYSIS, 45-93%), so these must not claim 60-90%.
         # Stage 3: Classification

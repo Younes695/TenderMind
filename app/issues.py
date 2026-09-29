@@ -169,6 +169,16 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                                   + (f"\n… and {len(rs) - 30} more" if len(rs) > 30 else ""),
                         "source_document": doc, "page": None, "priority": "LOW",
                         "dedupe_key": _key("unknown-doc", doc, len(rs))})
+    from app.models import EligibilityResult  # Stage 6 gate
+    el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == tender_id).first()
+    if el is not None and el.status == "INELIGIBLE" and not el.override_by:
+        from app.eligibility import failed_reasons
+        reasons = failed_reasons(el.checks or [])
+        out.append({"category": "missing", "kind": "ineligible", "title": "Tender not suitable for the company",
+                    "detail": "\n".join(reasons) + "\nThe full analysis was not run. Open the tender to review "
+                              "the checks or continue anyway.",
+                    "source_document": None, "page": None, "priority": "HIGH",
+                    "dedupe_key": _key("ineligible", tender_id, reasons)})
     out.extend(_missing_evidence(db, tender_id))
     return out
 
@@ -207,6 +217,7 @@ _SUPERSEDED = {  # Stage 5I: per-item kinds now grouped — drop their open, unt
     "unclassified-requirement": "Requirement could not be classified",
     # Stage 6: grouped model-doubt "questions" replaced by per-requirement quotes
     "unclear-applicability": "", "undefined-term": "", "missing-value": "", "unclear-date-anchor": "",
+    "ineligible": "",  # Stage 6: disappears once the manager overrides or the tender becomes eligible
 }
 
 
