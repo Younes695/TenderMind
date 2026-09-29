@@ -7,7 +7,7 @@ import { DEPARTMENTS } from "./SettingsStage6";
 /** Stage 6 — tender workspace tools: the eligibility result (and override),
  *  RFP parts with past suppliers, team tasks, department votes and the outcome. */
 
-const input = "rounded-lg border border-[#d0d5dd] px-3 py-2 text-[14px] outline-none focus:border-[#162A4C]";
+const input = "w-full min-w-0 rounded-lg border border-[#d0d5dd] px-3 py-2 text-[14px] outline-none focus:border-[#162A4C]";
 const primary = "rounded-lg bg-[#162A4C] px-4 py-2 text-[14px] font-semibold text-white disabled:opacity-50";
 /** Translate a backend template; string vars are translated too (comma-separated lists item by item). */
 export const tx = (t, key, vars, fallback) => {
@@ -62,7 +62,7 @@ export function EligibilityBanner({ tenderId, onContinue }) {
       <h2 className="flex items-center gap-2 text-[17px] font-bold text-[#b42318]"><ShieldAlert size={19} /> {t("This tender does not fit the company")}</h2>
       <p className="mt-1 text-[13px] text-[#667085]">{t("The full analysis was stopped after the eligibility check. Review the reasons below.")}</p>
       {el?.checks?.length ? <div className="mt-3"><Checks checks={el.checks} /></div> : null}
-      <form onSubmit={go} className="mt-4 grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+      <form onSubmit={go} className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_2fr_auto]">
         <input className={input} placeholder={t("Your name")} value={form.by} onChange={(e) => setForm({ ...form, by: e.target.value })} maxLength={120} />
         <input className={input} placeholder={t("Why continue anyway?")} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} maxLength={1000} />
         <button type="submit" data-testid="continue-anyway" className={primary} disabled={busy}>{t("Continue anyway")}</button>
@@ -142,7 +142,7 @@ function Tasks({ tenderId, team }) {
         ))}
         {!tasks.length && <li className="text-[13px] text-[#667085]">{t("No tasks yet.")}</li>}
       </ul>
-      <form onSubmit={add} className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]">
+      <form onSubmit={add} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_auto]">
         <input className={input} placeholder={t("Task")} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} maxLength={300} />
         <select className={input} value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })} aria-label={t("Assignee")}>
           <option value="">{t("Assignee")}</option>
@@ -189,7 +189,7 @@ function Votes({ tenderId, team }) {
           </ul>
         </div>
       )}
-      <form onSubmit={save} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_2fr_auto]">
+      <form onSubmit={save} className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_2fr_auto]">
         {team.length ? (
           <select className={input} value={form.member_name} onChange={(e) => pick(e.target.value)} aria-label={t("Member")}>
             <option value="">{t("Member")}</option>
@@ -222,7 +222,7 @@ function Outcome({ tenderId, initial }) {
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select className={input} value={value} onChange={(e) => save(e.target.value)} aria-label={t("Outcome")}>
+      <select className={`${input} w-auto`} value={value} onChange={(e) => save(e.target.value)} aria-label={t("Outcome")}>
         <option value="">{t("Not set")}</option>
         {OUTCOMES.map((o) => <option key={o} value={o}>{t(o)}</option>)}
       </select>
