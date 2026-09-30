@@ -12,6 +12,7 @@ import DecisionPack from "./pages/DecisionPack";
 import { Approvals, WorkPackages, DocumentsLibrary, Analytics } from "./pages/Portfolio";
 import Materials from "./pages/Materials";
 import Demo from "./pages/Demo";
+import Product from "./pages/Product";
 import HowItWorks from "./pages/HowItWorks";
 import Help from "./pages/Help";
 import Solutions from "./pages/Solution";
@@ -40,7 +41,7 @@ function App() {
 
           <Route path="/" element={<Home />} />
 
-          <Route path="/product" element={<Solutions />} />
+          <Route path="/product" element={<Product />} />
           <Route path="/solutions" element={<Solutions />} />
           <Route path="/industries" element={<Industries />} />
           <Route path="/how-it-works" element={<HowItWorks />} />

@@ -153,6 +153,22 @@ export default {
   "Industries": "القطاعات",
   "Sign up": "إنشاء حساب",
 
+  // Product page
+  "One platform for the whole tender": "منصة واحدة للمناقصة كلها",
+  "TenderMind reads the tender, checks if you qualify, prepares pricing and supplier RFQs, and gives management an evidence-based decision.": "يقرأ TenderMind المناقصة، ويفحص أهليتك، ويجهز التسعير وطلبات عروض أسعار الموردين، ويعطي الإدارة قرارًا مبنيًا على الدليل.",
+  "Tender Radar": "رادار المناقصات",
+  "RFP analysis": "تحليل كراسة الشروط",
+  "BOQ materials & prices": "مواد جدول الكميات وأسعارها",
+  "Decision pack": "ملف القرار",
+  "Notices from public sources in Egypt and the GCC, each with a match % and the reasons for your company.": "إعلانات من المصادر العامة في مصر والخليج، كل إعلان بنسبة توافق وأسبابها لشركتك.",
+  "Every requirement, date and clause extracted from PDF, Word, Excel, scans and archives, with its file and page.": "كل متطلب وتاريخ وبند يُستخرج من PDF وWord وExcel والصور والملفات المضغوطة، بملفه وصفحته.",
+  "Your certificates, voltage, work types and countries against the tender, with an eligibility % and what a partner must cover.": "شهاداتك والجهد ونوع الأعمال والدول مقابل المناقصة، مع نسبة الأهلية وما يجب أن يغطيه شريك.",
+  "Materials read from the bill of quantities and priced from your own supplier price lists, with the same material across all active tenders.": "مواد جدول الكميات مسعّرة من قوائم أسعار مورديك، مع نفس المادة عبر كل المناقصات النشطة.",
+  "One request for quotation per equipment package, with the scope pages, design criteria, drawings and data schedules, ready as a ZIP.": "طلب عرض سعر لكل حزمة معدات، بصفحات نطاق العمل ومعايير التصميم والرسومات وجداول البيانات، جاهز كملف ZIP.",
+  "Decision board, department votes and approvals, ending in a pack with every fact and its source and a summary for management.": "لوحة القرارات وتصويت الإدارات والموافقات، تنتهي بملف فيه كل معلومة ومصدرها وملخص للإدارة.",
+  "An assistant that answers in Arabic or English from your tender documents only, always citing the file and page.": "مساعد يجيب بالعربية أو الإنجليزية من مستندات مناقصتك فقط، مع ذكر الملف والصفحة دائمًا.",
+  "Each account sees only its own tenders, every action is logged, and enterprises can run TenderMind on their own servers.": "كل حساب يرى مناقصاته فقط، وكل إجراء مسجّل، ويمكن للمؤسسات تشغيل TenderMind على خوادمها.",
+
   // Materials & prices
   "Materials & prices": "المواد والأسعار",
   "PRICE UNAVAILABLE": "السعر غير متاح",
