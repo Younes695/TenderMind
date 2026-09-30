@@ -143,6 +143,13 @@ def init_db():
             if ecols and "capability_source" not in ecols:  # app/eligibility.py clear_foreign_capability_results
                 conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN capability_source VARCHAR"))
                 conn.commit()
+            # Decision engine v2: which engine computed a decision, and how many
+            # mandatory requirements the company's documents contradict.
+            dcols = [row[1] for row in conn.execute(text("PRAGMA table_info(decisions)")).fetchall()]
+            for col in ("engine_version", "contradicted_count"):
+                if dcols and col not in dcols:
+                    conn.execute(text(f"ALTER TABLE decisions ADD COLUMN {col} INTEGER"))
+                    conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
         pass

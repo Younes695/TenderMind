@@ -133,6 +133,13 @@ def build(db, tender, user) -> Dict[str, Any]:
         actions.append(_action("Line up a partner or supplier for: {items}.", items=", ".join(partner)))
     if reqs and not evaluated:
         actions.append(_action("Upload company documents and run Evaluate to measure the company match."))
+    if evaluated:
+        from app.engines.decision import contradiction_waived, latest_decision
+        dec = latest_decision(db, tender.id)
+        contradicted = int((dec.contradicted_count if dec and not contradiction_waived(dec) else 0) or 0)
+        if contradicted:
+            actions.append(_action("Resolve {n} mandatory requirement(s) your documents contradict before bidding.",
+                                   n=contradicted))
     if conflicts:
         actions.append(_action("Ask the tender owner which value applies for {n} contradiction(s).", n=len(conflicts)))
     if open_q:

@@ -12,7 +12,7 @@
     "mandatory_missing_count": {"type": "number", "description": "Mandatory HARD_GATE missing+review"},
     "top_blockers": {"type": "array", "items": {"type": "string"}, "description": "Up to 6 blocker requirement texts"},
     "top_risks": {"type": "array", "items": {"type": "string"}, "description": "Up to 4 risk descriptions, always REVIEW"},
-    "rules_triggered": {"type": "array", "items": {"type": "string", "enum": ["HARD_GATE_FAIL","MANDATORY_GATE_MISSING","MANDATORY_GATE_REVIEW","EXPERIENCE_EVIDENCE_MISSING","COMMERCIAL_RISK_REVIEW","ALL_MANDATORY_PASS","HUMAN_OVERRIDE"]}},
+    "rules_triggered": {"type": "array", "items": {"type": "string", "enum": ["HARD_GATE_FAIL","MANDATORY_GATE_MISSING","MANDATORY_GATE_REVIEW","MANDATORY_REQUIREMENT_CONTRADICTED","EXPERIENCE_EVIDENCE_MISSING","COMMERCIAL_RISK_REVIEW","ALL_MANDATORY_PASS","HUMAN_OVERRIDE"]}},
     "supporting_requirements": {"type": "array", "items": {"type": "string"}},
     "supporting_evidence": {"type": "array", "items": {"type": "string"}},
     "missing_evidence": {"type": "array", "items": {"type": "string"}},

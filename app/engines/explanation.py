@@ -80,7 +80,11 @@ def build_explanation(db: Session, tender_id: str, decision_obj, status_results:
                 })
 
     # summary
-    if decision_obj.decision == "REVIEW":
+    contradicted = [b for b in (decision_obj.top_blockers or []) if b.endswith("[CONTRADICTED]")]
+    if decision_obj.decision == "REVIEW" and "MANDATORY_REQUIREMENT_CONTRADICTED" in (decision_obj.rules_triggered or []):
+        summary = (f"REVIEW — DO NOT BID YET: a company document contradicts a mandatory requirement. "
+                   f"Top blocker: {contradicted[0] if contradicted else 'see blockers'}.")
+    elif decision_obj.decision == "REVIEW":
         summary = f"REVIEW — DO NOT BID YET: {len(missing_evidence)} evidence gaps require human review. Top blocker: {decision_obj.top_blockers[0] if decision_obj.top_blockers else 'multiple missing'}."
     elif decision_obj.decision == "NO_BID":
         summary = f"NO_BID: {len(hard_failures)} mandatory requirement(s) explicitly failed — {hard_failures[0]['requirement'] if hard_failures else 'hard fail'}."

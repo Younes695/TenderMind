@@ -139,6 +139,8 @@ class Decision(Base):
     top_blockers = Column(JSON)
     top_risks = Column(JSON)
     is_override = Column(Boolean, default=False)
+    engine_version = Column(Integer, nullable=True)  # app/engines/decision.py ENGINE_VERSION; NULL = before versions
+    contradicted_count = Column(Integer, nullable=True, default=0)  # mandatory non-gate FAIL (REVIEW, not NO_BID)
 
 class DecisionAudit(Base):
     __tablename__ = "decision_audits"

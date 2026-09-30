@@ -227,9 +227,23 @@ def _missing_evidence(db: Session, tender_id: str) -> List[Dict[str, Any]]:
         status = evaluate_all(db, tender_id)
     except Exception:
         return []
+    from app.engines.decision import contradiction_waived, latest_decision
+    accepted = contradiction_waived(latest_decision(db, tender_id))  # a person decided to bid anyway
     out = []
     for r in reqs:
-        if (status.get(r.id) or {}).get("status") != "MISSING_EVIDENCE":
+        st = (status.get(r.id) or {}).get("status")
+        if st == "FAIL":
+            if accepted:
+                continue
+            # Not a gap: the company's own document says the opposite. The
+            # decision cannot be BID until a person resolved it.
+            out.append({"category": "missing", "kind": "evidence-contradicted",
+                        "title": "A company document contradicts a mandatory requirement",
+                        "detail": r.requirement, "source_document": r.source_document,
+                        "page": r.page_or_section, "priority": "HIGH",
+                        "dedupe_key": _key("contradicted", r.id)})
+            continue
+        if st != "MISSING_EVIDENCE":
             continue
         out.append({"category": "missing", "kind": "evidence-missing",
                     "title": "No company evidence for a mandatory requirement",
@@ -245,6 +259,8 @@ _SUPERSEDED = {  # Stage 5I: per-item kinds now grouped — drop their open, unt
     "unclassified-requirement": "Requirement could not be classified",
     # Stage 6: grouped model-doubt "questions" replaced by per-requirement quotes
     "unclear-applicability": "", "undefined-term": "", "missing-value": "", "unclear-date-anchor": "",
+    # A contradiction the evidence no longer shows (or a BID override accepted) retires by itself.
+    "evidence-contradicted": "",
     "client-history": "",  # Stage 8: refreshed when more tenders with the client arrive
     "ineligible": "",  # Stage 6: disappears once the manager overrides or the tender becomes eligible
 }

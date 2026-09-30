@@ -127,6 +127,7 @@ export default {
   "A company document explicitly contradicts a mandatory gate.": "توثيق الشركة يتناقض بوضوح مع بوابة إجبارية.",
   "Mandatory qualification requirements have no company evidence yet.": "متطلبات التأهيل الإجبارية لا تحتوي على أدلة من الشركة حتى الآن.",
   "Some mandatory evidence is ambiguous and needs human review.": "بعض الأدلة الإجبارية غامضة وتحتاج إلى مراجعة بشرية.",
+  "A company document contradicts a mandatory requirement; review it before bidding.": "مستند من مستندات الشركة يتعارض مع متطلب إجباري؛ راجعه قبل التقدّم.",
   "Mandatory requirements still lack company evidence.": "متطلبات إجبارية تفتقد أدلة من الشركة.",
   "High commercial risk needs review.": "المخاطر التجارية العالية تحتاج إلى مراجعة.",
   "Every mandatory requirement is supported by company evidence.": "كل متطلب إجباري مدعوم بأدلة من الشركة.",

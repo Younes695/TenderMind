@@ -74,6 +74,7 @@ export default {
   "Unclear wording — ask for clarification": "صياغة غير واضحة — اطلب توضيحاً",
   "Requirement could not be classified": "لم يتم تصنيف المتطلب",
   "No company evidence for a mandatory requirement": "لا توجد أدلة من الشركة لمتطلب إلزامي",
+  "A company document contradicts a mandatory requirement": "مستند من مستندات الشركة يتعارض مع متطلب إلزامي",
   "Package gap": "فجوة في الحزمة",
   "Resolved": "تم حلها",
   "Answer / clarification": "الإجابة / التوضيح",
