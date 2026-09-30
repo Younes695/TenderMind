@@ -238,7 +238,7 @@ class EscalatingProvider(ModelProvider):
 
     The escalation result is used only when it is a valid, non-UNKNOWN answer;
     otherwise the primary outcome stands. Nothing is fabricated either way.
-    Enabled by TENDERMIND_ESCALATION_MODEL (off by default).
+    Model: TENDERMIND_ESCALATION_MODEL (default qwen3:4b; "off" disables).
     """
 
     def __init__(self, primary: ModelProvider, escalation_model: str,
@@ -269,11 +269,25 @@ class EscalatingProvider(ModelProvider):
     def health_check(self):
         return self._primary.health_check()
 
+    # Stage 5H: batch mode. On a small GPU the two models cannot stay loaded
+    # together, so escalating candidate-by-candidate swapped models on almost
+    # every call (Turaif: ~5 calls/min instead of ~24). The runner now calls
+    # primary_only() for every candidate, then escalate() for the unsettled ones
+    # in one batch — one model swap per job.
+    def primary_only(self, candidate: RequirementCandidate):
+        return self._primary.normalize_requirement(candidate)
+
+    @staticmethod
+    def needs_escalation(result, status) -> bool:
+        return status != "ok" or result is None or result.category == "UNKNOWN"
+
     def normalize_requirement(self, candidate: RequirementCandidate):
         result, status, lat, raw = self._primary.normalize_requirement(candidate)
-        needs = status != "ok" or result is None or result.category == "UNKNOWN"
-        if not needs:
+        if not self.needs_escalation(result, status):
             return result, status, lat, raw
+        return self.escalate(candidate, result, status, lat, raw)
+
+    def escalate(self, candidate: RequirementCandidate, result, status, lat, raw):
         self.escalations += 1
         t0 = time.time()
         try:
@@ -299,20 +313,25 @@ class EscalatingProvider(ModelProvider):
         return m
 
 
+DEFAULT_ESCALATION_MODEL = "qwen3:4b"
+
+
 def default_router(timeout_s: int = 90) -> Router:
     """Production router: only REQUIREMENT_NORMALIZATION wired.
 
-    Optional per-task escalation: TENDERMIND_ESCALATION_MODEL=<ollama model>
-    (e.g. gemma3:12b) re-asks only UNKNOWN/failed candidates. Off by default —
-    on CPU-offloaded hardware the strong model costs 2-4 minutes per call.
+    Per-task escalation: only UNKNOWN/failed candidates are re-asked to
+    TENDERMIND_ESCALATION_MODEL (default qwen3:4b, measured +2/70 with no
+    change to rows the primary settled — docs/STAGE_5G_ESCALATION.md).
+    Set it to "off" to disable. If the model is not installed the call fails
+    fast and the primary outcome stands.
     """
     import os
     provider: ModelProvider = QwenMinimalContractProvider(timeout_s)
-    esc = os.environ.get("TENDERMIND_ESCALATION_MODEL", "").strip()
-    if esc:
+    esc = os.environ.get("TENDERMIND_ESCALATION_MODEL", DEFAULT_ESCALATION_MODEL).strip()
+    if esc and esc.lower() not in ("off", "none", "0", "false"):
         try:
-            esc_timeout = int(os.environ.get("TENDERMIND_ESCALATION_TIMEOUT", 240))
+            esc_timeout = int(os.environ.get("TENDERMIND_ESCALATION_TIMEOUT", 150))
         except ValueError:
-            esc_timeout = 240
+            esc_timeout = 150
         provider = EscalatingProvider(provider, esc, timeout_s=esc_timeout)
     return Router({AITask.REQUIREMENT_NORMALIZATION.value: provider})

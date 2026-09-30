@@ -254,7 +254,9 @@ def test_postprocess_end_to_end_ids_evidence():
 
 
 def test_postprocess_rejects_bad_category_and_keeps_unknown():
-    ok_u = (LLMNormalizationResult(summary="Unclear fragment here please", category="UNKNOWN"), _cand("chunk-0001-seg-01"))
+    # no rule cue in the text either (Stage 5K fallback), so UNKNOWN is kept
+    ok_u = (LLMNormalizationResult(summary="Unclear fragment here please", category="UNKNOWN"),
+            _cand("chunk-0001-seg-01", text="Door Schedule & Details"))
     bad = (LLMNormalizationResult(summary="x", category="NOPE"), _cand("chunk-0001-seg-02"))
     reqs, evs, fails = PP.post_process([ok_u, bad])
     assert len(reqs) == 1 and reqs[0].category == "UNKNOWN"
@@ -449,6 +451,8 @@ def test_two_stage_schema_permits_unknown_only_additively():
     b, n = json.loads(base), json.loads(new)
     b["properties"]["requirements"]["items"]["properties"]["category"]["enum"].append("UNKNOWN")
     b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].append("two-stage")
+    # Stage 5K: requirements classified by the rule fallback are marked as such
+    b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].append("two-stage+rule")
     b["properties"]["requirements"]["items"]["properties"]["extraction_method"]["enum"].sort()
     # Stage 5A: two-stage never fabricates confidence -> null permitted on
     # requirements/evidence (live E2E failed persistence without this).

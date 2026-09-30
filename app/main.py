@@ -40,9 +40,18 @@ def _ensure_seed():
         if not db.query(Tender).filter(Tender.id == "SA-2018-HV2").first():
             from app.seed import seed
             seed()
-        _fail_interrupted_jobs(db)
     finally:
         db.close()
+    # Stage 5H: a job cut off by a restart continues by itself (files and AI
+    # answers already done come back from checkpoints), and a watchdog resumes
+    # any job whose worker dies without recording a result.
+    from app.processing import resume_interrupted, start_watchdog
+    resume_interrupted(reason="the server stopped")
+    if _os.environ.get("TENDERMIND_WATCHDOG", "1").strip() != "0":
+        start_watchdog()
+    if _os.environ.get("TENDERMIND_NEWS_ENABLED", "1").strip() != "0":
+        from app.news import start_refresher
+        start_refresher()
 
 
 def _fail_interrupted_jobs(db) -> int:
@@ -67,11 +76,43 @@ async def lifespan(_app):
     yield
 
 
+_PRODUCTION = os.environ.get("TENDERMIND_ENV", "development").strip().lower() in {"prod", "production"}
+
+# Interactive API docs list every endpoint; off in production unless asked for.
+_docs = (not _PRODUCTION) or os.environ.get("TENDERMIND_API_DOCS", "").strip().lower() in {"1", "true", "yes"}
+
 app = FastAPI(
     title="TenderMind",
     version="0.2.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
 )
+
+# Browser hardening headers on every response. The CSP allows the built SPA
+# (same-origin scripts/styles, inline styles used by React, images incl. data:
+# URIs); OAuth sign-in is a full-page redirect so no third-party frames/scripts.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' "
+                                "https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; "
+                                "img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; "
+                                "base-uri 'self'; form-action 'self'"),
+}
+
+
+@app.middleware("http")
+async def _security_headers(request, call_next):
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
+    if _PRODUCTION:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 # CORS — defaults cover local Vite dev; production origins come from
 # TENDERMIND_CORS_ORIGINS (comma-separated, e.g. "https://tendermind.example.com").
@@ -127,7 +168,16 @@ if os.path.isdir(_frontend_dist):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "tender": "SA/2018/HV2"}
+    """Liveness + readiness: the database answers a query."""
+    from sqlalchemy import text
+    from app.database import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"status": "error", "database": "unavailable"}, status_code=503)
+    return {"status": "ok", "database": "ok", "tender": "SA/2018/HV2"}
 
 # SPA fallback: any path that isn't /api/*, /docs, /openapi.json, /health or a
 # built asset returns index.html so React Router can handle client-side

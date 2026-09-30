@@ -187,6 +187,15 @@ def log_inventory(inventory):
 
 # --- Document Intelligence ---
 
+def _report_page(done, total):
+    """Live per-page progress for the processing job (no-op outside the app)."""
+    try:
+        from app.pipeline.progress import report
+    except ImportError:
+        return
+    report("pages", done, total)
+
+
 def _call_tesseract_routing(pdf_path: Path):
     """Helper for Tesseract routing — isolated for testability (patchable)."""
     import importlib.util
@@ -245,6 +254,7 @@ def extract_pdf_text(pdf_path, ocr_needed_hint=None):
                 "garbled_ratio": garbled,
                 "bbox": list(page.rect) if hasattr(page, "rect") else [0,0,612,792]
             })
+            _report_page(i + 1, len(doc))
         doc.close()
     except Exception as e:
         pages.append({"page_number": 1, "text": "", "method": f"fitz_error: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e)})

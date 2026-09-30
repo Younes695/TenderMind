@@ -3,6 +3,7 @@
 # Secrets / credentials
 .env
 .env.*
+!.env.example
 *.env
 *API_KEY*
 *SECRET*
@@ -17,6 +18,8 @@ secrets*.json
 *.sqlite
 *.sqlite3
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Logs (may contain secrets)
 *.log

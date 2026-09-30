@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import apiClient from "../api/client";
+import { useT } from "../i18n";
 
 export function GoogleIcon() {
   return (
@@ -34,6 +35,7 @@ export const AUTH_ERRORS = {
   email_not_verified: "Your Google email address is not verified.",
   no_email: "The provider did not share an email address.",
   signup_disabled: "New accounts are not accepted on this server.",
+  account_exists: "An account with this email already exists. Sign in the way you created it (email and password, or the original provider).",
 };
 
 const PROVIDERS = [
@@ -41,8 +43,9 @@ const PROVIDERS = [
   { id: "microsoft", label: "Microsoft", Icon: MicrosoftIcon },
 ];
 
-/** "Continue with Google / Microsoft" — full-page redirect to the server's OAuth start. */
+/** "Continue with Google / Microsoft" - full-page redirect to the server's OAuth start. */
 export default function SocialSignIn({ next = "/dashboard" }) {
+  const t = useT();
   const [available, setAvailable] = useState(null);
 
   useEffect(() => {
@@ -57,17 +60,17 @@ export default function SocialSignIn({ next = "/dashboard" }) {
         const cls = "flex h-[52px] w-full items-center justify-center gap-3 rounded-lg border border-[#e2e6ee] bg-white text-[14px] font-medium text-[#162A4C] transition";
         return enabled ? (
           <a key={id} href={href} data-testid={`oauth-${id}`} className={`${cls} hover:bg-[#f5f6f9]`}>
-            <Icon /> Continue with {label}
+            <Icon /> {t("Continue with {label}", { label })}
           </a>
         ) : (
-          <button key={id} type="button" disabled data-testid={`oauth-${id}`} title={`${label} sign-in is not configured on this server yet`}
+          <button key={id} type="button" disabled data-testid={`oauth-${id}`} title={t("{label} sign-in is not configured on this server yet", { label })}
             className={`${cls} cursor-not-allowed opacity-50`}>
-            <Icon /> Continue with {label}
+            <Icon /> {t("Continue with {label}", { label })}
           </button>
         );
       })}
       {available && !available.google && !available.microsoft && (
-        <p className="text-center text-[12px] text-[#98a2b3]">Google and Microsoft sign-in will appear once configured by the administrator.</p>
+        <p className="text-center text-[12px] text-[#98a2b3]">{t("Google and Microsoft sign-in will appear once configured by the administrator.")}</p>
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import {
   KeyRound,
   ScrollText,
@@ -7,6 +8,7 @@ import {
   FileCog,
   Info,
 } from "lucide-react";
+import { useT } from "../i18n";
 
 const controls = [
   {
@@ -42,21 +44,20 @@ const controls = [
 ];
 
 function Security() {
+  const t = useT();
   return (
     <>
       {/* Hero band */}
       <section className="bg-[#162A4C] py-14 sm:py-16">
         <div className="mx-auto max-w-[1190px] px-4 sm:px-6 lg:px-8">
           <span className="mb-3 block text-[11px] font-semibold uppercase tracking-widest text-[#C8A96B]">
-            Security & Control
+            {t("Security & Control")}
           </span>
           <h1 className="mb-4 max-w-[560px] text-[32px] font-bold leading-tight tracking-tight text-white sm:text-[38px]">
-            Your tenders contain sensitive information. We treat them that
-            way.
+            {t("Your tenders contain sensitive information. We treat them that way.")}
           </h1>
           <p className="max-w-[560px] text-[14px] leading-relaxed text-[#c5d0e6]">
-            Enterprise controls for who sees what, who approved what, and
-            when — on every tender.
+            {t("Enterprise controls for who sees what, who approved what, and when — on every tender.")}
           </p>
         </div>
       </section>
@@ -74,10 +75,10 @@ function Security() {
                   <Icon size={17} strokeWidth={1.8} />
                 </span>
                 <h3 className="mb-1.5 text-[15px] font-bold text-[#162A4C]">
-                  {title}
+                  {t(title)}
                 </h3>
                 <p className="text-[13px] leading-relaxed text-[#4b5f86]">
-                  {text}
+                  {t(text)}
                 </p>
               </article>
             ))}
@@ -86,19 +87,17 @@ function Security() {
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#eddcae] bg-[#f8efd6] px-5 py-4">
             <Info size={16} strokeWidth={1.8} className="mt-0.5 shrink-0 text-[#a88645]" />
             <p className="text-[13px] leading-relaxed text-[#7a5f2b]">
-              Certification roadmap (ISO 27001, SOC 2) available under NDA
-              during enterprise evaluation. No unsupported claims are made
-              on this page.
+              {t("Certification roadmap (ISO 27001, SOC 2) available under NDA during enterprise evaluation. No unsupported claims are made on this page.")}
             </p>
           </div>
 
           <div className="mt-8 flex justify-center">
-            <button
-              type="button"
+            <Link
+              to="/demo?topic=security"
               className="rounded-lg bg-[#162A4C] px-6 py-3.5 text-[14px] font-bold text-white transition-colors hover:bg-[#0F1D38]"
             >
-              Explore Security with our team
-            </button>
+              {t("Explore Security with our team")}
+            </Link>
           </div>
         </div>
       </section>

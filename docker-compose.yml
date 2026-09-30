@@ -1,0 +1,62 @@
+# TenderMind production stack.
+#   cp .env.example .env   # fill in TENDERMIND_SESSION_SECRET (and OAuth keys if used)
+#   docker compose up -d --build
+# First start pulls the two local models (~4.5 GB) before the app becomes healthy.
+# Put a TLS reverse proxy (Caddy, nginx, a cloud load balancer) in front of port 8001.
+
+services:
+  app:
+    build: .
+    image: tendermind:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      TENDERMIND_OLLAMA_ENDPOINT: http://ollama:11434
+    ports:
+      - "127.0.0.1:8001:8001"   # only the reverse proxy on this host reaches it
+    volumes:
+      - tendermind-data:/data
+    depends_on:
+      ollama-models:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=4g            # archive extraction / OCR scratch
+
+  ollama:
+    image: ollama/ollama:0.12.3
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    # GPU (NVIDIA): uncomment
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  ollama-models:
+    image: ollama/ollama:0.12.3
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "ollama pull qwen2.5:3b && ollama pull qwen3:4b"]
+    restart: "no"
+
+volumes:
+  tendermind-data:
+  ollama-models:

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, JSON, ForeignKey
+from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 import uuid
@@ -23,6 +23,7 @@ class CompanyDocument(Base):
     source_path = Column(String)
     page = Column(String)
     section = Column(String)
+    owner_email = Column(String, nullable=True, index=True)  # app/access.py
 
 class Tender(Base):
     __tablename__ = "tenders"
@@ -31,6 +32,14 @@ class Tender(Base):
     client = Column(String)
     location = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+    owner_email = Column(String, nullable=True, index=True)  # app/access.py
+    outcome = Column(String, nullable=True)  # Stage 6: WON | LOST | SUBMITTED | NOT_SUBMITTED
+    stage = Column(String, nullable=True)  # Stage 8: ELIGIBILITY | STUDY | PRICING | SUBMISSION | SUBMITTED | CLOSED
+    submission_deadline = Column(DateTime, nullable=True)  # Stage 8: set by the team
+    final_decision = Column(String, nullable=True)  # Stage 9: GO | NO_GO — the authorised team's decision
+    final_reason = Column(Text, nullable=True)
+    final_by = Column(String, nullable=True)
+    final_at = Column(DateTime, nullable=True)
 
 class TenderDocument(Base):
     __tablename__ = "tender_documents"
@@ -218,3 +227,261 @@ class User(Base):
     provider_subject = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+
+
+class TenderIssue(Base):
+    """Stage 5H — things a person must look at, per tender.
+
+    category "missing": review required (missing / unreadable / unsupported files,
+    referenced documents not in the package, mandatory requirements with no
+    company evidence) — surfaced as notifications.
+    category "question": the Q&A list (ambiguous clauses, unreadable scanned
+    pages, requirements the AI could not classify) with an answer field.
+    dedupe_key keeps rebuilds idempotent and never reopens a resolved item.
+    """
+    __tablename__ = "tender_issues"
+    __table_args__ = (UniqueConstraint("tender_id", "dedupe_key", name="uq_issue_tender_key"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    category = Column(String, nullable=False)  # missing | question
+    kind = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    source_document = Column(String, nullable=True)
+    page = Column(String, nullable=True)
+    priority = Column(String, default="MEDIUM")  # HIGH | MEDIUM | LOW
+    status = Column(String, default="OPEN", index=True)  # OPEN | RESOLVED
+    answer = Column(Text, nullable=True)
+    resolved_by = Column(String, nullable=True)
+    dedupe_key = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+
+class NewsItem(Base):
+    """Stage 5H — tender notices from official sources (no personal contact data)."""
+    __tablename__ = "news_items"
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uq_news_source_ext"),)
+    id = Column(String, primary_key=True)
+    source = Column(String, nullable=False)
+    external_id = Column(String, nullable=False)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    country = Column(String, nullable=True, index=True)
+    notice_type = Column(String, nullable=True)
+    organization = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    published_at = Column(DateTime, nullable=True, index=True)
+    deadline_at = Column(DateTime, nullable=True)
+    relevant = Column(Boolean, default=False, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Rfq(Base):
+    """Stage 5I — a request for quotation for one work package of a tender."""
+    __tablename__ = "rfqs"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    reference = Column(String, nullable=False)       # e.g. RFQ-MECH-04
+    package_name = Column(String, nullable=False)    # e.g. Mechanical Work Package
+    discipline = Column(String, nullable=True)       # e.g. HVAC
+    scope = Column(Text, nullable=True)              # keywords / scope used to pick requirements
+    invited_count = Column(Float, nullable=True)
+    closes_at = Column(DateTime, nullable=True)
+    currency = Column(String, default="SAR")
+    status = Column(String, default="OPEN")          # OPEN | CLOSED | AWARDED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Quotation(Base):
+    """One subcontractor's answer to an RFQ. Technical fit is entered by the engineer."""
+    __tablename__ = "quotations"
+    id = Column(String, primary_key=True)
+    rfq_id = Column(String, ForeignKey("rfqs.id"), index=True, nullable=False)
+    contractor = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    duration_weeks = Column(Float, nullable=False)
+    technical_fit = Column(Float, nullable=False)    # 0-100 %
+    payment_terms_days = Column(Float, nullable=False)
+    notes = Column(Text, nullable=True)
+    selected = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Feedback(Base):
+    """Stage 5I — problems / suggestions sent from inside the product."""
+    __tablename__ = "feedback"
+    id = Column(String, primary_key=True)
+    user_email = Column(String, index=True, nullable=True)
+    kind = Column(String, default="problem")         # problem | suggestion | upgrade
+    message = Column(Text, nullable=False)
+    page = Column(String, nullable=True)
+    plan = Column(String, nullable=True)
+    status = Column(String, default="NEW")           # NEW | IN_PROGRESS | DONE
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CompanyProfile(Base):
+    """Stage 5J — the bidder's own details, used in bid emails (one per account)."""
+    __tablename__ = "company_profiles"
+    id = Column(String, primary_key=True)  # account email, or "local" when auth is off
+    name = Column(String, nullable=True)
+    intro = Column(Text, nullable=True)
+    contact_name = Column(String, nullable=True)
+    contact_title = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    website = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    account_type = Column(String, nullable=True)  # company (default) | individual professional
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+
+class CompanyCapability(Base):
+    """Stage 6 — what the company can bid for (one row per account, like CompanyProfile)."""
+    __tablename__ = "company_capabilities"
+    id = Column(String, primary_key=True)             # account email or "local"
+    work_types = Column(JSON, default=list)           # app/tender_facts.WORK_TYPES
+    max_kv = Column(Float, nullable=True)
+    countries = Column(JSON, default=list)
+    registrations = Column(JSON, default=list)        # e.g. "SEC approved contractor"
+    certifications = Column(JSON, default=list)       # e.g. "ISO 9001"
+    years_experience = Column(Float, nullable=True)
+    annual_turnover = Column(Float, nullable=True)
+    turnover_currency = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EligibilityResult(Base):
+    """Stage 6 — outcome of the eligibility gate for a tender, and any override."""
+    __tablename__ = "eligibility_results"
+    tender_id = Column(String, ForeignKey("tenders.id"), primary_key=True)
+    status = Column(String, nullable=False)           # ELIGIBLE | INELIGIBLE | SKIPPED
+    checks = Column(JSON, default=list)
+    override_by = Column(String, nullable=True)       # the account that continued
+    override_name = Column(String, nullable=True)     # the person named (shared company login)
+    override_reason = Column(Text, nullable=True)
+    overridden_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TeamMember(Base):
+    """Stage 6 — people who work on the company's tenders (one shared login)."""
+    __tablename__ = "team_members"
+    id = Column(String, primary_key=True)
+    owner_email = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=False)
+    department = Column(String, nullable=True)
+    role = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TenderTask(Base):
+    """Stage 6 — a task of the tender team on one tender."""
+    __tablename__ = "tender_tasks"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    title = Column(String, nullable=False)
+    assignee = Column(String, nullable=True)          # team member name
+    department = Column(String, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String, default="OPEN")           # OPEN | DONE
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    done_at = Column(DateTime, nullable=True)
+
+
+class DepartmentVote(Base):
+    """Stage 6 — one team member's go/no-go opinion, entered by the tender manager."""
+    __tablename__ = "department_votes"
+    __table_args__ = (UniqueConstraint("tender_id", "member_name", name="uq_vote_tender_member"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    member_name = Column(String, nullable=False)
+    department = Column(String, nullable=False)
+    vote = Column(String, nullable=False)             # APPROVE | REJECT | ABSTAIN
+    comment = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScoreSettings(Base):
+    """Stage 6 — per-account Go/No-Go factor weights."""
+    __tablename__ = "score_settings"
+    id = Column(String, primary_key=True)             # account email or "local"
+    weights = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SubmissionItem(Base):
+    """Stage 7 — team state of one bid submission checklist item (items come from the analysis)."""
+    __tablename__ = "submission_items"
+    __table_args__ = (UniqueConstraint("tender_id", "item_key", name="uq_submission_item"),)
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    item_key = Column(String, nullable=False)
+    status = Column(String, default="TODO")           # TODO | READY | NOT_APPLICABLE
+    assignee = Column(String, nullable=True)
+    note = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditEvent(Base):
+    """Stage 7 — who changed what on a tender, and when (decision pack audit trail)."""
+    __tablename__ = "audit_events"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    action = Column(String, nullable=False)
+    detail = Column(JSON, default=dict)
+    actor = Column(String, nullable=True)             # signed-in account
+    actor_name = Column(String, nullable=True)        # person named on the shared login
+    at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class TenderNote(Base):
+    """Stage 8 — a note on a tender by a team member (shared login: the name is typed)."""
+    __tablename__ = "tender_notes"
+    id = Column(String, primary_key=True)
+    tender_id = Column(String, ForeignKey("tenders.id"), index=True, nullable=False)
+    author = Column(String, nullable=True)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceList(Base):
+    """A supplier price list uploaded by the account (the only source of material prices)."""
+    __tablename__ = "price_lists"
+    id = Column(String, primary_key=True)
+    owner = Column(String, index=True, nullable=False)   # account key (email, or "local" with auth off)
+    supplier = Column(String, nullable=False)
+    currency = Column(String, nullable=False)
+    price_date = Column(DateTime, nullable=False)        # the date printed on / given for the list
+    filename = Column(String, nullable=True)
+    items_count = Column(Float, default=0)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PriceItem(Base):
+    __tablename__ = "price_items"
+    id = Column(String, primary_key=True)
+    list_id = Column(String, ForeignKey("price_lists.id"), index=True, nullable=False)
+    description = Column(Text, nullable=False)
+    unit = Column(String, nullable=True)
+    price = Column(Float, nullable=False)
+    currency = Column(String, nullable=False)
+    min_qty = Column(Float, default=0)                   # a price break: this price from this quantity
+    key = Column(String, index=True, nullable=True)      # app.materials.material_key
+
+
+class DemoRequest(Base):
+    """A demo / sales request sent from the public website (no account needed)."""
+    __tablename__ = "demo_requests"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    company = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    topic = Column(String, nullable=True)      # e.g. plan:growth, security, industry:power
+    message = Column(Text, nullable=True)
+    status = Column(String, default="NEW")     # NEW | CONTACTED
+    created_at = Column(DateTime, default=datetime.utcnow)

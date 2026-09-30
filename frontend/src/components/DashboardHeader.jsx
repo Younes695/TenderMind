@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, Bell, Menu } from "lucide-react";
+import { useT } from "../i18n";
 
 function DashboardHeader({
   title = "Dashboard",
@@ -8,13 +9,15 @@ function DashboardHeader({
   activeTenders = 5,
   newTenderTo = "/tenders/new",
   hasNotifications = false,
+  notificationCount = 0,
   onSearch,
   onNotificationsClick,
   onMenuClick,
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
 
-  // "Tuesday pipeline · 5 active tenders" — اليوم بيتحسب أوتوماتيك
+  // "Tuesday pipeline · 5 active tenders" - اليوم بيتحسب أوتوماتيك
   const weekday = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
   const handleChange = (e) => {
@@ -28,7 +31,7 @@ function DashboardHeader({
       <button
         type="button"
         onClick={onMenuClick}
-        aria-label="Open menu"
+        aria-label={t("Open menu")}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e2e6ee] bg-white text-[#162A4C] transition-colors hover:bg-[#f5f6f9] lg:hidden"
       >
         <Menu size={20} strokeWidth={1.8} />
@@ -40,7 +43,7 @@ function DashboardHeader({
           {title}
         </h1>
         <p className="mt-0.5 truncate text-[14px] text-[#4b5f86] sm:text-[15px]">
-          {subtitle ?? `${weekday} pipeline · ${activeTenders} active tenders`}
+          {subtitle ?? `${weekday} ${t("pipeline")} · ${activeTenders} ${t("active tenders")}`}
         </p>
       </div>
 
@@ -50,15 +53,15 @@ function DashboardHeader({
           <Search
             size={18}
             strokeWidth={1.8}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7a99]"
+            className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[#6b7a99]"
           />
           <input
             type="search"
             value={query}
             onChange={handleChange}
-            placeholder="Search tenders..."
-            aria-label="Search tenders"
-            className="h-11 w-full rounded-xl border border-[#e2e6ee] bg-white pl-10 pr-3 text-[15px] text-[#162A4C] placeholder:text-[#9aa5bd] outline-none transition focus:border-[#162A4C] focus:ring-2 focus:ring-[#162A4C]/15"
+            placeholder={t("Search tenders...")}
+            aria-label={t("Search tenders...")}
+            className="h-11 w-full rounded-xl border border-[#e2e6ee] bg-white ps-10 pe-3 text-[15px] text-[#162A4C] placeholder:text-[#9aa5bd] outline-none transition focus:border-[#162A4C] focus:ring-2 focus:ring-[#162A4C]/15"
           />
         </div>
 
@@ -66,13 +69,13 @@ function DashboardHeader({
           to={newTenderTo}
           className="hidden h-11 items-center rounded-xl bg-[#162A4C] px-5 text-[15px] font-bold whitespace-nowrap text-white transition-colors hover:bg-[#0F1D38] focus:outline-none focus:ring-2 focus:ring-[#162A4C]/40 focus:ring-offset-2 sm:flex"
         >
-          + New Tender
+          + {t("New Tender")}
         </Link>
 
         {/* Mobile: icon only */}
         <Link
           to={newTenderTo}
-          aria-label="New Tender"
+          aria-label={t("New Tender")}
           className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#162A4C] text-[20px] font-bold text-white sm:hidden"
         >
           +
@@ -81,13 +84,17 @@ function DashboardHeader({
         <button
           type="button"
           onClick={onNotificationsClick}
-          aria-label="Notifications"
+          aria-label={t("Notifications")}
           className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e2e6ee] bg-white text-[#162A4C] transition-colors hover:bg-[#f5f6f9]"
         >
           <Bell size={19} strokeWidth={1.8} />
-          {hasNotifications && (
-            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-[#C8A96B] ring-2 ring-white" />
-          )}
+          {hasNotifications && (notificationCount > 0 ? (
+            <span data-testid="bell-count" className="absolute -end-1 -top-1 min-w-[20px] rounded-full bg-[#b42318] px-1.5 text-center text-[11px] font-bold leading-5 text-white ring-2 ring-white">
+              {notificationCount > 99 ? "99+" : notificationCount}
+            </span>
+          ) : (
+            <span className="absolute end-2.5 top-2.5 h-2 w-2 rounded-full bg-[#C8A96B] ring-2 ring-white" />
+          ))}
         </button>
       </div>
 
@@ -96,15 +103,15 @@ function DashboardHeader({
         <Search
           size={18}
           strokeWidth={1.8}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7a99]"
+          className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[#6b7a99]"
         />
         <input
           type="search"
           value={query}
           onChange={handleChange}
-          placeholder="Search tenders..."
-          aria-label="Search tenders"
-          className="h-11 w-full rounded-xl border border-[#e2e6ee] bg-white pl-10 pr-3 text-[15px] text-[#162A4C] placeholder:text-[#9aa5bd] outline-none transition focus:border-[#162A4C] focus:ring-2 focus:ring-[#162A4C]/15"
+          placeholder={t("Search tenders...")}
+          aria-label={t("Search tenders...")}
+          className="h-11 w-full rounded-xl border border-[#e2e6ee] bg-white ps-10 pe-3 text-[15px] text-[#162A4C] placeholder:text-[#9aa5bd] outline-none transition focus:border-[#162A4C] focus:ring-2 focus:ring-[#162A4C]/15"
         />
       </div>
     </header>

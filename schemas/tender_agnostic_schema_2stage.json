@@ -86,6 +86,7 @@
               "CLARIFICATION",
               "ADDENDUM",
               "DRAWING",
+              "SCHEDULE",
               "OTHER",
               null
             ],
@@ -258,7 +259,8 @@
               "deterministic",
               "hybrid",
               "llm",
-              "two-stage"
+              "two-stage",
+              "two-stage+rule"
             ]
           }
         }

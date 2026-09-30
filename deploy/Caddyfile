@@ -1,0 +1,17 @@
+{
+	email {$EMAIL}
+}
+
+{$DOMAIN} {
+	encode gzip
+	# large tender packages (the app enforces its own per-file limits)
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy app:8001 {
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+	}
+}

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import HeroHome from "../components/HeroHome";
+import { Link } from "react-router-dom";
+import { useT } from "../i18n";
 import {
   FileWarning,
   LayoutGrid,
@@ -146,7 +148,7 @@ const auditLog = [
 ];
 
 const features = [
-  { icon: FileSearch, title: "AI RFP Analysis", text: "248 requirements extracted in minutes, every clause linked to its page." },
+  { icon: FileSearch, title: "AI RFP Analysis", text: "Every requirement extracted and linked to its file and page." },
   { icon: Scale, title: "Go / No-Go Intelligence", text: "Weighted scoring across technical, financial, risk and capacity." },
   { icon: TrendingUp, title: "Financial & Cash Flow Analysis", text: "Payment terms, retention and bonds modelled before you bid." },
   { icon: AlertTriangle, title: "Risk Analysis", text: "Contractual and commercial risks flagged with evidence." },
@@ -165,6 +167,7 @@ const features = [
 
 
 function Home() {
+  const t = useT();
   const [showTop, setShowTop] = useState(false);
 
   useEffect(() => {
@@ -200,7 +203,7 @@ function Home() {
           </ul>
 
           <h2 className="mb-6 mt-12 max-w-[520px] text-[28px] font-bold leading-snug tracking-tight text-[#162A4C] sm:mt-[72px]">
-            Your team shouldn’t spend hours deciding whether a tender is worth
+            Your team shouldn't spend hours deciding whether a tender is worth
             pursuing.
           </h2>
 
@@ -270,10 +273,10 @@ function Home() {
                 AI Intelligence
               </span>
               <h2 className="mb-4 max-w-[520px] text-[28px] font-bold leading-snug tracking-tight text-[#162A4C]">
-                AI that understands your tender — and your company.
+                AI that understands your tender - and your company.
               </h2>
               <p className="mb-6 max-w-[520px] text-[13px] leading-relaxed text-[#4b5f86]">
-                TenderMind doesn’t just summarize documents. It compares every
+                TenderMind doesn't just summarize documents. It compares every
                 RFP against your capabilities, past projects, certifications,
                 financial policies, risk policies, capacity and tender strategy.
               </p>
@@ -300,7 +303,7 @@ function Home() {
                 RFP Requirement
               </span>
               <blockquote className="mb-5 border-l-2 border-[#C8A96B] pl-3 text-[16px] font-semibold leading-snug text-[#162A4C]">
-                “Minimum 5 years experience in similar projects.”
+                "Minimum 5 years experience in similar projects."
               </blockquote>
 
               <div className="rounded-xl bg-[#e8ecf3] p-4">
@@ -361,12 +364,12 @@ function Home() {
                 Human approval required before proceeding.
               </p>
 
-              <button
-                type="button"
-                className="w-full rounded-lg bg-[#C8A96B] px-4 py-3 text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
+              <Link
+                to="/how-it-works"
+                className="block w-full rounded-lg bg-[#C8A96B] px-4 py-3 text-center text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
               >
                 See How Go / No-Go Works
-              </button>
+              </Link>
 
               <p className="mt-3 flex items-center gap-1.5 text-[12px] text-[#a9b8d4]">
                 <Lock size={12} strokeWidth={1.8} />
@@ -375,6 +378,7 @@ function Home() {
             </div>
 
             <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#a9b8d4]">{t("Illustrative example — not a real tender")}</p>
               <ul className="space-y-4">
                 {scores.map(({ label, value }) => (
                   <li key={label}>
@@ -434,12 +438,13 @@ function Home() {
               Financial Intelligence
             </span>
             <h2 className="mb-3 max-w-[560px] text-[28px] font-bold leading-snug tracking-tight text-white">
-              Don’t evaluate a tender without understanding its financial impact.
+              Don't evaluate a tender without understanding its financial impact.
             </h2>
             <p className="mb-6 text-[14px] text-[#a9b8d4]">
               Give Finance the information they need before the commercial decision.
             </p>
 
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#a9b8d4]">{t("Illustrative example — not a real tender")}</p>
             <div className="mb-4 grid grid-cols-2 gap-3">
               {finStats.map(({ label, value }) => (
                 <div key={label} className="rounded-xl border border-white/15 px-4 py-4">
@@ -451,7 +456,7 @@ function Home() {
 
             <p className="inline-flex items-center gap-2 rounded-md bg-[#fadfdf] px-3.5 py-2 text-[12px] font-semibold text-[#c0453f]">
               <AlertTriangle size={14} strokeWidth={2} className="shrink-0" />
-              Cash Flow Risk: HIGH — 90-day terms + 10% retention strain Q2–Q3.
+              Cash Flow Risk: HIGH - 90-day terms + 10% retention strain Q2-Q3.
             </p>
           </div>
 
@@ -528,19 +533,19 @@ function Home() {
                   >
                     {done ? <Check size={14} strokeWidth={2.5} /> : n}
                   </span>
-                  <span className="flex-1 text-[13px] font-semibold text-[#162A4C]">{name}</span>
+                  <span className="flex-1 text-[13px] font-semibold text-[#162A4C]">{t(name)}</span>
                   {status && (
                     <span
                       className={`text-[12px] ${done ? "text-emerald-700" : "text-[#C8A96B]"}`}
                     >
-                      {status}
+                      {t(status)}
                     </span>
                   )}
                 </li>
               ))}
             </ul>
             <p className="mt-5 text-[12px] leading-relaxed text-[#4b5f86]">
-              Every approval is documented. Every decision has an owner. Every action has a timestamp.
+              {t("Every approval is documented. Every decision has an owner. Every action has a timestamp.")}
             </p>
           </article>
 
@@ -548,11 +553,11 @@ function Home() {
           <article className="rounded-2xl border border-[#ebe8e1] bg-white p-6">
             <Truck size={18} strokeWidth={1.8} className="mb-4 text-[#162A4C]" />
             <h3 className="mb-4 text-[18px] font-bold leading-snug text-[#162A4C]">
-              Turn RFP requirements into subcontractor RFQs.
+              {t("Turn RFP requirements into subcontractor RFQs.")}
             </h3>
             <div className="rounded-xl border border-[#ebe8e1] bg-[#f5f3ee] p-4">
-              <p className="text-[13px] font-bold text-[#162A4C]">Mechanical Work Package</p>
-              <p className="mb-3 text-[12px] text-[#4b5f86]">HVAC · SAR 2.1M estimate</p>
+              <p className="text-[13px] font-bold text-[#162A4C]">{t("Mechanical Work Package")}</p>
+              <p className="mb-3 text-[12px] text-[#4b5f86]">{t("HVAC · SAR 2.1M estimate")}</p>
               <ol className="space-y-2">
                 {rfqSteps.map((step, i) => (
                   <li key={step} className="flex items-center gap-2.5 text-[12px] text-[#4b5f86]">
@@ -563,17 +568,17 @@ function Home() {
                     >
                       {i + 1}
                     </span>
-                    {step}
+                    {t(step)}
                   </li>
                 ))}
               </ol>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="rounded-full bg-[#e8ecf3] px-3 py-1 text-[11px] font-semibold text-[#162A4C]">
-                Bid Management
+                {t("Bid Management")}
               </span>
               <span className="rounded-full bg-[#f3ead6] px-3 py-1 text-[11px] font-semibold text-[#a88645]">
-                Subcontractor Procurement
+                {t("Subcontractor Procurement")}
               </span>
             </div>
           </article>
@@ -583,30 +588,30 @@ function Home() {
         <div className="mx-auto grid max-w-[1240px] gap-8 rounded-2xl border border-[#ebe8e1] bg-white p-6 sm:p-8 lg:grid-cols-2 lg:gap-12">
           <div>
             <h2 className="mb-4 text-[24px] font-bold leading-snug tracking-tight text-[#162A4C]">
-              Your tenders contain sensitive information. We treat them that way.
+              {t("Your tenders contain sensitive information. We treat them that way.")}
             </h2>
             <ul className="mb-6 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
               {securityItems.map((item) => (
                 <li key={item} className="flex items-center gap-2 text-[13px] text-[#162A4C]">
                   <Lock size={14} strokeWidth={1.8} className="shrink-0" />
-                  {item}
+                  {t(item)}
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              className="rounded-lg border-2 border-[#162A4C] px-4 py-2.5 text-[13px] font-semibold text-[#162A4C] transition hover:bg-[#162A4C] hover:text-white"
+            <Link
+              to="/security"
+              className="inline-block rounded-lg border-2 border-[#162A4C] px-4 py-2.5 text-[13px] font-semibold text-[#162A4C] transition hover:bg-[#162A4C] hover:text-white"
             >
-              Explore Security
-            </button>
+              {t("Explore Security")}
+            </Link>
           </div>
 
           <div className="space-y-3 self-center rounded-xl border border-[#ebe8e1] bg-[#f5f3ee] p-5 font-mono text-[12px] text-[#4b5f86]">
             {auditLog.map((line) => (
-              <p key={line} className="break-words">{line}</p>
+              <p key={line} className="break-words">{t(line)}</p>
             ))}
             <p className="break-words text-emerald-700">
-              [09:51:40] approved · signed · timestamped
+              {t("[09:51:40] approved · signed · timestamped")}
             </p>
           </div>
         </div>
@@ -614,7 +619,7 @@ function Home() {
         {/* Features */}
         <div className="mx-auto max-w-[1240px]">
           <h2 className="mb-8 text-center text-[28px] font-bold tracking-tight text-[#162A4C]">
-            Everything a tender team needs.
+            {t("Everything a tender team needs.")}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {features.map(({ icon: Icon, title, text }) => (
@@ -622,8 +627,8 @@ function Home() {
                 <span className="mb-4 inline-flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-[#eef0f4] text-[#162A4C]">
                   <Icon size={16} strokeWidth={1.8} />
                 </span>
-                <h3 className="mb-1.5 text-[14px] font-bold text-[#162A4C]">{title}</h3>
-                <p className="text-[13px] leading-relaxed text-[#4b5f86]">{text}</p>
+                <h3 className="mb-1.5 text-[14px] font-bold text-[#162A4C]">{t(title)}</h3>
+                <p className="text-[13px] leading-relaxed text-[#4b5f86]">{t(text)}</p>
               </article>
             ))}
           </div>
@@ -633,24 +638,24 @@ function Home() {
       {/* CTA */}
       <section className="bg-[#162A4C] px-4 py-16 text-center sm:px-6 sm:py-20">
         <span className="mb-3 block text-[11px] font-semibold uppercase tracking-widest text-[#C8A96B]">
-          From RFP to ready-to-bid
+          {t("From RFP to ready-to-bid")}
         </span>
         <h2 className="mx-auto mb-8 max-w-[720px] text-[32px] font-bold leading-snug tracking-tight text-white">
-          Understand the tender. Decide with confidence. Coordinate the team. Submit on time.
+          {t("Understand the tender. Decide with confidence. Coordinate the team. Submit on time.")}
         </h2>
         <div className="flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
+          <Link
+            to="/demo"
             className="rounded-lg bg-[#C8A96B] px-6 py-3 text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
           >
-            Book a Demo
-          </button>
-          <button
-            type="button"
+            {t("Book a Demo")}
+          </Link>
+          <Link
+            to="/how-it-works"
             className="rounded-lg border border-white/30 px-6 py-3 text-[13px] font-semibold text-white transition hover:bg-white/10"
           >
-            See How It Works
-          </button>
+            {t("See How It Works")}
+          </Link>
         </div>
       </section>
 
@@ -660,7 +665,7 @@ function Home() {
       {/* Back to top */}
       <button
         type="button"
-        aria-label="Back to top"
+        aria-label={t("Back to top")}
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
         className={`fixed bottom-6 right-6 z-50 flex items-center gap-1.5 rounded-full bg-[#C8A96B] px-4 py-3 text-[12px] font-bold tracking-wide text-[#162A4C] shadow-lg transition-all duration-300 hover:brightness-110 ${
           showTop
@@ -669,7 +674,7 @@ function Home() {
         }`}
       >
         <ArrowUp size={14} strokeWidth={2.5} />
-        TOP
+        {t("TOP")}
       </button>
     </>
   );

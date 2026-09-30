@@ -287,7 +287,7 @@ describe("Stage 2B — Tender Workspace", () => {
         <GoNoGo />
       </BrowserRouter>
     );
-    await waitFor(() => expect(screen.getByText("Decision requires management review.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("decision-board")).toBeInTheDocument());
     expect(screen.queryByText("CONDITIONAL GO")).not.toBeInTheDocument();
     expect(screen.queryByText("BID")).not.toBeInTheDocument();
   });

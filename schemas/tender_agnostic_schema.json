@@ -22,7 +22,7 @@
           "text_length": {"type": "integer"},
           "extraction_method": {"type": "string", "description": "Free-form extraction method, e.g., tesseract, libreoffice, fitz, tesseract_5.4.0_ara+eng_psm6_dpi300"},
           "extraction_status": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "FAILED", "UNSUPPORTED"], "description": "Document extraction status"},
-          "document_type": {"type": ["string", "null"], "enum": ["TECHNICAL", "COMMERCIAL", "BOQ", "LEGAL", "SUBMISSION", "CLARIFICATION", "ADDENDUM", "DRAWING", "OTHER", null], "description": "Generic classification"},
+          "document_type": {"type": ["string", "null"], "enum": ["TECHNICAL", "COMMERCIAL", "BOQ", "LEGAL", "SUBMISSION", "CLARIFICATION", "ADDENDUM", "DRAWING", "SCHEDULE", "OTHER", null], "description": "Generic classification"},
           "document_status": {"type": "string", "enum": ["COMPLETE", "PARTIAL", "FAILED", "UNSUPPORTED"], "description": "Alias for extraction_status"},
           "ocr_applied": {"type": "boolean"},
           "language_detected": {"type": ["string", "null"]},

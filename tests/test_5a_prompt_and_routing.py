@@ -73,13 +73,18 @@ def test_escalation_failure_keeps_primary_outcome():
     assert res2 is None and status2 == "malformed"  # no fabricated requirement
 
 
-def test_default_router_escalation_is_opt_in(monkeypatch):
+def test_default_router_escalates_to_qwen3_by_default(monkeypatch):
+    # Measured (docs/STAGE_5G_ESCALATION.md): qwen3:4b on UNKNOWN/failed rows
+    # lifts 60/70 -> 62/70; phi4-mini was rejected (turns UNKNOWN into wrong labels).
     monkeypatch.delenv("TENDERMIND_ESCALATION_MODEL", raising=False)
-    assert isinstance(R.default_router().route(AITask.REQUIREMENT_NORMALIZATION),
-                      QwenMinimalContractProvider)
+    p = R.default_router().route(AITask.REQUIREMENT_NORMALIZATION)
+    assert isinstance(p, EscalatingProvider) and p.model_name.endswith("+qwen3:4b")
     monkeypatch.setenv("TENDERMIND_ESCALATION_MODEL", "gemma3:12b")
-    assert isinstance(R.default_router().route(AITask.REQUIREMENT_NORMALIZATION),
-                      EscalatingProvider)
+    assert R.default_router().route(AITask.REQUIREMENT_NORMALIZATION).model_name.endswith("+gemma3:12b")
+    for off in ("off", "none", "0", "OFF"):
+        monkeypatch.setenv("TENDERMIND_ESCALATION_MODEL", off)
+        assert isinstance(R.default_router().route(AITask.REQUIREMENT_NORMALIZATION),
+                          QwenMinimalContractProvider)
 
 
 def test_processing_passes_worker_config():

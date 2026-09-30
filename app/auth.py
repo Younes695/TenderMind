@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import threading
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -64,6 +65,12 @@ def validate_auth_config() -> None:
         return
     if bool(_configured_email()) != bool(_configured_password()):
         raise RuntimeError("Set both TENDERMIND_AUTH_EMAIL and TENDERMIND_AUTH_PASSWORD, or neither")
+    pw = _configured_password()
+    env = os.getenv("TENDERMIND_ENV", "development").strip().lower()
+    if pw and env in {"prod", "production"} and (
+            password_problem(pw) or len(pw) < 12 or "change-me" in pw.lower()):
+        raise RuntimeError("TENDERMIND_AUTH_PASSWORD is weak or a placeholder: use 12+ characters "
+                           "with letters and numbers")
     _session_secret()  # validates production secret
 
 
@@ -103,6 +110,39 @@ def password_problem(password: str) -> Optional[str]:
 
 def normalize_email(raw) -> str:
     return str(raw or "").strip().lower()[:254]
+
+
+# ------------------------------------------------------------ rate limiting
+# In-process sliding window (the app runs one worker — see run_prod.sh).
+_LOGIN_WINDOW_S = 15 * 60
+_LOGIN_MAX_FAILURES = 10          # per IP+email
+_LOGIN_MAX_FAILURES_PER_IP = 50
+_login_failures: dict = {}
+_login_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate(key: str) -> None:
+    import time
+    now = time.time()
+    limit = _LOGIN_MAX_FAILURES_PER_IP if key.startswith("ip:") else _LOGIN_MAX_FAILURES
+    with _login_lock:
+        hits = [t for t in _login_failures.get(key, []) if now - t < _LOGIN_WINDOW_S]
+        _login_failures[key] = hits
+        if len(hits) >= limit:
+            raise HTTPException(status_code=429, detail="Too many attempts — try again in 15 minutes")
+
+
+def _record_failure(key: str) -> None:
+    import time
+    with _login_lock:
+        _login_failures.setdefault(key, []).append(time.time())
+        if len(_login_failures) > 10_000:  # bound memory under a spray
+            for k in list(_login_failures)[:5_000]:
+                _login_failures.pop(k, None)
 
 
 # ------------------------------------------------------------------ sessions
@@ -166,6 +206,10 @@ def signup(payload: dict, request: Request):
         db.add(User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email, name=name,
                     password_hash=hash_password(password), provider="password",
                     last_login_at=datetime.utcnow()))
+        kind = str(payload.get("account_type") or "company").strip().lower()
+        if kind in ("company", "individual"):
+            from app.models import CompanyProfile
+            db.merge(CompanyProfile(id=email, account_type=kind, name=name if kind == "individual" else None))
         db.commit()
     finally:
         db.close()
@@ -176,7 +220,21 @@ def signup(payload: dict, request: Request):
 def login(payload: dict, request: Request):
     email = normalize_email(payload.get("email"))
     password = str(payload.get("password", ""))
+    ip = _client_ip(request)
+    # Per IP and per IP+email: a stranger cannot lock a victim out from elsewhere.
+    keys = (f"ip:{ip}", f"ip-email:{ip}|{email}")
+    for k in keys:
+        _check_rate(k)
+    try:
+        return _login(email, password, request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            for k in keys:
+                _record_failure(k)
+        raise
 
+
+def _login(email: str, password: str, request: Request):
     db = _db()
     try:
         user = _find_user(db, email) if email else None
@@ -269,6 +327,26 @@ def _login_error(code: str) -> RedirectResponse:
     return RedirectResponse(f"/login?auth_error={code}", status_code=302)
 
 
+def _may_link(user, provider: str, subject: str) -> bool:
+    """May this provider identity sign in to an existing account with the same email?
+
+    - An account already bound to a provider identity only accepts that exact identity.
+    - Microsoft's email / preferred_username claims are not verified (any tenant
+      admin can set them), so Microsoft never takes over an account created
+      another way — otherwise anyone with their own Azure tenant could sign in
+      as any user.
+    - Google emails are verified (email_verified is required above), so Google
+      may sign in to a password account with the same address.
+    """
+    if user.provider_subject:
+        # A password account can only have been linked by Google (rule below).
+        linked = "google" if user.provider == "password" else user.provider
+        return provider == linked and hmac.compare_digest(user.provider_subject, subject)
+    if provider == "microsoft":
+        return user.provider == "microsoft"
+    return True
+
+
 def _decode_jwt_payload(token: str) -> dict:
     part = token.split(".")[1]
     part += "=" * (-len(part) % 4)
@@ -328,18 +406,21 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
         return _login_error("no_email")
 
     from app.models import User
+    subject = str(claims.get("sub", ""))
     db = _db()
     try:
         user = _find_user(db, email)
+        if user is not None and not _may_link(user, provider, subject):
+            return _login_error("account_exists")
         if user is None:
             if not signup_enabled():
                 return _login_error("signup_disabled")
             user = User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email,
                         name=(claims.get("name") or "")[:120] or None, provider=provider,
-                        provider_subject=str(claims.get("sub", "")))
+                        provider_subject=subject)
             db.add(user)
         elif not user.provider_subject:
-            user.provider_subject = str(claims.get("sub", ""))
+            user.provider_subject = subject
         user.last_login_at = datetime.utcnow()
         db.commit()
         name = user.name
@@ -347,3 +428,91 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
         db.close()
     _start_session(request, email, name)
     return RedirectResponse(pending.get("next") or "/dashboard", status_code=302)
+
+
+
+# ------------------------------------------------------------ Stage 5I settings
+@auth_router.patch("/me")
+def update_me(payload: dict, request: Request):
+    email = request.session.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    name = str(payload.get("name") or "").strip()[:120]
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    db = _db()
+    try:
+        user = _find_user(db, email)
+        if user is not None:
+            user.name = name
+            db.commit()
+    finally:
+        db.close()
+    request.session["name"] = name
+    return {"authenticated": True, "email": email, "name": name, "auth_disabled": not auth_enabled()}
+
+
+@auth_router.post("/change-password")
+def change_password(payload: dict, request: Request):
+    email = request.session.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    current = str(payload.get("current_password") or "")
+    new = str(payload.get("new_password") or "")
+    problem = password_problem(new)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    key = f"ip-email:{_client_ip(request)}|{email}"
+    _check_rate(key)
+    db = _db()
+    try:
+        user = _find_user(db, email)
+        if user is None:
+            raise HTTPException(status_code=400, detail="This account's password is managed by the server administrator")
+        if user.password_hash and not verify_password(current, user.password_hash):
+            _record_failure(key)
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+        user.password_hash = hash_password(new)
+        db.commit()
+    finally:
+        db.close()
+    return {"changed": True}
+
+
+# ------------------------------------------------------- public demo requests
+_DEMO_MAX_PER_IP = 5          # per hour: the form is public, so it is rate-limited per address
+_demo_hits: dict = {}
+
+
+@auth_router.post("/demo-requests")
+def create_demo_request(payload: dict, request: Request):
+    """'Book a demo' / 'Talk to sales' from the public website. Stored for the team; nothing is emailed."""
+    import time
+    from app.models import DemoRequest
+    ip = _client_ip(request)
+    now = time.time()
+    with _login_lock:
+        hits = [t for t in _demo_hits.get(ip, []) if now - t < 3600]
+        if len(hits) >= _DEMO_MAX_PER_IP:
+            raise HTTPException(status_code=429, detail="Too many requests — try again later")
+        hits.append(now)
+        _demo_hits[ip] = hits
+        if len(_demo_hits) > 10_000:
+            _demo_hits.clear()
+    clean = lambda k, n: " ".join(str(payload.get(k) or "").split())[:n] or None
+    name, email = clean("name", 120), normalize_email(payload.get("email"))
+    if not name:
+        raise HTTPException(status_code=400, detail="Your name is required")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if payload.get("website"):  # honeypot field, invisible to people
+        return {"ok": True}
+    db = _db()
+    try:
+        db.add(DemoRequest(id=f"DR-{uuid.uuid4().hex[:10].upper()}", name=name, email=email,
+                           company=clean("company", 200), country=clean("country", 60), topic=clean("topic", 60),
+                           message=(str(payload.get("message") or "").strip()[:2000] or None)))
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True}

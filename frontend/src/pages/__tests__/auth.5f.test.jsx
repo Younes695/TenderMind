@@ -60,7 +60,7 @@ describe("Stage 5F — sign up / log in", () => {
     fireEvent.click(screen.getByText("Create account"));
     expect(await screen.findByText("dashboard page")).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([u]) => String(u).includes("/auth/signup"));
-    expect(JSON.parse(call[1].body)).toEqual({ name: "Sara", email: "sara@company.com", password: "Tender2026" });
+    expect(JSON.parse(call[1].body)).toEqual({ name: "Sara", email: "sara@company.com", password: "Tender2026", account_type: "company" });  // company is the default
   });
 
   it("existing email shows the server's message", async () => {

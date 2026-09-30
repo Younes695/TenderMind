@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 
 from app.models import (Company, CompanyDocument, Decision, Evidence, EvidenceMatch,
-                        MissingEvidence, Requirement, TenderAnalysis)
+                        MissingEvidence, Requirement, Tender, TenderAnalysis)
 
 COMPANY_ID = "OUR_COMPANY"
 
@@ -190,9 +190,14 @@ def _paragraphs(doc_title: str, pages: List[Dict[str, Any]], window: int = 350) 
     return paras
 
 
-def company_paragraphs(db: Session) -> List[Dict[str, Any]]:
+def company_paragraphs(db: Session, owner_email: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Passages from the company documents of the tender's owner only
+    (owner None = rows created without auth / before ownership existed)."""
     out = []
-    for d in db.query(CompanyDocument).filter(CompanyDocument.company_id == COMPANY_ID).all():
+    q = db.query(CompanyDocument).filter(CompanyDocument.company_id == COMPANY_ID)
+    q = q.filter(CompanyDocument.owner_email.is_(None) if owner_email is None
+                 else CompanyDocument.owner_email == owner_email)
+    for d in q.all():
         p = Path(d.source_path or "")
         if p.is_file():
             out.extend(_paragraphs(d.title or p.name, extract_pages(p)))
@@ -325,7 +330,8 @@ def evaluate_tender(db: Session, tender_id: str, matcher=None,
         sync_requirements(db, tender_id)
     _clear_bridge_rows(db, tender_id, keep_requirements=True)
     ensure_company(db)
-    paras = company_paragraphs(db)
+    tender = db.query(Tender).filter(Tender.id == tender_id).first()
+    paras = company_paragraphs(db, tender.owner_email if tender else None)
     reqs = (db.query(Requirement).filter(Requirement.id.like(f"{req_prefix(tender_id)}%"),
                                          Requirement.mandatory.is_(True)).all())
     matcher = matcher or _default_matcher()

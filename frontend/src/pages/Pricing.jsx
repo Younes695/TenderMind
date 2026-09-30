@@ -1,48 +1,70 @@
 import { Check } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useT } from "../i18n";
 
+// Initial pricing hypothesis (same as the financial model) — being validated with pilot customers.
 const plans = [
   {
     name: "Starter",
-    tagline: "For smaller teams",
-    price: "Talk to Sales",
+    tagline: "Individual / small business",
+    price: "EGP 1,499.99",
+    gcc: "SAR 299",
+    per: "/ month",
     features: [
-      "Tender Intelligence",
-      "RFP Summaries",
-      "Basic Matching",
-      "Document Analysis",
+      "5 tender analyses / month",
+      "Tender Radar with match % and reasons",
+      "AI RFP analysis — every fact with file and page",
+      "Eligibility check against your profile",
+      "Ask TenderMind",
     ],
     cta: "Start Trial",
     highlighted: false,
   },
   {
-    name: "Professional",
-    tagline: "For growing tender teams",
-    price: "Talk to Sales",
+    name: "Growth",
+    tagline: "Tender team / growing company",
+    price: "EGP 4,899.99",
+    gcc: "SAR 899",
+    per: "/ month",
     badge: "Most Popular",
     features: [
+      "15 tender analyses / month",
       "Everything in Starter",
-      "Go / No-Go",
-      "Financial Analysis",
-      "Risk Analysis",
-      "Team Workflow",
-      "Approvals",
-      "Company Knowledge",
+      "Team tasks, votes and approvals",
+      "BOQ materials with your supplier price lists",
+      "RFQ packages per equipment",
     ],
     cta: "Book a Demo",
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    tagline: "For large organizations",
-    price: "Custom",
+    name: "Business",
+    tagline: "Larger company / multiple users",
+    price: "EGP 14,899.99",
+    gcc: "SAR 2,900",
+    per: "/ month",
     features: [
-      "Everything in Professional",
-      "Advanced Workflows",
-      "Subcontractor RFQs",
-      "Advanced Security",
-      "Custom Integrations",
-      "Multiple Teams",
-      "Advanced Analytics",
+      "60 tender analyses / month",
+      "Everything in Growth",
+      "Same materials across all active tenders",
+      "Decision pack, compliance matrix and analytics",
+      "Multiple teams",
+    ],
+    cta: "Book a Demo",
+    highlighted: false,
+  },
+  {
+    name: "Enterprise",
+    tagline: "Dedicated cloud / private deployment",
+    price: "From EGP 44,999.99",
+    gcc: "From SAR 9,500",
+    per: "/ month",
+    features: [
+      "Dedicated cloud hosted by us",
+      "On-premise option (quoted separately)",
+      "Your own AI keys and data residency",
+      "Custom tender sources and integrations",
+      "Priority support",
     ],
     cta: "Talk to Sales",
     highlighted: false,
@@ -50,33 +72,34 @@ const plans = [
 ];
 
 function Pricing() {
+  const t = useT();
   return (
     <section className="bg-[#f5f3ee] py-14 sm:py-16">
       <div className="mx-auto max-w-[1190px] px-4 sm:px-6 lg:px-8">
         {/* Heading */}
         <div className="mb-10 text-center">
           <span className="mb-3 block text-[11px] font-semibold uppercase tracking-widest text-[#C8A96B]">
-            Pricing
+            {t("Pricing")}
           </span>
           <h1 className="text-[32px] font-bold leading-tight tracking-tight text-[#162A4C] sm:text-[38px]">
-            Priced for how tender teams grow.
+            {t("Priced for how tender teams grow.")}
           </h1>
         </div>
 
         {/* Plans */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {plans.map(({ name, tagline, price, features, cta, highlighted, badge }) => (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          {plans.map(({ name, tagline, price, gcc, per, features, cta, highlighted, badge }) => (
             <article
               key={name}
               className={`relative flex flex-col rounded-2xl border p-6 sm:p-7 ${
                 highlighted
-                  ? "border-[#C8A96B] bg-[#162A4C] lg:-my-4 lg:py-10"
+                  ? "border-[#C8A96B] bg-[#162A4C] xl:-my-4 xl:py-10"
                   : "border-[#ebe8e1] bg-white"
               }`}
             >
               {badge && (
                 <span className="mb-4 inline-flex w-fit items-center rounded-full bg-[#C8A96B] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#162A4C]">
-                  {badge}
+                  {t(badge)}
                 </span>
               )}
 
@@ -85,14 +108,14 @@ function Pricing() {
                   highlighted ? "text-white" : "text-[#162A4C]"
                 }`}
               >
-                {name}
+                {t(name)}
               </h2>
               <p
                 className={`mt-1 text-[13px] ${
                   highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"
                 }`}
               >
-                {tagline}
+                {t(tagline)}
               </p>
 
               <p
@@ -100,8 +123,10 @@ function Pricing() {
                   highlighted ? "text-white" : "text-[#162A4C]"
                 }`}
               >
-                {price}
+                {t(price)}
+                {per && <span className={`ms-1 text-[13px] font-medium ${highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"}`}>{t(per)}</span>}
               </p>
+              {gcc && <p className={`-mt-5 mb-6 text-[12px] ${highlighted ? "text-[#a9b8d4]" : "text-[#4b5f86]"}`}>{t("GCC: {p} / month", { p: t(gcc) })}</p>}
 
               <ul className="mb-8 flex-1 space-y-3">
                 {features.map((f) => (
@@ -118,29 +143,28 @@ function Pricing() {
                         highlighted ? "text-[#C8A96B]" : "text-emerald-600"
                       }`}
                     />
-                    {f}
+                    {t(f)}
                   </li>
                 ))}
               </ul>
 
-              <button
-                type="button"
-                className={`w-full rounded-lg px-4 py-3 text-[13px] font-bold transition-colors ${
+              <Link
+                to={cta === "Start Trial" ? "/signup" : `/demo?topic=plan:${name.toLowerCase()}`}
+                className={`block w-full rounded-lg px-4 py-3 text-center text-[13px] font-bold transition-colors ${
                   highlighted
                     ? "bg-[#C8A96B] text-[#162A4C] hover:brightness-110"
                     : "bg-[#162A4C] text-white hover:bg-[#0F1D38]"
                 }`}
               >
-                {cta}
-              </button>
+                {t(cta)}
+              </Link>
             </article>
           ))}
         </div>
 
         {/* Footnote */}
         <p className="mt-10 text-center text-[13px] text-[#4b5f86]">
-          Annual tenders volume and average tender value shape every quote.
-          Pricing in SAR / AED available from sales.
+          {t("Prices exclude VAT. Egypt prices in EGP, GCC prices in SAR.")}
         </p>
       </div>
     </section>

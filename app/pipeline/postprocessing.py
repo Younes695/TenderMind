@@ -73,19 +73,25 @@ def bind_requirement(result: LLMNormalizationResult, candidate: RequirementCandi
     minimal-contract fields inside LLMNormalizationResult, so there is nothing
     else to drop by construction.
     """
+    category, method = result.category, "two-stage"
+    if category == "UNKNOWN":  # Stage 5K: deterministic fallback, never overrides a model category
+        from app.pipeline.rule_category import rule_category
+        ruled = rule_category(candidate.source_text, result.summary)
+        if ruled:
+            category, method = ruled, "two-stage+rule"
     return ValidatedRequirement(
         requirement_id=provisional_id or candidate.candidate_id,
         candidate_id=candidate.candidate_id,
         parent_chunk_id=candidate.parent_chunk_id,
         summary=result.summary.strip(),
-        category=result.category,
+        category=category,
         mandatory=result.mandatory,
         applicable_entity=result.applicable_entity,
         source_document=candidate.source_document,
         page_number=candidate.page,
         source_text=candidate.source_text,
         provenance={"quote_en": candidate.source_text[:200]},
-        extraction_method="two-stage",
+        extraction_method=method,
         confidence=None,
     )
 

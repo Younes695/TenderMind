@@ -137,11 +137,11 @@ describe("Frontend Integration — Real API", () => {
         <GoNoGo />
       </BrowserRouter>
     );
-    await waitFor(() => expect(screen.getByText("Decision requires management review.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("decision-board")).toBeInTheDocument());
     expect(screen.queryByText("82 / 100")).not.toBeInTheDocument();
     expect(screen.queryByText("CONDITIONAL GO")).not.toBeInTheDocument();
     expect(screen.queryByText("92%")).not.toBeInTheDocument();
-    expect(screen.getByText(/No fit score/)).toBeInTheDocument();
+    expect(screen.getAllByText(/never replaces your team's decision|No tenders yet/).length).toBeGreaterThan(0);
   });
 
   it("NewTender — create tender validation error shown", async () => {

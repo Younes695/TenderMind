@@ -277,6 +277,9 @@ def _extract_archive(path: Path, kind: str, dest: Path) -> None:
         exe = _first_existing([os.environ.get("TENDERMIND_7Z_PATH"), "7z", "7za",
                                str(Path(pf) / "7-Zip" / "7z.exe") if pf else None])
         tool = ("7z", exe) if exe else None
+        if tool is None:  # libarchive's bsdtar reads 7z too (Linux images)
+            bsd = _first_existing(["bsdtar"])
+            tool = ("bsdtar", bsd) if bsd else None
     if not tool:
         raise RuntimeError(f"no {kind.upper()} extractor on the server (install unrar, 7-Zip or bsdtar)")
     name, exe = tool

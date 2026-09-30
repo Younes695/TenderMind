@@ -182,11 +182,11 @@ export async function overrideDecision(tenderId, { reviewer, new_decision, reaso
   return handleResponse(resp);
 }
 
-export async function signup({ name, email, password }) {
+export async function signup({ name, email, password, account_type }) {
   const resp = await apiFetch("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, account_type }),
   });
   return handleResponse(resp);
 }
@@ -225,13 +225,146 @@ export async function pollProcessingJob(jobId, { intervalMs = 1500, maxAttempts 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const job = await getProcessingJob(jobId);
     if (onUpdate) onUpdate(job);
-    if (["COMPLETED", "PARTIAL", "FAILED"].includes(job.status)) {
+    if (["COMPLETED", "PARTIAL", "FAILED", "INELIGIBLE"].includes(job.status)) {
       return job;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error("Polling timeout: job did not reach terminal state");
 }
+
+// ---- Stage 5H: review items, Q&A, notifications, news
+export async function getTenderIssues(tenderId, { category, status } = {}) {
+  const q = new URLSearchParams();
+  if (category) q.set("category", category);
+  if (status) q.set("status", status);
+  const resp = await apiFetch(`/api/tenders/${encodeURIComponent(tenderId)}/issues${q.toString() ? `?${q}` : ""}`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function updateIssue(issueId, patch) {
+  const resp = await apiFetch(`/api/issues/${encodeURIComponent(issueId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return handleResponse(resp);
+}
+
+export async function getNotifications() {
+  const resp = await apiFetch(`/api/notifications`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function getNews({ country, q, relevant = true, sort } = {}) {
+  const p = new URLSearchParams({ relevant: String(relevant) });
+  if (sort) p.set("sort", sort);
+  if (country) p.set("country", country);
+  if (q) p.set("q", q);
+  const resp = await apiFetch(`/api/news?${p}`, { method: "GET" });
+  return handleResponse(resp);
+}
+
+export async function refreshNews() {
+  const resp = await apiFetch(`/api/news/refresh`, { method: "POST" });
+  return handleResponse(resp);
+}
+
+// ---- Stage 5I: subcontractor RFQs, account settings, feedback
+async function jsonCall(path, method = "GET", body) {
+  const opts = { method };
+  if (body !== undefined) {
+    opts.headers = { "Content-Type": "application/json" };
+    opts.body = JSON.stringify(body);
+  }
+  return handleResponse(await apiFetch(path, opts));
+}
+
+export const listRfqs = (tenderId) => jsonCall(`/api/rfqs${tenderId ? `?tender_id=${encodeURIComponent(tenderId)}` : ""}`);
+export const createRfq = (tenderId, data) => jsonCall(`/api/tenders/${encodeURIComponent(tenderId)}/rfqs`, "POST", data);
+export const deleteRfq = (rfqId) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}`, "DELETE");
+export const addQuotation = (rfqId, data) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}/quotations`, "POST", data);
+export const deleteQuotation = (quoteId) => jsonCall(`/api/quotations/${encodeURIComponent(quoteId)}`, "DELETE");
+export const selectQuotation = (quoteId) => jsonCall(`/api/quotations/${encodeURIComponent(quoteId)}/select`, "POST");
+export const getRfqDraft = (rfqId) => jsonCall(`/api/rfqs/${encodeURIComponent(rfqId)}/draft`);
+export const updateProfile = (data) => jsonCall(`/api/auth/me`, "PATCH", data);
+export const changePassword = (data) => jsonCall(`/api/auth/change-password`, "POST", data);
+export const sendFeedback = (data) => jsonCall(`/api/feedback`, "POST", data);
+export const listFeedback = () => jsonCall(`/api/feedback`);
+export const getRecommendation = (id, lang = "en") => jsonCall(`/api/tenders/${encodeURIComponent(id)}/recommendation?lang=${lang}`);
+export const getEmailDraft = (id, lang = "en") => jsonCall(`/api/tenders/${encodeURIComponent(id)}/email-draft?lang=${lang}`);
+export const getCompanyProfile = () => jsonCall(`/api/company-profile`);
+export const saveCompanyProfile = (data) => jsonCall(`/api/company-profile`, "PUT", data);
+// Stage 6
+const T = (id) => `/api/tenders/${encodeURIComponent(id)}`;
+export const getCapability = () => jsonCall(`/api/company-capability`);
+export const saveCapability = (data) => jsonCall(`/api/company-capability`, "PUT", data);
+export const getEligibility = (id) => jsonCall(`${T(id)}/eligibility`);
+export const overrideEligibility = (id, data) => jsonCall(`${T(id)}/eligibility/override`, "POST", data);
+export const getSections = (id) => jsonCall(`${T(id)}/sections`);
+export const listTeam = () => jsonCall(`/api/team`);
+export const addTeamMember = (data) => jsonCall(`/api/team`, "POST", data);
+export const deleteTeamMember = (mid) => jsonCall(`/api/team/${encodeURIComponent(mid)}`, "DELETE");
+export const listTasks = (id) => jsonCall(`${T(id)}/tasks`);
+export const addTask = (id, data) => jsonCall(`${T(id)}/tasks`, "POST", data);
+export const updateTask = (id, taskId, data) => jsonCall(`${T(id)}/tasks/${encodeURIComponent(taskId)}`, "PUT", data);
+export const deleteTask = (id, taskId) => jsonCall(`${T(id)}/tasks/${encodeURIComponent(taskId)}`, "DELETE");
+export const getTaskGroups = () => jsonCall(`/api/tasks/groups`);
+export const getVotes = (id) => jsonCall(`${T(id)}/votes`);
+export const putVote = (id, data) => jsonCall(`${T(id)}/votes`, "PUT", data);
+export const deleteVote = (id, name) => jsonCall(`${T(id)}/votes/${encodeURIComponent(name)}`, "DELETE");
+export const setOutcome = (id, outcome) => jsonCall(`${T(id)}/outcome`, "PUT", { outcome });
+export const getScore = (id) => jsonCall(`${T(id)}/score`);
+export const getScoreWeights = () => jsonCall(`/api/score-weights`);
+export const saveScoreWeights = (data) => jsonCall(`/api/score-weights`, "PUT", data);
+// Stage 7
+export const getChecklist = (id) => jsonCall(`${T(id)}/checklist`);
+export const updateChecklistItem = (id, key, data) => jsonCall(`${T(id)}/checklist/${encodeURIComponent(key)}`, "PUT", data);
+export const getDecisionPack = (id, lang = "en") => jsonCall(`${T(id)}/decision-pack?lang=${lang}`);
+export const getDecisionSummary = (id, lang = "en", to = "") => jsonCall(`${T(id)}/decision-summary?lang=${lang}&to=${encodeURIComponent(to)}`);
+export const complianceMatrixUrl = (id, lang = "en") => apiUrl(`${T(id)}/compliance-matrix.xlsx?lang=${lang}`);
+// Materials: BOQ, supplier price lists, bulk opportunities
+export const getTenderMaterials = (id) => jsonCall(`${T(id)}/materials`);
+export const getPortfolioMaterials = () => jsonCall(`/api/portfolio/materials`);
+export const listPriceLists = () => jsonCall(`/api/price-lists`);
+export const deletePriceList = (id) => jsonCall(`/api/price-lists/${encodeURIComponent(id)}`, "DELETE");
+export async function uploadPriceList({ file, supplier, currency, price_date }) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("supplier", supplier);
+  fd.append("currency", currency);
+  fd.append("price_date", price_date);
+  const resp = await apiFetch(`/api/price-lists`, { method: "POST", body: fd });
+  return handleResponse(resp);
+}
+// Public demo / sales requests (stored for the team)
+export const requestDemo = (data) => jsonCall(`/api/auth/demo-requests`, "POST", data);
+export const listDemoRequests = () => jsonCall(`/api/demo-requests`);
+// Account type (company / individual professional)
+export const getAccount = () => jsonCall(`/api/account`);
+export const setAccount = (data) => jsonCall(`/api/account`, "PUT", data);
+// RFQ packages
+export const getRfqPackages = (id) => jsonCall(`${T(id)}/rfq-packages`);
+export const createRfqPackages = (id, data) => jsonCall(`${T(id)}/rfq-packages`, "POST", data);
+export const rfqPackagesZipUrl = (id, keys = [], closesAt = "") =>
+  apiUrl(`${T(id)}/rfq-packages.zip?keys=${encodeURIComponent(keys.join(","))}${closesAt ? `&closes_at=${closesAt}` : ""}`);
+// Stage 8
+export const getSummary = (id) => jsonCall(`${T(id)}/summary`);
+export const getSimilar = (id) => jsonCall(`${T(id)}/similar`);
+export const setPlan = (id, data) => jsonCall(`${T(id)}/plan`, "PUT", data);
+export const listNotes = (id) => jsonCall(`${T(id)}/notes`);
+export const addNote = (id, data) => jsonCall(`${T(id)}/notes`, "POST", data);
+export const deleteNote = (id, noteId) => jsonCall(`${T(id)}/notes/${encodeURIComponent(noteId)}`, "DELETE");
+export const getReminders = () => jsonCall(`/api/reminders`);
+export const getAttention = () => jsonCall(`/api/dashboard/attention`);
+export const askAssistant = (data) => jsonCall(`/api/assistant/ask`, "POST", data);
+// Stage 9
+export const getBoard = () => jsonCall(`/api/portfolio/board`);
+export const getApprovals = () => jsonCall(`/api/portfolio/approvals`);
+export const setFinalDecision = (id, data) => jsonCall(`${T(id)}/final-decision`, "PUT", data);
+export const getWorkPackages = () => jsonCall(`/api/portfolio/work-packages`);
+export const getDocuments = (q = "") => jsonCall(`/api/portfolio/documents?q=${encodeURIComponent(q)}`);
+export const getAnalytics = () => jsonCall(`/api/portfolio/analytics`);
 
 const apiClient = {
   listTenders,
@@ -257,6 +390,78 @@ const apiClient = {
   uploadCompanyDocuments,
   deleteCompanyDocument,
   overrideDecision,
+  getTenderIssues,
+  updateIssue,
+  getNotifications,
+  getNews,
+  refreshNews,
+  listRfqs,
+  createRfq,
+  deleteRfq,
+  addQuotation,
+  deleteQuotation,
+  selectQuotation,
+  getRfqDraft,
+  updateProfile,
+  changePassword,
+  sendFeedback,
+  listFeedback,
+  getRecommendation,
+  getEmailDraft,
+  getCompanyProfile,
+  saveCompanyProfile,
+  getCapability,
+  saveCapability,
+  getEligibility,
+  overrideEligibility,
+  getSections,
+  listTeam,
+  addTeamMember,
+  deleteTeamMember,
+  listTasks,
+  addTask,
+  updateTask,
+  deleteTask,
+  getTaskGroups,
+  getVotes,
+  putVote,
+  deleteVote,
+  setOutcome,
+  getScore,
+  getScoreWeights,
+  saveScoreWeights,
+  getChecklist,
+  updateChecklistItem,
+  getDecisionPack,
+  getDecisionSummary,
+  complianceMatrixUrl,
+  getRfqPackages,
+  getAccount,
+  requestDemo,
+  listDemoRequests,
+  setAccount,
+  getTenderMaterials,
+  getPortfolioMaterials,
+  listPriceLists,
+  deletePriceList,
+  uploadPriceList,
+  createRfqPackages,
+  rfqPackagesZipUrl,
+  getSummary,
+  getSimilar,
+  setPlan,
+  listNotes,
+  addNote,
+  deleteNote,
+  getReminders,
+  getAttention,
+  askAssistant,
+  getBoard,
+  getApprovals,
+  setFinalDecision,
+  getWorkPackages,
+  getDocuments,
+  getAnalytics,
   apiUrl,
 };
 

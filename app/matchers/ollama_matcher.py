@@ -42,7 +42,7 @@ def get_ollama_model() -> str:
     return os.environ.get("TENDERMIND_OLLAMA_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 def get_ollama_endpoint() -> str:
-    return os.environ.get("TENDERMIND_OLLAMA_ENDPOINT", OLLAMA_ENDPOINT).strip().rstrip("/")
+    return (os.environ.get("OLLAMA_BASE_URL") or os.environ.get("TENDERMIND_OLLAMA_ENDPOINT") or OLLAMA_ENDPOINT).strip().rstrip("/")
 
 def get_ollama_timeout() -> int:
     # Configurable via TENDERMIND_OLLAMA_TIMEOUT, default 90 for qwen3:4b

@@ -337,14 +337,22 @@ def compute_derived_features(doc_results: Dict[str, Any], requirements: List[Dic
     }
 
 # --- Main API ---
-def build_generic_extraction(tender_path: Path, tender_id: Optional[str] = None, use_llm: bool = False) -> Dict[str, Any]:
-    """Clean production API — returns validated tender_agnostic_schema.json object"""
+def build_generic_extraction(tender_path: Path, tender_id: Optional[str] = None, use_llm: bool = False,
+                             doc_results: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Clean production API — returns validated tender_agnostic_schema.json object.
+
+    doc_results: text the caller already extracted (app/processing.py). Without
+    it every file is extracted again here, i.e. OCR ran twice per processing job.
+    """
     # A. Ingestion — reuse canonical ingest_tender (no duplication, no self-import)
-    ingested = ingest_tender(tender_path, tender_id)
-    tender_id = ingested["tender_id"]
-    doc_results = ingested["doc_results"]
-    doc_stats = ingested["doc_stats"]
-    inventory = ingested["inventory"]
+    title = tender_path.name  # same value ingest_tender returns as "title"
+    if doc_results is None:
+        ingested = ingest_tender(tender_path, tender_id)
+        tender_id = ingested["tender_id"]
+        doc_results = ingested["doc_results"]
+        title = ingested["title"]
+    elif tender_id is None:
+        tender_id = tender_path.name
 
     # C. Classification — reuse canonical function (no duplication)
     classification = classify_documents(doc_results)
@@ -379,7 +387,7 @@ def build_generic_extraction(tender_path: Path, tender_id: Optional[str] = None,
     # Build final object — with proper handling for unknown
     result = {
         "tender_id": tender_id,
-        "title": ingested["title"],
+        "title": title,
         "client": None,  # Unknown in Phase 1 — not guessed
         "location": None,  # Unknown
         "languages": languages,

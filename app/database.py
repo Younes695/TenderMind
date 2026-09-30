@@ -24,7 +24,26 @@ if DATABASE_URL.startswith("sqlite"):
 
 DB_URL = DATABASE_URL
 
-engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False}
+if DB_URL.startswith("sqlite"):
+    _connect_args["timeout"] = 30  # seconds to wait for a lock instead of failing at 5
+engine = create_engine(DB_URL, connect_args=_connect_args)
+
+if DB_URL.startswith("sqlite"):
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        """WAL lets pages read while a processing job writes progress. In the
+        default rollback-journal mode every read failed with 'database is
+        locked' during a commit, and one such failure killed a 1,500-page job."""
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cur.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -65,6 +84,32 @@ def init_db():
                 conn.commit()
             if "original_filename" not in cols:
                 conn.execute(text("ALTER TABLE tender_documents ADD COLUMN original_filename VARCHAR"))
+                conn.commit()
+            # Stage 5G: per-account ownership (app/access.py). Existing rows stay
+            # NULL = owned by the env admin only.
+            for table in ("tenders", "company_documents"):
+                tcols = [row[1] for row in conn.execute(text(f"PRAGMA table_info({table})")).fetchall()]
+                if "owner_email" not in tcols:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN owner_email VARCHAR"))
+                    conn.commit()
+            # Stage 6: tender outcome (feeds the similar-past-tenders score factor)
+            tcols = [row[1] for row in conn.execute(text("PRAGMA table_info(tenders)")).fetchall()]
+            if "outcome" not in tcols:
+                conn.execute(text("ALTER TABLE tenders ADD COLUMN outcome VARCHAR"))
+                conn.commit()
+            for col, typ in (("stage", "VARCHAR"), ("submission_deadline", "DATETIME"),  # Stage 8
+                             ("final_decision", "VARCHAR"), ("final_reason", "TEXT"), ("final_by", "VARCHAR"),
+                             ("final_at", "DATETIME")):  # Stage 9
+                if col not in tcols:
+                    conn.execute(text(f"ALTER TABLE tenders ADD COLUMN {col} {typ}"))
+                    conn.commit()
+            pcols = [row[1] for row in conn.execute(text("PRAGMA table_info(company_profiles)")).fetchall()]
+            if pcols and "account_type" not in pcols:
+                conn.execute(text("ALTER TABLE company_profiles ADD COLUMN account_type VARCHAR"))
+                conn.commit()
+            ecols = [row[1] for row in conn.execute(text("PRAGMA table_info(eligibility_results)")).fetchall()]
+            if ecols and "override_name" not in ecols:
+                conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN override_name VARCHAR"))
                 conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
