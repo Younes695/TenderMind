@@ -60,3 +60,13 @@ services:
 volumes:
   tendermind-data:
   ollama-models:
+
+# The app trusts X-Forwarded-For only from this network (Dockerfile
+# FORWARDED_ALLOW_IPS): Caddy and the gateway a host proxy connects through are
+# on it, clients never are. If the subnet collides with a network on the host,
+# change it here AND in FORWARDED_ALLOW_IPS.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.87.0/24

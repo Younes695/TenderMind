@@ -36,6 +36,7 @@ export const AUTH_ERRORS = {
   microsoft_email_unverified: "Microsoft did not confirm that your organisation owns this email domain. Ask your IT administrator, or sign in with email and password.",
   no_email: "The provider did not share an email address.",
   signup_disabled: "New accounts are not accepted on this server.",
+  too_many_signups: "Too many new accounts from this address. Try again in an hour.",
   account_exists: "An account with this email already exists. Sign in the way you created it (email and password, or the original provider).",
 };
 

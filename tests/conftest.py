@@ -22,3 +22,15 @@ os.environ["TENDERMIND_AUTO_RESUME"] = "0"
 os.environ["TENDERMIND_WATCHDOG"] = "0"
 os.environ["TENDERMIND_NEWS_ENABLED"] = "0"
 atexit.register(shutil.rmtree, _TMP, True)
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _fresh_signup_allowance():
+    """Many tests sign up accounts from the same TestClient address; the
+    per-address sign-up limit (app/auth.py) has its own test and must not leak
+    from one test into the next."""
+    from app import auth
+    auth._signup_hits.clear()
+    yield
