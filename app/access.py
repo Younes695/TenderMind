@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth import _configured_email, require_auth
+from app.auth import require_auth
 from app.database import get_db
 
 DEMO_TENDER_ID = "SA-2018-HV2"
@@ -30,8 +30,9 @@ def owner_for_new_rows(user: dict) -> Optional[str]:
 
 
 def is_admin(user: dict) -> bool:
-    admin = _configured_email()
-    return bool(admin) and user.get("email") == admin
+    """Set by app.auth._principal: only a session opened with the env admin's own
+    password — an email match alone is not enough (OAuth could supply the email)."""
+    return bool(user.get("is_admin"))
 
 
 def owns(owner_email: Optional[str], user: dict) -> bool:

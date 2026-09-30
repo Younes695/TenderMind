@@ -67,9 +67,38 @@ def get_db():
     finally:
         db.close()
 
+def migrate_users_session_version(conn) -> None:
+    """Session revocation (users.session_version). Unlike the migrations below,
+    a failure here stops startup: without the column every sign-in fails.
+
+    Password accounts that were later linked to Google kept the password typed
+    at sign-up, which nobody verified, so whoever registered the address first
+    could still sign in. Those passwords are cleared; the owner signs in with
+    Google and may set a new password in Settings. Their open sessions end with
+    everyone else's: pre-upgrade cookies carry no version and are refused.
+
+    The column is the "done" marker, so it is added only after the cleanup has
+    committed: if either step fails, the next start redoes both (the cleanup is
+    idempotent and nothing can set a password while startup is failing).
+    """
+    from sqlalchemy import inspect
+    if "users" not in inspect(conn).get_table_names():
+        return
+    if "session_version" in {c["name"] for c in inspect(conn).get_columns("users")}:
+        return
+    conn.execute(text("UPDATE users SET password_hash = NULL "
+                      "WHERE provider = 'password' AND password_hash IS NOT NULL "
+                      "AND provider_subject IS NOT NULL AND provider_subject <> ''"))
+    conn.commit()
+    conn.execute(text("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0"))
+    conn.commit()
+
+
 def init_db():
     from app import models  # noqa
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        migrate_users_session_version(conn)
     # Stage 1B migration: add TenderDocument.source_path if missing (sqlite, no alembic)
     try:
         with engine.connect() as conn:

@@ -2320,7 +2320,11 @@ def portfolio_materials(db: Session = Depends(get_db), user: dict = Depends(requ
 
 @router.get("/demo-requests")
 def list_demo_requests(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
-    """Requests sent from the public website, newest first (signed-in team only)."""
+    """Requests sent from the public website, newest first. They are leads of
+    whoever runs this server (the env admin), not of the customers who sign up
+    on it, so any other account gets the same 404 as an unknown route."""
+    if not (user.get("auth_disabled") or is_admin(user)):
+        raise HTTPException(status_code=404, detail="Not Found")
     from app.models import DemoRequest
     rows = db.query(DemoRequest).order_by(DemoRequest.created_at.desc()).limit(200).all()
     return [{"id": r.id, "name": r.name, "email": r.email, "company": r.company, "country": r.country,

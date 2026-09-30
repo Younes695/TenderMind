@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, JSON, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, Text, DateTime, Float, Integer, JSON, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 import uuid
@@ -225,6 +225,9 @@ class User(Base):
     password_hash = Column(String, nullable=True)
     provider = Column(String, default="password")  # password | google | microsoft
     provider_subject = Column(String, nullable=True)
+    # Bumped on password change and account takeover; sessions carry it and are
+    # refused once it moves on (app/auth.py _principal).
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
 
