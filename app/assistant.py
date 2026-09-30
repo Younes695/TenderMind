@@ -87,6 +87,19 @@ AR_EN = [
     ("\u0642\u0648\u0629 \u0642\u0627\u0647\u0631\u0629", ["force majeure"]),
 ]
 _AR_EN = [(re.compile(p), en) for p, en in AR_EN]
+# English wordings that mean the same clause in different tenders (SEC uses "bank guarantee", others "bid bond")
+EN_SYN = [
+    (r"bid bond|bid security|tender bond|bid guarantee", ["bid bond", "bid security", "tender bond", "bid guarantee", "bank guarantee"]),
+    (r"performance bond|performance guarantee|performance security", ["performance bond", "performance guarantee", "performance security", "bank guarantee"]),
+    (r"liquidated damages|delay penalt", ["liquidated damages", "delay penalty", "penalty"]),
+    (r"advance payment", ["advance payment", "down payment"]),
+    (r"retention", ["retention", "retained"]),
+]
+_EN_SYN = [(re.compile(p, re.IGNORECASE), terms) for p, terms in EN_SYN]
+# a model reply that only says the quotes do not answer
+_NO_ANSWER = re.compile(r"does not (mention|contain|answer|say)|do not (mention|contain|answer|say)|cannot answer|"
+                        r"can't answer|not (mentioned|found|stated)|no (information|mention)|لا (يذكر|تذكر|يوجد|تحتوي|تجيب)|"
+                        r"لم (يرد|يذكر|تذكر)", re.IGNORECASE)
 
 
 def _query_terms(question: str):
@@ -94,7 +107,7 @@ def _query_terms(question: str):
     low = question.lower()
     words = [w for w in re.findall(r"[a-z0-9]{3,}|[\u0621-\u064a]{3,}", low) if w not in _QSTOP]
     phrases = [f"{a} {b}" for a, b in zip(words, words[1:])]
-    for rx, en in _AR_EN:
+    for rx, en in _AR_EN + _EN_SYN:
         if rx.search(low):
             for term in en:
                 (phrases if " " in term else words).append(term)
@@ -192,7 +205,7 @@ def _safe_reply(text: str, n_sources: int) -> Optional[str]:
     cited = {int(n) for n in re.findall(r"\[(\d{1,2})\]", t)}
     if any(n < 1 or n > n_sources for n in cited):
         return None                      # cites quotes it was never given
-    if not cited:
+    if not cited or _NO_ANSWER.search(t):
         return ""                        # no grounded answer: the quotes do not answer the question
     return t[:900]
 
@@ -262,8 +275,7 @@ def answer(db, user, question: str, tender_id: Optional[str] = None, lang: str =
             lines.append(dict(L(e), example=True))  # shown as a question the user can click
 
     if kind in ("greeting", "about"):
-        if kind == "greeting":
-            lines.append(L("Hello! I am TenderMind's assistant."))
+        lines.append(L("Hello! I am TenderMind's assistant." if kind == "greeting" else "I am TenderMind's assistant."))
         lines.append(L("I answer from your own tenders only: deadlines, tasks, eligibility, certificates, similar tenders, "
                        "clients, materials, and any clause in the tender documents — always with the file and page."))
         lines.append(L("Try for example:"))

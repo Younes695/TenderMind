@@ -100,3 +100,16 @@ def test_taqa_is_not_a_uae_signal():
     from app.tender_facts import detect_country
     # Egyptian tender that names TAQA (e.g. TAQA Arabia) many times and EETC once
     assert detect_country(["TAQA " * 50 + " Egyptian Electricity Transmission Company EETC"]) == "Egypt"
+
+
+def test_synonyms_and_model_saying_no_answer(monkeypatch):
+    import app.assistant as a
+    words, phrases = a._query_terms("What is the bid bond?")
+    assert "bank guarantee" in phrases and "bid security" in phrases
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"message": {"content": "[1] does not mention bid bond, so it cannot answer the question."}}
+    monkeypatch.setattr("requests.post", lambda *a_, **k: R())
+    src = [{"file": "ITB.doc", "page": 1, "quote": "Purchase order compliance with Schedule A."}]
+    assert a._llm_answer("What is the bid bond?", src, "en") == ""   # shown as "not answered", not as an answer

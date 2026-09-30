@@ -44,6 +44,7 @@ export default {
 
   // Assistant
   "Hello! I am TenderMind's assistant.": "أهلًا! أنا مساعد TenderMind.",
+  "I am TenderMind's assistant.": "أنا مساعد TenderMind.",
   "I answer from your own tenders only: deadlines, tasks, eligibility, certificates, similar tenders, clients, materials, and any clause in the tender documents — always with the file and page.": "أجيب من مناقصاتكم فقط: المواعيد، والمهام، والأهلية، والشهادات، والمناقصات المشابهة، والعملاء، والمواد، وأي بند في مستندات المناقصة — دائمًا مع اسم الملف ورقم الصفحة.",
   "Try for example:": "جرّب مثلًا:",
   "The closest passages below do not answer this directly:": "أقرب المقاطع أدناه لا تجيب عن هذا مباشرة:",
