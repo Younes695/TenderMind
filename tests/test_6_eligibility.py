@@ -43,6 +43,27 @@ def test_voltage_above_company_limit_fails_with_evidence_page():
     assert v["evidence"]["page"] == 5
 
 
+def test_title_voltage_with_decimal_secondary_is_read_not_the_drawings():
+    # SEC RFX-4000077315 "Maaden 132/13.8kV Substation": "13.8" broke the title match, so the gate fell
+    # back to the most frequent kV in the drawings (the 380 kV upstream network) and failed a 220 kV company.
+    drawings = _src("TRANSFORMER FROM 380kV (FUTURE)", "380kV GIS SWGR", "380kV BUSBAR", "132kV CABLE/PHASE")
+    v = _by_key(check(CAP, "Construction of Maaden 132/13.8kV Substation", drawings))["voltage"]
+    assert v["result"] == "PASS" and "132 kV" in v["detail"]
+
+
+@pytest.mark.parametrize("text, kv", [("132/13.8kV", 132), ("132/13.8 kV", 132), ("380/132/13.8kV", 380),
+                                      ("33/11kV", 33), ("132kV", 132),
+                                      ("13.8kV", None)])  # a bare decimal voltage stays unread, as before
+def test_kv_parsing_accepts_decimal_secondary_voltages(text, kv):
+    from app.tender_facts import max_kv
+    assert max_kv(text) == kv
+
+
+def test_voltage_evidence_found_when_written_with_a_decimal_secondary():
+    v = _by_key(check(CAP, "Riyadh 132/13.8kV Substation", _src(*PAGES, "Scope: one 132/13.8 kV GIS substation.")))
+    assert v["voltage"]["result"] == "PASS" and v["voltage"]["evidence"]["page"] == 5
+
+
 def test_work_type_mismatch_fails():
     res = check(CAP, "132kV Overhead Transmission Line", _src(*PAGES))
     assert _by_key(res)["work_type"]["result"] == "FAIL"

@@ -129,7 +129,8 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
             ok = kv <= float(cap["max_kv"])
             add("voltage", "Voltage", "PASS" if ok else "FAIL",
                 "Tender: {kv} kV. Company works up to {max} kV.",
-                _evidence(sources, re.compile(rf"\b{kv}\s?kV", re.IGNORECASE)), kv=kv, max=f"{cap['max_kv']:g}")
+                _evidence(sources, re.compile(rf"\b{kv}(?:/\d{{1,3}}(?:\.\d{{1,2}})?){{0,3}}\s?kV", re.IGNORECASE)),
+                kv=kv, max=f"{cap['max_kv']:g}")
     if cap.get("countries"):
         country = detect_country([title, body[:200000]])
         if not country:

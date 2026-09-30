@@ -7,7 +7,8 @@ from __future__ import annotations
 import re
 from typing import Iterable, Optional
 
-_KV = re.compile(r"(\d{2,3})(?:/\d{1,3}){0,3}\s?kV", re.IGNORECASE)
+# Secondary voltages may be decimal ("132/13.8kV"); the captured group is always the first, highest one.
+_KV = re.compile(r"(\d{2,3})(?:/\d{1,3}(?:\.\d{1,2})?){0,3}\s?kV", re.IGNORECASE)
 
 WORK_TYPES = ("substation", "overhead line", "cable", "distribution", "generation", "renewables", "other")
 
