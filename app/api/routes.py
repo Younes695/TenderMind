@@ -519,6 +519,7 @@ def override(tender_id: str, payload: dict, db: Session = Depends(get_db)):
         risks=last.risks,
         hard_fail_count=last.hard_fail_count,
         mandatory_missing_count=last.mandatory_missing_count,
+        contradicted_count=last.contradicted_count,
         top_blockers=last.top_blockers,
         top_risks=last.top_risks,
         is_override=True
@@ -757,6 +758,7 @@ def get_decision_detail(tender_id: str, db: Session = Depends(get_db)):
                          "timestamp": dec.timestamp, "rules_triggered": dec.rules_triggered,
                          "hard_fail_count": dec.hard_fail_count,
                          "mandatory_missing_count": dec.mandatory_missing_count,
+                         "contradicted_count": dec.contradicted_count or 0,
                          "top_blockers": dec.top_blockers, "is_override": dec.is_override},
             "mandatory_status_counts": counts, "requirements": items}
 
@@ -1629,13 +1631,28 @@ def _score_for(db, tender_id, user, rec=None, detail=None):
         except HTTPException:
             detail = None
         rec = build_recommendation(detail, None, None)
-    hard = int(((detail or {}).get("decision") or {}).get("hard_fail_count") or 0)
-    res = tender_score(db, t, user, rec.get("match_percent"), hard)
-    _LAST_SCORE[tender_id] = res  # the dashboard shows this same number
+    decision = (detail or {}).get("decision") or {}
+    hard = int(decision.get("hard_fail_count") or 0)
+    # The REVIEW cap waits for a person; only a BID override is that person saying "bid anyway".
+    waived = bool(decision.get("is_override") and decision.get("decision") == "BID")
+    contradicted = 0 if waived else int(decision.get("contradicted_count") or 0)
+    res = tender_score(db, t, user, rec.get("match_percent"), hard, contradicted)
+    _LAST_SCORE[tender_id] = (decision.get("decision_id"), res)  # the dashboard shows this same number
     return res
 
 
-_LAST_SCORE: dict = {}
+_LAST_SCORE: dict = {}  # tender_id -> (decision id it was computed on, score)
+
+
+def _cached_score(db, tender_id):
+    """The score last shown for this tender, only while its decision is unchanged."""
+    hit = _LAST_SCORE.get(tender_id)
+    if not hit:
+        return None
+    decision_id, res = hit
+    from app.engines.decision import latest_decision
+    current = latest_decision(db, tender_id)
+    return res if (current.id if current else None) == decision_id else None
 
 
 @router.get("/tenders/{tender_id}/score")
@@ -2053,7 +2070,7 @@ def dashboard_attention(db: Session = Depends(get_db), user: dict = Depends(requ
             blocked.append({"id": t.id, "title": t.title})
             continue
         if t.id in analysed and not t.outcome and t.stage not in CLOSED_STAGES:
-            sc = _LAST_SCORE.get(t.id)  # computed when the tender's score was last shown
+            sc = _cached_score(db, t.id)  # computed when the tender's score was last shown
             awaiting.append({"id": t.id, "title": t.title, "stage": t.stage,
                              "deadline": t.submission_deadline.date().isoformat() if t.submission_deadline else None,
                              "score": sc.get("score") if sc else None, "band": sc.get("band") if sc else None})

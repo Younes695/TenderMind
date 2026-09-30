@@ -20,6 +20,7 @@ export default {
   "Get or confirm these certificates: {items}.": "احصل على هذه الشهادات أو تأكد منها: {items}.",
   "Line up a partner or supplier for: {items}.": "جهّز شريكًا أو موردًا لـ: {items}.",
   "Upload company documents and run Evaluate to measure the company match.": "ارفع مستندات الشركة وشغّل التقييم لقياس مطابقة الشركة.",
+  "Resolve {n} mandatory requirement(s) your documents contradict before bidding.": "راجع {n} متطلب إلزامي تتعارض معه مستندات الشركة قبل التقدّم.",
   "Ask the tender owner which value applies for {n} contradiction(s).": "اسأل صاحب المناقصة عن القيمة المعتمدة في {n} تعارض.",
   "Send {n} clarification question(s) to the tender owner — the email draft is ready.": "أرسل {n} سؤال استيضاح لصاحب المناقصة — مسودة البريد جاهزة.",
   "Prepare {n} submission item(s) on the checklist.": "جهّز {n} بند من قائمة مستندات التقديم.",
