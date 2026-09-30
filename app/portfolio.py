@@ -21,7 +21,7 @@ def _votes(db, tender_id):
 
 
 def board(db, user, tenders) -> List[Dict[str, Any]]:
-    from app.api.routes import _LAST_SCORE
+    from app.api.routes import _LAST_SCORE, _cached_score
     from app.certifications import summary as cert_summary, tender_certifications
     from app.eligibility import capability_dict, capability_for, score as elig_score
     from app.models import EligibilityResult, TenderAnalysis
@@ -30,11 +30,15 @@ def board(db, user, tenders) -> List[Dict[str, Any]]:
     analysed = {tid for (tid,) in db.query(TenderAnalysis.tender_id).distinct().all()}
     rows = []
     for t in tenders:
-        sc = _LAST_SCORE.get(t.id)
+        sc = _cached_score(db, t.id)
         if sc is None and t.id in analysed:
             try:
-                sc = tender_score(db, t, user, None, 0)
-                _LAST_SCORE[t.id] = sc
+                # The board must not say GO where the decision says NO_BID or REVIEW.
+                from app.engines.decision import contradiction_waived, latest_decision
+                dec = latest_decision(db, t.id)
+                sc = tender_score(db, t, user, None, int((dec.hard_fail_count if dec else 0) or 0),
+                                  0 if (dec is None or contradiction_waived(dec)) else int(dec.contradicted_count or 0))
+                _LAST_SCORE[t.id] = (dec.id if dec else None, sc)
             except Exception:
                 db.rollback()
         el = db.query(EligibilityResult).filter(EligibilityResult.tender_id == t.id).first()

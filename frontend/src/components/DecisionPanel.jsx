@@ -21,6 +21,7 @@ const RULE_TEXT = {
   HARD_GATE_FAIL: "A company document explicitly contradicts a mandatory gate.",
   MANDATORY_GATE_MISSING: "Mandatory qualification requirements have no company evidence yet.",
   MANDATORY_GATE_REVIEW: "Some mandatory evidence is ambiguous and needs human review.",
+  MANDATORY_REQUIREMENT_CONTRADICTED: "A company document contradicts a mandatory requirement; review it before bidding.",
   EXPERIENCE_EVIDENCE_MISSING: "Mandatory requirements still lack company evidence.",
   COMMERCIAL_RISK_REVIEW: "High commercial risk needs review.",
   ALL_MANDATORY_PASS: "Every mandatory requirement is supported by company evidence.",

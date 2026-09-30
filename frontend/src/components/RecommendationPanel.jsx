@@ -25,6 +25,7 @@ export function ScoreBlock({ score }) {
         <div>
           <p className="text-[15px] font-bold text-[#101828]">{t("Go/No-Go score")}: {t(label)}</p>
           {score.hard_fail && <p className="text-[13px] text-[#b42318]">{t("No-Go regardless of the score")}: {t(score.hard_fail.replace(/^\d+/, "{n}"), { n: (score.hard_fail.match(/^\d+/) || [""])[0] })}</p>}
+          {!score.hard_fail && score.review && <p data-testid="score-review" className="text-[13px] text-[#b54708]">{t("Not Go until reviewed")}: {t(score.review.replace(/^\d+/, "{n}"), { n: (score.review.match(/^\d+/) || [""])[0] })}</p>}
           {score.score == null && <p className="text-[13px] text-[#667085]">{t("Not enough data yet to score this tender.")}</p>}
         </div>
       </div>

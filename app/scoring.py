@@ -40,9 +40,11 @@ def band(score: Optional[float]) -> Optional[str]:
     return "GO" if score >= GO else "REVIEW" if score >= REVIEW else "NO_GO"
 
 
-def compute(factors: Dict[str, Dict[str, Any]], weights: Dict[str, float], hard_fail: Optional[str] = None
-            ) -> Dict[str, Any]:
-    """factors: {key: {"value": 0-100 | None, "reason": str}}."""
+def compute(factors: Dict[str, Dict[str, Any]], weights: Dict[str, float], hard_fail: Optional[str] = None,
+            review: Optional[str] = None) -> Dict[str, Any]:
+    """factors: {key: {"value": 0-100 | None, "reason": str}}.
+    hard_fail forces NO_GO; review (a contradicted mandatory requirement that is
+    not a hard gate) caps the band at REVIEW - never GO until a person looked."""
     rows, total_w, acc = [], 0.0, 0.0
     for k in DEFAULT_WEIGHTS:
         f = factors.get(k) or {}
@@ -60,7 +62,10 @@ def compute(factors: Dict[str, Dict[str, Any]], weights: Dict[str, float], hard_
     b = band(score)
     if hard_fail:
         b = "NO_GO"
-    return {"score": score, "band": b, "hard_fail": hard_fail, "factors": rows,
+        review = None
+    elif review and b == "GO":
+        b = "REVIEW"
+    return {"score": score, "band": b, "hard_fail": hard_fail, "review": review, "factors": rows,
             "not_counted": [r["label"] for r in rows if not r["counted"]]}
 
 
@@ -130,7 +135,8 @@ def _kind_from_analysis(db, tender_id: str) -> Optional[str]:
     return kinds.most_common(1)[0][0] if kinds else None
 
 
-def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_count: int = 0) -> Dict[str, Any]:
+def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_count: int = 0,
+                 contradicted_count: int = 0) -> Dict[str, Any]:
     """Collects the four factors for one tender of the account and computes the score."""
     from app.access import owner_filter
     from app.models import DepartmentVote, EligibilityResult, ScoreSettings, Tender
@@ -168,6 +174,8 @@ def tender_score(db, tender, user, match_percent: Optional[float], hard_fail_cou
         hard = f"{hard_fail_count} mandatory requirement(s) contradicted by your documents."  # shown with t()
     elif el is not None and el.status == "INELIGIBLE" and not el.override_by:
         hard = "Blocked by the eligibility check."
+    review = (f"{contradicted_count} mandatory requirement(s) contradicted by your documents - review before bidding."
+              if contradicted_count else None)  # shown with t()
     return compute({"fit": fit_factor(match_percent, checks), "history": history_factor(kind, past, me["client"], me["client_key"]),
                     "partners": partners_factor(disciplines, suppliers), "votes": votes_factor(vote_summary(votes))},
-                   clean_weights(st.weights if st else None), hard)
+                   clean_weights(st.weights if st else None), hard, review)

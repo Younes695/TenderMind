@@ -40,6 +40,17 @@ def _ensure_seed():
         if not db.query(Tender).filter(Tender.id == "SA-2018-HV2").first():
             from app.seed import seed
             seed()
+        # Decisions saved by an older decision engine are recomputed once, so a
+        # tender its rules called BID is not still shown as BID (overrides kept).
+        from app.engines.decision import recompute_stale_decisions
+        try:
+            redone, failed = recompute_stale_decisions(db)
+            if redone or failed:
+                print(f"Decision engine upgrade: recomputed {len(redone)} tender decision(s)"
+                      + (f"; could not recompute {len(failed)}: {', '.join(failed[:20])}" if failed else ""))
+        except Exception as e:  # a bad database must not keep the server down
+            db.rollback()
+            print(f"Decision engine upgrade: recompute failed ({type(e).__name__}: {e})")
     finally:
         db.close()
     # Stage 5H: a job cut off by a restart continues by itself (files and AI
