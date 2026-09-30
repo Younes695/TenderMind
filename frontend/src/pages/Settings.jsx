@@ -182,7 +182,7 @@ export default function Settings() {
       <CapabilityCard />
       {!individual && <TeamCard />}
       <WeightsCard />
-      <DemoRequests />
+      {(me?.is_admin || me?.auth_disabled) && <DemoRequests />}
 
       <Card icon={KeyRound} title={t("Change password")}>
         <form onSubmit={savePassword} className="grid gap-3 sm:grid-cols-3">

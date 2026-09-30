@@ -45,6 +45,13 @@ def _configured_password() -> str:
     return os.getenv("TENDERMIND_AUTH_PASSWORD", "")
 
 
+def _is_reserved(email: str) -> bool:
+    """The env admin's address is never a users row: no sign-up, no Google or
+    Microsoft sign-in, only the env password (see _principal)."""
+    admin = _configured_email()
+    return bool(admin) and email == admin
+
+
 def _session_secret() -> str:
     secret = os.getenv("TENDERMIND_SESSION_SECRET", "").strip()
     env = os.getenv("TENDERMIND_ENV", "development").strip().lower()
@@ -146,22 +153,74 @@ def _record_failure(key: str) -> None:
 
 
 # ------------------------------------------------------------------ sessions
-def require_auth(request: Request):
+# A session is only as good as the credential that opened it. The cookie is
+# signed but stateless, so it carries the account id and the account's
+# session_version (users table); a password change or an account takeover bumps
+# the version and every cookie opened before it stops working on its next
+# request. The env admin has no users row: its version is derived from the
+# configured email and password, so rotating that password signs it out too.
+# Cookies from before this scheme carry no version and are refused (one forced
+# sign-in after the upgrade): an old cookie naming the admin email cannot be
+# told apart from one minted through the Microsoft sign-in hole it closes.
+def _admin_session_version() -> str:
+    material = f"{_configured_email()}\n{_configured_password()}".encode("utf-8")
+    return hmac.new(_session_secret().encode("utf-8"), material, hashlib.sha256).hexdigest()[:32]
+
+
+def _principal(request: Request) -> Optional[dict]:
+    """The signed-in account, re-checked against its credential on every request."""
+    session = request.session
     if not auth_enabled():
-        return {"email": request.session.get("email") or "dev", "auth_disabled": True}
+        email = session.get("email") or "dev"
+        return {"email": email, "auth_disabled": True,
+                "is_admin": bool(_configured_email()) and email == _configured_email()}
 
-    email = request.session.get("email")
-    if not email:
+    email, kind, version = session.get("email"), session.get("kind"), session.get("sv")
+    if not email or version is None:
+        return None
+    admin = _configured_email()
+    if kind == "admin":
+        if admin and email == admin and hmac.compare_digest(str(version), _admin_session_version()):
+            return {"email": email, "auth_disabled": False, "is_admin": True}
+        return None
+    if kind != "user" or email == admin:
+        return None  # the admin address only ever signs in with the env password
+
+    from app.models import User
+    uid = session.get("uid")
+    db = _db()
+    try:
+        row = db.query(User.email, User.session_version).filter(User.id == uid).first()
+    finally:
+        db.close()
+    if row is None or row.email != email or row.session_version != version:
+        return None
+    return {"email": email, "auth_disabled": False, "is_admin": False, "uid": uid, "sv": version}
+
+
+def require_auth(request: Request):
+    principal = _principal(request)
+    if principal is None:
+        if request.session:
+            request.session.clear()  # a revoked or legacy cookie is dropped, not kept around
         raise HTTPException(status_code=401, detail="Authentication required")
-    return {"email": email, "auth_disabled": False}
+    return principal
 
 
-def _start_session(request: Request, email: str, name: Optional[str] = None) -> dict:
+def _start_session(request: Request, email: str, name: Optional[str] = None, *,
+                   kind: str = "user", uid: Optional[str] = None, version=None) -> dict:
+    """kind: 'user' (users row uid + its session_version), 'admin' (env admin) or 'dev'."""
     request.session.clear()  # new session on every login (no fixation)
     request.session["email"] = email
+    request.session["kind"] = kind
+    if uid is not None:
+        request.session["uid"] = uid
+    if version is not None:
+        request.session["sv"] = version
     if name:
         request.session["name"] = name
-    return {"authenticated": True, "email": email, "name": name, "auth_disabled": not auth_enabled()}
+    return {"authenticated": True, "email": email, "name": name, "auth_disabled": not auth_enabled(),
+            "is_admin": kind == "admin"}
 
 
 def _db():
@@ -201,11 +260,11 @@ def signup(payload: dict, request: Request):
     db = _db()
     try:
         existing = _find_user(db, email)
-        if existing is not None or email == _configured_email():
+        if existing is not None or _is_reserved(email):
             raise HTTPException(status_code=409, detail="An account with this email already exists — log in instead")
-        db.add(User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email, name=name,
-                    password_hash=hash_password(password), provider="password",
-                    last_login_at=datetime.utcnow()))
+        uid = f"USR-{uuid.uuid4().hex[:12].upper()}"
+        db.add(User(id=uid, email=email, name=name, password_hash=hash_password(password),
+                    provider="password", session_version=0, last_login_at=datetime.utcnow()))
         kind = str(payload.get("account_type") or "company").strip().lower()
         if kind in ("company", "individual"):
             from app.models import CompanyProfile
@@ -213,7 +272,7 @@ def signup(payload: dict, request: Request):
         db.commit()
     finally:
         db.close()
-    return _start_session(request, email, name)
+    return _start_session(request, email, name, uid=uid, version=0)
 
 
 @auth_router.post("/login")
@@ -235,25 +294,31 @@ def login(payload: dict, request: Request):
 
 
 def _login(email: str, password: str, request: Request):
-    db = _db()
-    try:
-        user = _find_user(db, email) if email else None
-        if user is not None:
-            # A registered account always needs its own password (also in dev mode).
-            if not user.password_hash or not verify_password(password, user.password_hash):
-                detail = ("This account uses Google or Microsoft sign-in"
-                          if not user.password_hash else "Invalid email or password")
-                raise HTTPException(status_code=401, detail=detail)
-            user.last_login_at = datetime.utcnow()
-            db.commit()
-            return _start_session(request, user.email, user.name)
-    finally:
-        db.close()
+    # The admin address skips the users table: a row someone created for it
+    # (before it was reserved) must not shadow or stand in for the env password.
+    if not _is_reserved(email):
+        db = _db()
+        try:
+            user = _find_user(db, email) if email else None
+            if user is not None:
+                # A registered account always needs its own password (also in dev mode).
+                if not user.password_hash or not verify_password(password, user.password_hash):
+                    detail = ("This account uses Google or Microsoft sign-in"
+                              if not user.password_hash else "Invalid email or password")
+                    raise HTTPException(status_code=401, detail=detail)
+                # The version read with the hash just verified: if the account is
+                # taken over meanwhile, this session is already stale.
+                uid, version, name = user.id, user.session_version, user.name
+                user.last_login_at = datetime.utcnow()
+                db.commit()
+                return _start_session(request, email, name, uid=uid, version=version)
+        finally:
+            db.close()
 
     if not auth_enabled():
         # Dev mode: unknown emails are let in, but the typed email is kept so
         # the UI shows who is signed in instead of a placeholder.
-        return _start_session(request, email or "dev")
+        return _start_session(request, email or "dev", kind="dev")
 
     expected_email = _configured_email()
     expected_password = _configured_password()
@@ -262,18 +327,20 @@ def _login(email: str, password: str, request: Request):
             hmac.compare_digest(email.encode("utf-8"), expected_email.encode("utf-8"))
             and hmac.compare_digest(password.encode("utf-8"), expected_password.encode("utf-8"))):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    return _start_session(request, expected_email)
+    return _start_session(request, expected_email, kind="admin", version=_admin_session_version())
+
+
+def _me_payload(request: Request, principal: dict) -> dict:
+    return {"authenticated": True, "email": principal["email"], "name": request.session.get("name"),
+            "auth_disabled": principal["auth_disabled"], "is_admin": principal["is_admin"]}
 
 
 @auth_router.get("/me")
 def me(request: Request):
-    email = request.session.get("email")
-    if not auth_enabled():
-        return {"authenticated": True, "email": email or "dev", "name": request.session.get("name"),
-                "auth_disabled": True}
-    if not email:
+    principal = _principal(request)
+    if principal is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return {"authenticated": True, "email": email, "name": request.session.get("name"), "auth_disabled": False}
+    return _me_payload(request, principal)
 
 
 @auth_router.post("/logout")
@@ -327,16 +394,50 @@ def _login_error(code: str) -> RedirectResponse:
     return RedirectResponse(f"/login?auth_error={code}", status_code=302)
 
 
-def _may_link(user, provider: str, subject: str) -> bool:
+def _claim_true(value) -> bool:
+    """Boolean claims arrive as JSON true; accept the string/int spellings, nothing else."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value == 1
+    return str(value or "").strip().lower() in {"true", "1"}
+
+
+def _oauth_email(provider: str, claims: dict) -> tuple[Optional[str], Optional[str]]:
+    """(email, None) when the provider vouches for the address, else (None, error code).
+
+    Microsoft's email and preferred_username are editable by any tenant admin, so
+    anyone with their own Entra tenant could claim any address. Only an email
+    claim whose domain Microsoft has verified for that tenant (optional claim
+    xms_edov, configured on the app registration) is accepted as an identity.
+    """
+    if provider == "google":
+        if not _claim_true(claims.get("email_verified")):
+            return None, "email_not_verified"
+        return normalize_email(claims.get("email")), None
+    if not _claim_true(claims.get("xms_edov")):
+        return None, "microsoft_email_unverified"
+    return normalize_email(claims.get("email")), None
+
+
+def _google_is_authoritative(email: str, claims: dict) -> bool:
+    """Google vouches for who owns an address today only for Gmail and for the
+    Workspace domains it hosts (hd claim); elsewhere email_verified may date
+    from a previous owner of the address."""
+    domain = email.rsplit("@", 1)[-1]
+    if domain in {"gmail.com", "googlemail.com"}:
+        return True
+    return str(claims.get("hd") or "").strip().lower() == domain
+
+
+def _may_link(user, provider: str, subject: str, email: str, claims: dict) -> bool:
     """May this provider identity sign in to an existing account with the same email?
 
     - An account already bound to a provider identity only accepts that exact identity.
-    - Microsoft's email / preferred_username claims are not verified (any tenant
-      admin can set them), so Microsoft never takes over an account created
-      another way — otherwise anyone with their own Azure tenant could sign in
-      as any user.
-    - Google emails are verified (email_verified is required above), so Google
-      may sign in to a password account with the same address.
+    - Microsoft never takes over an account created another way.
+    - Google may claim a password account only where Google is authoritative for
+      the address; the unverified password on it is then removed (oauth_callback).
+      A provider row without a subject is never claimed across providers.
     """
     if user.provider_subject:
         # A password account can only have been linked by Google (rule below).
@@ -344,7 +445,7 @@ def _may_link(user, provider: str, subject: str) -> bool:
         return provider == linked and hmac.compare_digest(user.provider_subject, subject)
     if provider == "microsoft":
         return user.provider == "microsoft"
-    return True
+    return user.provider == "password" and _google_is_authoritative(email, claims)
 
 
 def _decode_jwt_payload(token: str) -> dict:
@@ -399,34 +500,55 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
             and hmac.compare_digest(str(claims.get("nonce", "")), str(pending.get("nonce", "")))):
         return _login_error("invalid_token")
 
-    email = normalize_email(claims.get("email") or claims.get("preferred_username"))
-    if provider == "google" and not claims.get("email_verified"):
-        return _login_error("email_not_verified")
+    email, problem = _oauth_email(provider, claims)
+    if problem:
+        return _login_error(problem)
     if not _EMAIL_RE.match(email):
         return _login_error("no_email")
+    subject = str(claims.get("sub", "")).strip()
+    if not subject:
+        return _login_error("invalid_token")
+    if _is_reserved(email):
+        return _login_error("account_exists")
 
+    from sqlalchemy import update
     from app.models import User
-    subject = str(claims.get("sub", ""))
     db = _db()
     try:
         user = _find_user(db, email)
-        if user is not None and not _may_link(user, provider, subject):
+        if user is not None and not _may_link(user, provider, subject, email, claims):
             return _login_error("account_exists")
+        now = datetime.utcnow()
         if user is None:
             if not signup_enabled():
                 return _login_error("signup_disabled")
             user = User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email,
                         name=(claims.get("name") or "")[:120] or None, provider=provider,
-                        provider_subject=subject)
+                        provider_subject=subject, session_version=0, last_login_at=now)
             db.add(user)
         elif not user.provider_subject:
-            user.provider_subject = subject
-        user.last_login_at = datetime.utcnow()
+            # The provider has just proven this address. The password on the row
+            # was set by whoever typed the address at sign-up, which nobody
+            # verified: it stops working and every session opened with it ends.
+            # One statement, so a concurrent password change cannot survive it;
+            # the owner may set a new password in Settings.
+            claimed = db.execute(
+                update(User)
+                .where(User.id == user.id, (User.provider_subject.is_(None)) | (User.provider_subject == ""))
+                .values(provider_subject=subject, password_hash=None,
+                        session_version=User.session_version + 1, last_login_at=now)
+                .execution_options(synchronize_session=False))
+            if claimed.rowcount != 1:
+                db.rollback()
+                return _login_error("account_exists")
+        else:
+            user.last_login_at = now
         db.commit()
-        name = user.name
+        db.refresh(user)
+        uid, version, name = user.id, user.session_version, user.name
     finally:
         db.close()
-    _start_session(request, email, name)
+    _start_session(request, email, name, uid=uid, version=version)
     return RedirectResponse(pending.get("next") or "/dashboard", status_code=302)
 
 
@@ -434,9 +556,10 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
 # ------------------------------------------------------------ Stage 5I settings
 @auth_router.patch("/me")
 def update_me(payload: dict, request: Request):
-    email = request.session.get("email")
-    if not email:
+    principal = _principal(request)
+    if principal is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    email = principal["email"]
     name = str(payload.get("name") or "").strip()[:120]
     if not name:
         raise HTTPException(status_code=400, detail="Name is required")
@@ -449,14 +572,15 @@ def update_me(payload: dict, request: Request):
     finally:
         db.close()
     request.session["name"] = name
-    return {"authenticated": True, "email": email, "name": name, "auth_disabled": not auth_enabled()}
+    return _me_payload(request, principal)
 
 
 @auth_router.post("/change-password")
 def change_password(payload: dict, request: Request):
-    email = request.session.get("email")
-    if not email:
+    principal = _principal(request)
+    if principal is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    email = principal["email"]
     current = str(payload.get("current_password") or "")
     new = str(payload.get("new_password") or "")
     problem = password_problem(new)
@@ -464,18 +588,33 @@ def change_password(payload: dict, request: Request):
         raise HTTPException(status_code=400, detail=problem)
     key = f"ip-email:{_client_ip(request)}|{email}"
     _check_rate(key)
+    from sqlalchemy import update
+    from app.models import User
     db = _db()
     try:
-        user = _find_user(db, email)
+        user = None if _is_reserved(email) else _find_user(db, email)
         if user is None:
             raise HTTPException(status_code=400, detail="This account's password is managed by the server administrator")
         if user.password_hash and not verify_password(current, user.password_hash):
             _record_failure(key)
             raise HTTPException(status_code=401, detail="Current password is incorrect")
-        user.password_hash = hash_password(new)
+        # Only from the session version this request was authorised with: a
+        # takeover or another password change in between makes this a no-op.
+        version = principal.get("sv", user.session_version)
+        changed = db.execute(
+            update(User).where(User.id == user.id, User.session_version == version)
+            .values(password_hash=hash_password(new), session_version=User.session_version + 1)
+            .execution_options(synchronize_session=False))
+        if changed.rowcount != 1:
+            db.rollback()
+            request.session.clear()
+            raise HTTPException(status_code=401, detail="Your session has ended — sign in again")
         db.commit()
+        uid, name = user.id, request.session.get("name")
     finally:
         db.close()
+    # Every other session of this account ends; this one continues on the new version.
+    _start_session(request, email, name, uid=uid, version=version + 1)
     return {"changed": True}
 
 

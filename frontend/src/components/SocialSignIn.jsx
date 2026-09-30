@@ -33,6 +33,7 @@ export const AUTH_ERRORS = {
   token_exchange_failed: "Could not complete sign-in with the provider. Please try again.",
   invalid_token: "The provider's response could not be verified.",
   email_not_verified: "Your Google email address is not verified.",
+  microsoft_email_unverified: "Microsoft did not confirm that your organisation owns this email domain. Ask your IT administrator, or sign in with email and password.",
   no_email: "The provider did not share an email address.",
   signup_disabled: "New accounts are not accepted on this server.",
   account_exists: "An account with this email already exists. Sign in the way you created it (email and password, or the original provider).",

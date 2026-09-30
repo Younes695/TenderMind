@@ -163,6 +163,7 @@ def test_microsoft_sign_in(client, monkeypatch):
         def json(self):
             return {"id_token": _id_token({"aud": "ms-app-id", "exp": time.time() + 300, "nonce": nonce,
                                             "iss": "https://login.microsoftonline.com/tenant-guid/v2.0",
+                                            "email": email, "xms_edov": True,
                                             "preferred_username": email, "name": "Mona", "sub": "ms-1"})}
     monkeypatch.setattr("requests.post", lambda *a, **k: R())
     r = client.get("/api/auth/oauth/microsoft/callback", params={"code": "c", "state": state}, follow_redirects=False)
@@ -183,7 +184,7 @@ def test_google_account_cannot_password_login(client, google):
     state, nonce, _q = _start(client, "google")
     email = _email()
     install({"aud": "gid.apps.googleusercontent.com", "iss": "accounts.google.com", "exp": time.time() + 300,
-             "nonce": nonce, "email": email, "email_verified": True})
+             "nonce": nonce, "email": email, "email_verified": True, "sub": "g-2"})
     client.get("/api/auth/oauth/google/callback", params={"code": "c", "state": state}, follow_redirects=False)
     client.post("/api/auth/logout")
     r = client.post("/api/auth/login", json={"email": email, "password": "anything1"})
@@ -200,7 +201,7 @@ def _ms_callback(client, monkeypatch, email, sub):
         def json(self):
             return {"id_token": _id_token({"aud": "ms-app-id", "exp": time.time() + 300, "nonce": nonce,
                                             "iss": "https://login.microsoftonline.com/attacker-tenant/v2.0",
-                                            "preferred_username": email, "sub": sub})}
+                                            "email": email, "xms_edov": True, "sub": sub})}
     monkeypatch.setattr("requests.post", lambda *a, **k: R())
     return client.get("/api/auth/oauth/microsoft/callback", params={"code": "c", "state": state},
                       follow_redirects=False)
@@ -242,9 +243,11 @@ def test_login_is_rate_limited(client):
         auth._login_failures.clear()
 
 
-def test_password_account_linked_by_google_keeps_working(client, google):
+def test_google_claiming_a_password_account_ends_the_unverified_password(client, google):
+    """The password was typed at sign-up by whoever registered the address first;
+    once Google proves the owner, it must stop working (it used to be kept)."""
     install, _ = google
-    email = _email()
+    email = f"user-{uuid.uuid4().hex[:8]}@gmail.com"
     client.post("/api/auth/signup", json={"email": email, "password": "Tender2026"})
     client.post("/api/auth/logout")
     for _ in range(2):  # first sign-in links, second must still be accepted
@@ -254,7 +257,8 @@ def test_password_account_linked_by_google_keeps_working(client, google):
         r = client.get("/api/auth/oauth/google/callback", params={"code": "c", "state": state}, follow_redirects=False)
         assert r.headers["location"] == "/tenders"
         client.post("/api/auth/logout")
-    assert client.post("/api/auth/login", json={"email": email, "password": "Tender2026"}).status_code == 200
+    r = client.post("/api/auth/login", json={"email": email, "password": "Tender2026"})
+    assert r.status_code == 401 and "Google or Microsoft" in r.json()["detail"]
 
 
 def test_signup_records_individual_account_type(client):
