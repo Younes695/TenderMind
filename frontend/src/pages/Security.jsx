@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import {
   KeyRound,
   ScrollText,
@@ -91,12 +92,12 @@ function Security() {
           </div>
 
           <div className="mt-8 flex justify-center">
-            <button
-              type="button"
+            <Link
+              to="/demo?topic=security"
               className="rounded-lg bg-[#162A4C] px-6 py-3.5 text-[14px] font-bold text-white transition-colors hover:bg-[#0F1D38]"
             >
               {t("Explore Security with our team")}
-            </button>
+            </Link>
           </div>
         </div>
       </section>

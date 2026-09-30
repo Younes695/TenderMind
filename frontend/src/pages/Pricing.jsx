@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useT } from "../i18n";
 
 // Initial pricing hypothesis (same as the financial model) — being validated with pilot customers.
@@ -147,16 +148,16 @@ function Pricing() {
                 ))}
               </ul>
 
-              <button
-                type="button"
-                className={`w-full rounded-lg px-4 py-3 text-[13px] font-bold transition-colors ${
+              <Link
+                to={cta === "Start Trial" ? "/signup" : `/demo?topic=plan:${name.toLowerCase()}`}
+                className={`block w-full rounded-lg px-4 py-3 text-center text-[13px] font-bold transition-colors ${
                   highlighted
                     ? "bg-[#C8A96B] text-[#162A4C] hover:brightness-110"
                     : "bg-[#162A4C] text-white hover:bg-[#0F1D38]"
                 }`}
               >
                 {t(cta)}
-              </button>
+              </Link>
             </article>
           ))}
         </div>

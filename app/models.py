@@ -471,3 +471,17 @@ class PriceItem(Base):
     currency = Column(String, nullable=False)
     min_qty = Column(Float, default=0)                   # a price break: this price from this quantity
     key = Column(String, index=True, nullable=True)      # app.materials.material_key
+
+
+class DemoRequest(Base):
+    """A demo / sales request sent from the public website (no account needed)."""
+    __tablename__ = "demo_requests"
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    company = Column(String, nullable=True)
+    country = Column(String, nullable=True)
+    topic = Column(String, nullable=True)      # e.g. plan:growth, security, industry:power
+    message = Column(Text, nullable=True)
+    status = Column(String, default="NEW")     # NEW | CONTACTED
+    created_at = Column(DateTime, default=datetime.utcnow)

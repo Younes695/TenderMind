@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import logo from "../assets/logo.jpg";
 import { useT, usePrefs } from "../i18n";
@@ -5,6 +6,9 @@ import { useT, usePrefs } from "../i18n";
 function Header() {
   const t = useT();
   const { lang, setLang } = usePrefs();
+  const [open, setOpen] = useState(false);
+  const mobileLinks = [["/product", "Product"], ["/solutions", "Solutions"], ["/industries", "Industries"],
+    ["/how-it-works", "How It Works"], ["/security", "Security"], ["/pricing", "Pricing"], ["/login", "Log in"], ["/demo", "Book a Demo"]];
   return (
     <header className="w-full border-b border-white/10 bg-[#102542]">
       <div className="mx-auto flex h-[58px] max-w-[1190px] items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -97,6 +101,9 @@ function Header() {
           type="button"
           className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 text-white transition-colors hover:bg-white/10 lg:hidden"
           aria-label={t("Open menu")}
+          aria-expanded={open}
+          data-testid="mobile-menu-button"
+          onClick={() => setOpen(!open)}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -115,6 +122,16 @@ function Header() {
         </button>
 
       </div>
+      {open && (
+        <nav data-testid="mobile-menu" className="border-t border-white/10 px-4 pb-4 lg:hidden">
+          {mobileLinks.map(([to, label]) => (
+            <Link key={to} to={to} onClick={() => setOpen(false)} className="block py-2.5 text-[14px] font-medium text-white/90 hover:text-[#D7B15F]">{t(label)}</Link>
+          ))}
+          <button type="button" onClick={() => setLang(lang === "en" ? "ar" : "en")} className="mt-1 py-2 text-[14px] font-medium text-[#D7B15F]">
+            {lang === "en" ? "العربية" : "English"}
+          </button>
+        </nav>
+      )}
     </header>
   );
 }

@@ -11,6 +11,8 @@ import TenderWorkspace from "./pages/TenderWorkspace";
 import DecisionPack from "./pages/DecisionPack";
 import { Approvals, WorkPackages, DocumentsLibrary, Analytics } from "./pages/Portfolio";
 import Materials from "./pages/Materials";
+import Demo from "./pages/Demo";
+import HowItWorks from "./pages/HowItWorks";
 import Help from "./pages/Help";
 import Solutions from "./pages/Solution";
 import Industries from "./pages/Industries";
@@ -38,10 +40,11 @@ function App() {
 
           <Route path="/" element={<Home />} />
 
-          <Route path="/product" element={<div>Product</div>} />
+          <Route path="/product" element={<Solutions />} />
           <Route path="/solutions" element={<Solutions />} />
           <Route path="/industries" element={<Industries />} />
-          <Route path="/how-it-works" element={<div>How It Works</div>} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/demo" element={<Demo />} />
           <Route path="/security" element={<Security/>} />
           <Route path="/pricing" element={<Pricing/>} />
 

@@ -477,3 +477,42 @@ def change_password(payload: dict, request: Request):
     finally:
         db.close()
     return {"changed": True}
+
+
+# ------------------------------------------------------- public demo requests
+_DEMO_MAX_PER_IP = 5          # per hour: the form is public, so it is rate-limited per address
+_demo_hits: dict = {}
+
+
+@auth_router.post("/demo-requests")
+def create_demo_request(payload: dict, request: Request):
+    """'Book a demo' / 'Talk to sales' from the public website. Stored for the team; nothing is emailed."""
+    import time
+    from app.models import DemoRequest
+    ip = _client_ip(request)
+    now = time.time()
+    with _login_lock:
+        hits = [t for t in _demo_hits.get(ip, []) if now - t < 3600]
+        if len(hits) >= _DEMO_MAX_PER_IP:
+            raise HTTPException(status_code=429, detail="Too many requests — try again later")
+        hits.append(now)
+        _demo_hits[ip] = hits
+        if len(_demo_hits) > 10_000:
+            _demo_hits.clear()
+    clean = lambda k, n: " ".join(str(payload.get(k) or "").split())[:n] or None
+    name, email = clean("name", 120), normalize_email(payload.get("email"))
+    if not name:
+        raise HTTPException(status_code=400, detail="Your name is required")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+    if payload.get("website"):  # honeypot field, invisible to people
+        return {"ok": True}
+    db = _db()
+    try:
+        db.add(DemoRequest(id=f"DR-{uuid.uuid4().hex[:10].upper()}", name=name, email=email,
+                           company=clean("company", 200), country=clean("country", 60), topic=clean("topic", 60),
+                           message=(str(payload.get("message") or "").strip()[:2000] or None)))
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True}

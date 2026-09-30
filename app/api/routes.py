@@ -2316,3 +2316,13 @@ def portfolio_materials(db: Session = Depends(get_db), user: dict = Depends(requ
     res = aggregate({k: v for k, v in lines.items() if v}, {t.id: t.title for t in tenders},
                     price_index(_price_items(db, user)))
     return dict(res, active_tenders=len(tenders), tenders_with_boq=sum(1 for v in lines.values() if v))
+
+
+@router.get("/demo-requests")
+def list_demo_requests(db: Session = Depends(get_db), user: dict = Depends(require_auth)):
+    """Requests sent from the public website, newest first (signed-in team only)."""
+    from app.models import DemoRequest
+    rows = db.query(DemoRequest).order_by(DemoRequest.created_at.desc()).limit(200).all()
+    return [{"id": r.id, "name": r.name, "email": r.email, "company": r.company, "country": r.country,
+             "topic": r.topic, "message": r.message, "status": r.status, "created_at": r.created_at.isoformat()}
+            for r in rows]

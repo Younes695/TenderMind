@@ -1,11 +1,12 @@
 
 const footerCols = [
-  { title: "Product", links: ["Tender Analysis", "Go / No-Go", "Financial Intelligence", "Approvals", "Subcontractor RFQs"] },
-  { title: "Solutions", links: ["Tender Managers", "Finance", "Executives", "Technical Teams", "Procurement"] },
-  { title: "Company", links: ["About", "Security", "Pricing", "Contact", "Careers"] },
-  { title: "Compliance", links: ["Role-Based Access", "Audit Logs", "Data Residency (KSA)", "Privacy", "Terms"] },
+  { title: "Product", links: [["Tender Analysis", "/how-it-works"], ["Go / No-Go", "/how-it-works"], ["Subcontractor RFQs", "/how-it-works"], ["Pricing", "/pricing"]] },
+  { title: "Solutions", links: [["Tender Managers", "/solutions"], ["Finance", "/solutions"], ["Executives", "/solutions"], ["Industries", "/industries"]] },
+  { title: "Company", links: [["Book a Demo", "/demo"], ["Log in", "/login"], ["Sign up", "/signup"]] },
+  { title: "Compliance", links: [["Security", "/security"], ["Audit Logs", "/security"], ["On-premise option", "/demo?topic=plan:enterprise"]] },
 ];
 
+import { Link } from "react-router-dom";
 import { useT } from "../i18n";
 
 function Footer (){
@@ -21,18 +22,18 @@ function Footer (){
                 {t("From RFP to Ready-to-Bid. AI-powered tender intelligence for teams that can't afford to miss the details.")}
               </p>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[#C8A96B]">
-                {t("Riyadh · Dubai · Cairo")}
+                {t("Egypt · GCC")}
               </p>
             </div>
             {footerCols.map(({ title, links }) => (
               <div key={title}>
                 <p className="mb-3 text-[12px] font-semibold tracking-wide text-[#a9b8d4]">{t(title)}</p>
                 <ul className="space-y-2.5">
-                  {links.map((l) => (
+                  {links.map(([l, to]) => (
                     <li key={l}>
-                      <a href="#" className="text-[13px] text-white/90 transition hover:text-[#C8A96B]">
+                      <Link to={to} className="text-[13px] text-white/90 transition hover:text-[#C8A96B]">
                         {t(l)}
-                      </a>
+                      </Link>
                     </li>
                   ))}
                 </ul>

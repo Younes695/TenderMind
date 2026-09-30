@@ -79,3 +79,18 @@ def test_account_type_company_or_individual(c):
     assert c.get("/api/account").json()["account_type"] == "individual"
     assert c.put("/api/account", json={"account_type": "freelancer"}).status_code == 422
     c.put("/api/account", json={"account_type": before})
+
+
+def test_public_demo_request_is_stored_validated_and_rate_limited(c):
+    import app.auth as auth
+    auth._demo_hits.clear()
+    ok = {"name": "Sara Ali", "email": "Sara@Company.test", "company": "Delta Grid", "topic": "plan:growth", "message": "Demo please"}
+    assert c.post("/api/auth/demo-requests", json=ok).json() == {"ok": True}
+    assert c.post("/api/auth/demo-requests", json=dict(ok, email="nope")).status_code == 400
+    assert c.post("/api/auth/demo-requests", json=dict(ok, name=" ")).status_code == 400
+    rows = c.get("/api/demo-requests").json()
+    assert rows[0]["email"] == "sara@company.test" and rows[0]["topic"] == "plan:growth"
+    for _ in range(4):
+        c.post("/api/auth/demo-requests", json=ok)
+    assert c.post("/api/auth/demo-requests", json=ok).status_code == 429
+    auth._demo_hits.clear()

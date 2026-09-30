@@ -89,7 +89,7 @@ function Industries() {
                 {t(text)}
               </p>
               <Link
-                to={`/industries/${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                to={`/demo?topic=industry:${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                 className="inline-flex items-center gap-1 text-[13px] font-bold text-[#162A4C] transition-colors hover:text-[#C8A96B]"
               >
                 {t("Explore")}

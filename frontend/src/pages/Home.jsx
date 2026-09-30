@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import HeroHome from "../components/HeroHome";
+import { Link } from "react-router-dom";
 import { useT } from "../i18n";
 import {
   FileWarning,
@@ -363,12 +364,12 @@ function Home() {
                 Human approval required before proceeding.
               </p>
 
-              <button
-                type="button"
-                className="w-full rounded-lg bg-[#C8A96B] px-4 py-3 text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
+              <Link
+                to="/how-it-works"
+                className="block w-full rounded-lg bg-[#C8A96B] px-4 py-3 text-center text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
               >
                 See How Go / No-Go Works
-              </button>
+              </Link>
 
               <p className="mt-3 flex items-center gap-1.5 text-[12px] text-[#a9b8d4]">
                 <Lock size={12} strokeWidth={1.8} />
@@ -597,12 +598,12 @@ function Home() {
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              className="rounded-lg border-2 border-[#162A4C] px-4 py-2.5 text-[13px] font-semibold text-[#162A4C] transition hover:bg-[#162A4C] hover:text-white"
+            <Link
+              to="/security"
+              className="inline-block rounded-lg border-2 border-[#162A4C] px-4 py-2.5 text-[13px] font-semibold text-[#162A4C] transition hover:bg-[#162A4C] hover:text-white"
             >
               {t("Explore Security")}
-            </button>
+            </Link>
           </div>
 
           <div className="space-y-3 self-center rounded-xl border border-[#ebe8e1] bg-[#f5f3ee] p-5 font-mono text-[12px] text-[#4b5f86]">
@@ -643,18 +644,18 @@ function Home() {
           {t("Understand the tender. Decide with confidence. Coordinate the team. Submit on time.")}
         </h2>
         <div className="flex flex-wrap justify-center gap-3">
-          <button
-            type="button"
+          <Link
+            to="/demo"
             className="rounded-lg bg-[#C8A96B] px-6 py-3 text-[13px] font-bold text-[#162A4C] transition hover:brightness-110"
           >
             {t("Book a Demo")}
-          </button>
-          <button
-            type="button"
+          </Link>
+          <Link
+            to="/how-it-works"
             className="rounded-lg border border-white/30 px-6 py-3 text-[13px] font-semibold text-white transition hover:bg-white/10"
           >
             {t("See How It Works")}
-          </button>
+          </Link>
         </div>
       </section>
 

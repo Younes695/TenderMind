@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check, UserRound } from "lucide-react";
+import { Settings as SettingsIcon, Building2, User, KeyRound, Languages, Moon, Sun, Monitor, Crown, LifeBuoy, Check, UserRound, Inbox } from "lucide-react";
 import apiClient from "../api/client";
 import { usePrefs } from "../i18n";
 import { useAccountType, setAccountType } from "../account";
@@ -33,6 +33,29 @@ function Notice({ msg }) {
   if (!msg) return null;
   const ok = msg.startsWith("ok:");
   return <p className={`mt-3 text-[13px] ${ok ? "text-[#1f7a4d]" : "text-[#b42318]"}`}>{msg.slice(msg.indexOf(":") + 1)}</p>;
+}
+
+/** Requests sent from the public "Book a demo" form. */
+function DemoRequests() {
+  const { t } = usePrefs();
+  const [rows, setRows] = useState(null);
+  useEffect(() => { apiClient.listDemoRequests().then((d) => setRows(Array.isArray(d) ? d : [])).catch(() => setRows([])); }, []);
+  return (
+    <Card icon={Inbox} title={t("Demo requests from the website")}>
+      {!rows ? null : !rows.length ? <p className="text-[13px] text-[#667085]">{t("No requests yet.")}</p> : (
+        <ul data-testid="demo-requests" className="divide-y divide-[#f0ede6] text-[13px]">
+          {rows.map((r) => (
+            <li key={r.id} className="py-2">
+              <b className="text-[#101828]">{r.name}</b> · <a href={`mailto:${r.email}`} className="text-[#162A4C] underline">{r.email}</a>
+              {r.company ? ` · ${r.company}` : ""}{r.country ? ` · ${t(r.country)}` : ""}
+              <span className="ms-2 rounded bg-[#f2f4f7] px-1.5 text-[11px]">{r.topic || "demo"}</span>
+              <span className="block text-[12px] text-[#667085]">{new Date(r.created_at).toLocaleString()}{r.message ? ` — ${r.message}` : ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
 }
 
 export default function Settings() {
@@ -159,6 +182,7 @@ export default function Settings() {
       <CapabilityCard />
       {!individual && <TeamCard />}
       <WeightsCard />
+      <DemoRequests />
 
       <Card icon={KeyRound} title={t("Change password")}>
         <form onSubmit={savePassword} className="grid gap-3 sm:grid-cols-3">

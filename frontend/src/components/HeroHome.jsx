@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import bgHome from "../assets/bg_home.jpg";
 import { useT } from "../i18n";
 
@@ -46,16 +47,16 @@ function HeroHome() {
 
             {/* Buttons */}
             <div className="mt-6 flex gap-2">
-            <button
+            <Link
                 to="/demo"
                 className="rounded-md bg-[#D7B15F] px-4 py-2 text-xs font-semibold text-[#102542] transition-colors hover:bg-[#F7D387]"
             >
                 {t("Book a Demo")}
-            </button>
+            </Link>
 
-              <button className="h-9 rounded-md border border-white/20 bg-transparent py-2 px-[17px] text-xs font-semibold text-white hover:bg-[#102542]">
+              <Link to="/how-it-works" className="flex h-9 items-center rounded-md border border-white/20 bg-transparent py-2 px-[17px] text-xs font-semibold text-white hover:bg-[#102542]">
                 {t("Explore TenderMind")}
-              </button>
+              </Link>
             </div>
 
             {/* Features */}

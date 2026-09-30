@@ -337,6 +337,9 @@ export async function uploadPriceList({ file, supplier, currency, price_date }) 
   const resp = await apiFetch(`/api/price-lists`, { method: "POST", body: fd });
   return handleResponse(resp);
 }
+// Public demo / sales requests (stored for the team)
+export const requestDemo = (data) => jsonCall(`/api/auth/demo-requests`, "POST", data);
+export const listDemoRequests = () => jsonCall(`/api/demo-requests`);
 // Account type (company / individual professional)
 export const getAccount = () => jsonCall(`/api/account`);
 export const setAccount = (data) => jsonCall(`/api/account`, "PUT", data);
@@ -434,6 +437,8 @@ const apiClient = {
   complianceMatrixUrl,
   getRfqPackages,
   getAccount,
+  requestDemo,
+  listDemoRequests,
   setAccount,
   getTenderMaterials,
   getPortfolioMaterials,
