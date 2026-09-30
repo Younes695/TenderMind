@@ -47,8 +47,8 @@ def main_kv(title: str, body: str = "") -> Optional[int]:
 COUNTRIES = {
     "Saudi Arabia": ("saudi", "ksa", "kingdom of saudi arabia", "riyadh", "jeddah", "dammam", "maaden",
                      "ma'aden", "ma’aden", "السعودية"),
-    "Egypt": ("egypt", "cairo", "egyptian electricity", "eetc", "مصر"),
-    "United Arab Emirates": ("united arab emirates", "uae", "dubai", "abu dhabi", "dewa", "taqa", "الإمارات"),
+    "Egypt": ("egypt", "egyptian", "cairo", "egyptian electricity", "eetc", "مصر"),
+    "United Arab Emirates": ("united arab emirates", "uae", "dubai", "abu dhabi", "dewa", "الإمارات"),
     "Qatar": ("qatar", "doha", "kahramaa", "قطر"),
     "Kuwait": ("kuwait", "mew kuwait", "الكويت"),
     "Oman": ("oman", "muscat", "oetc", "عمان"),

@@ -7,7 +7,7 @@ const plans = [
   {
     name: "Starter",
     tagline: "Individual / small business",
-    price: "EGP 1,500",
+    price: "EGP 1,499.99",
     gcc: "SAR 299",
     per: "/ month",
     features: [
@@ -23,7 +23,7 @@ const plans = [
   {
     name: "Growth",
     tagline: "Tender team / growing company",
-    price: "EGP 4,900",
+    price: "EGP 4,899.99",
     gcc: "SAR 899",
     per: "/ month",
     badge: "Most Popular",
@@ -40,7 +40,7 @@ const plans = [
   {
     name: "Business",
     tagline: "Larger company / multiple users",
-    price: "EGP 14,900",
+    price: "EGP 14,899.99",
     gcc: "SAR 2,900",
     per: "/ month",
     features: [
@@ -56,7 +56,7 @@ const plans = [
   {
     name: "Enterprise",
     tagline: "Dedicated cloud / private deployment",
-    price: "From EGP 45,000",
+    price: "From EGP 44,999.99",
     gcc: "From SAR 9,500",
     per: "/ month",
     features: [

@@ -94,3 +94,9 @@ def test_public_demo_request_is_stored_validated_and_rate_limited(c):
         c.post("/api/auth/demo-requests", json=ok)
     assert c.post("/api/auth/demo-requests", json=ok).status_code == 429
     auth._demo_hits.clear()
+
+
+def test_taqa_is_not_a_uae_signal():
+    from app.tender_facts import detect_country
+    # Egyptian tender that names TAQA (e.g. TAQA Arabia) many times and EETC once
+    assert detect_country(["TAQA " * 50 + " Egyptian Electricity Transmission Company EETC"]) == "Egypt"
