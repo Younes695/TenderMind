@@ -140,6 +140,9 @@ def init_db():
             if ecols and "override_name" not in ecols:
                 conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN override_name VARCHAR"))
                 conn.commit()
+            if ecols and "capability_source" not in ecols:  # app/eligibility.py clear_foreign_capability_results
+                conn.execute(text("ALTER TABLE eligibility_results ADD COLUMN capability_source VARCHAR"))
+                conn.commit()
     except Exception:
         # Non-sqlite or already applied — safe to ignore, create_all handles fresh DBs
         pass

@@ -63,5 +63,6 @@ export default {
   "signup_disabled": "لا تُقبل حسابات جديدة على هذا الخادم.",
   "account_exists": "يوجد حساب برسالة بريد إلكترونية مشابهة بالفعل. تسجيل الدخول بالطريقة التي أنشأت بها الحساب (البريد الإلكتروني وكلمة المرور، أو المزود الأصلي).",
   "Passwords do not match.": "كلمتا المرور غير متطابقتين.",
+  "Too many new accounts from this address. Try again in an hour.": "عدد كبير من الحسابات الجديدة من هذا العنوان. حاول مرة أخرى بعد ساعة.",
   "Microsoft did not confirm that your organisation owns this email domain. Ask your IT administrator, or sign in with email and password.": "لم تؤكد Microsoft أن مؤسستك تملك نطاق هذا البريد الإلكتروني. تواصل مع مسؤول تقنية المعلومات لديك، أو سجّل الدخول بالبريد الإلكتروني وكلمة المرور.",
 };

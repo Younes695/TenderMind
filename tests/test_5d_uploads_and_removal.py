@@ -41,13 +41,14 @@ def _stored(tid):
     return sorted(p.name for p in d.iterdir()) if d.exists() else []
 
 
-def test_default_cap_is_5gb_and_plan_override(monkeypatch):
+def test_default_cap_is_2gb_and_plan_override(monkeypatch):
+    # Was 5 GB; lowered to what the bundled Caddy front accepts (request_body max_size 2GB).
     from app.api.routes import _max_upload_bytes
     monkeypatch.delenv("TENDERMIND_MAX_UPLOAD_MB", raising=False)
-    assert _max_upload_bytes() == 5 * 1024 ** 3
+    assert _max_upload_bytes() == 2 * 1024 ** 3
     monkeypatch.setenv("TENDERMIND_MAX_UPLOAD_MB_STARTER", "500")
     assert _max_upload_bytes("starter") == 500 * 1024 ** 2
-    assert _max_upload_bytes("enterprise") == 5 * 1024 ** 3  # no plan override -> global
+    assert _max_upload_bytes("enterprise") == 2 * 1024 ** 3  # no plan override -> global
 
 
 def test_upload_is_streamed_in_chunks_and_oversize_leaves_no_partial_file(client, tender, monkeypatch):

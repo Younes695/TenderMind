@@ -4,9 +4,10 @@
 
 {$DOMAIN} {
 	encode gzip
-	# large tender packages (the app enforces its own per-file limits)
+	# large tender packages: one 2 GB file (the app's per-file cap) plus the
+	# multipart envelope must fit; the app enforces its own per-file limits
 	request_body {
-		max_size 2GB
+		max_size 2100MiB
 	}
 	reverse_proxy app:8001 {
 		transport http {

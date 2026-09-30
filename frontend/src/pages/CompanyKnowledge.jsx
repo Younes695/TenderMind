@@ -61,7 +61,7 @@ function CompanyKnowledge() {
           <input ref={fileRef} type="file" multiple className="hidden" onChange={onUpload} accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv,.jpg,.jpeg,.png,.bmp,.gif,.tif,.tiff,.webp,.zip,.rar,.7z,.dxf,.bak" data-testid="company-knowledge-upload" />
         </label>
       </div>
-      <p className="mt-2 text-[12px] text-[#98a2b3]">{t("PDF, Word, Excel, scanned images, ZIP/RAR archives, TXT • up to 5 GB per file")}</p>
+      <p className="mt-2 text-[12px] text-[#98a2b3]">{t("PDF, Word, Excel, scanned images, ZIP/RAR archives, TXT • up to 2 GB per file")}</p>
 
       {error && <div className="mt-4 rounded-xl border border-[#f5c6c6] bg-[#fdf0f0] p-3 text-[14px] text-[#a33a3a]">{error}</div>}
       {!docs && !error && <p className="mt-6 text-[14px] text-[#667085]">{t("Loading documents...")}</p>}

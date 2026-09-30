@@ -49,7 +49,12 @@ def capability_for(db, tender):
     """Capabilities are stored per account like the company profile: the tender
     owner's, else (tenders from before accounts) the admin's, else "local"."""
     from app.models import CompanyCapability
-    for key in (tender.owner_email, os.environ.get("TENDERMIND_AUTH_EMAIL", "").strip().lower(), "local"):
+    # An owned tender is judged by its owner's capabilities only: falling back to
+    # the admin's would check it against another company and echo that company's
+    # profile back in the check details.
+    keys = ((tender.owner_email,) if tender.owner_email
+            else (os.environ.get("TENDERMIND_AUTH_EMAIL", "").strip().lower(), "local"))
+    for key in keys:
         if key:
             cap = db.query(CompanyCapability).filter(CompanyCapability.id == key).first()
             if cap is not None:
@@ -202,6 +207,28 @@ def check(cap: Optional[Dict[str, Any]], title: str, sources: List[Any]) -> Dict
     return {"status": status, "checks": checks}
 
 
+def clear_foreign_capability_results(db) -> List[str]:
+    """Results saved before capability_for stopped falling back to the env
+    admin's profile may quote another company's capabilities (and may have
+    blocked the tender as INELIGIBLE against them). Every owned tender's result
+    that was not computed from its owner's own profile - including every result
+    from before capability_source existed, whose provenance is unknown - loses
+    its checks and becomes SKIPPED until the tender is processed again. A
+    manager's override record is kept. Idempotent; returns the tender ids changed."""
+    from app.models import EligibilityResult, Tender
+    changed = []
+    rows = (db.query(EligibilityResult, Tender).join(Tender, EligibilityResult.tender_id == Tender.id)
+            .filter(Tender.owner_email.isnot(None)).all())
+    for res, tender in rows:
+        if not res.checks or res.capability_source == tender.owner_email:
+            continue
+        res.status, res.checks, res.capability_source = "SKIPPED", [], None
+        changed.append(tender.id)
+    if changed:
+        db.commit()
+    return changed
+
+
 def run_gate(db, tender_id: str, job, doc_results: Dict[str, Any]) -> bool:
     """Called by processing after extraction. Returns True when processing must stop."""
     from app.models import EligibilityResult, Tender
@@ -217,6 +244,7 @@ def run_gate(db, tender_id: str, job, doc_results: Dict[str, Any]) -> bool:
     res = check(capability_dict(cap), f"{tender.title or ''} {tender.client or ''}", sources)
     row = row or EligibilityResult(tender_id=tender_id)
     row.status, row.checks, row.created_at = res["status"], res["checks"], dt.datetime.utcnow()
+    row.capability_source = cap.id if cap is not None else None
     db.merge(row)
     db.commit()
     if res["status"] != "INELIGIBLE":

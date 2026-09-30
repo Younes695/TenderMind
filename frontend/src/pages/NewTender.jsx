@@ -305,7 +305,7 @@ function UploadStep({ tenderId, setTenderId, tenderForm, setTenderForm, files, s
             <input ref={inputRef} type="file" multiple data-testid="file-input" className="hidden" onChange={(e) => addFiles(e.target.files)} />
             <div className="mt-6 flex flex-wrap justify-center gap-2">{["PDF", "Word", "Excel", "Images", "ZIP", "RAR", "7z", "DXF", ".bak"].map((ft) => (<span key={ft} className="rounded-lg border border-[#e3ddd0] bg-[#faf9f6] px-3 py-1.5 text-[14px] font-bold text-[#101828]">{ft}</span>))}</div>
             <p className="mt-4 text-[14px] text-[#667085]">{tenderId ? t("Select files, then upload") : t("Create tender before uploading")}</p>
-            <p className="mt-1 text-[13px] text-[#98a2b3]">{t("Up to 5 GB per file")}</p>
+            <p className="mt-1 text-[13px] text-[#98a2b3]">{t("Up to 2 GB per file")}</p>
           </div>
           <ErrorBanner message={uploadError} />
           <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-[#e8e4dc] bg-white p-4">
