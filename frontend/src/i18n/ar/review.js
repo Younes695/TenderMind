@@ -90,7 +90,7 @@ export default {
   "Referenced documents not in the package": "مستندات مذكورة غير موجودة في الملف",
   "{n} requirements could not be classified": "تعذّر تصنيف {n} متطلبًا",
   "Referenced documents not found in the readable text": "مستندات مذكورة لم نجدها في النص المقروء",
-  "Referenced documents not found in the readable text ({n} pages unread)": "مستندات مذكورة لم نجدها في النص المقروء ({n} صفحة لم تُقرأ)",
+  "Referenced documents not found in the readable text ({n} page(s) unread)": "مستندات مذكورة لم نجدها في النص المقروء ({n} صفحة لم تُقرأ)",
   "These forms / annexes / appendices are mentioned in the files below, but we found neither a file nor a section with their name in the text we could read. Pages that could not be read (scans, images) may still hold some of them — check those first, ask for or upload only what is really missing, then mark this resolved.":
     "هذه النماذج / الملاحق مذكورة في الملفات التالية، لكننا لم نجد ملفًا ولا قسمًا باسمها في النص الذي أمكن قراءته. قد يكون بعضها في صفحات لم تُقرأ (صفحات ممسوحة أو صور) — راجعها أولًا، واطلب أو ارفع الناقص فعلًا فقط، ثم علِّم التنبيه كمحلول.",
   HIGH: "عالية",

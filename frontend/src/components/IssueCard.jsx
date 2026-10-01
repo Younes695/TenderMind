@@ -24,8 +24,8 @@ export default function IssueCard({ issue, withAnswer = false, showTender = fals
     if (match) return t("{n} scanned page(s) could not be read reliably", { n: parseInt(match[1]) });
     const unk = issue.title?.match(/^(\d+) requirements could not be classified$/);
     if (unk) return t("{n} requirements could not be classified", { n: parseInt(unk[1]) });
-    const refs = issue.title?.match(/^Referenced documents not found in the readable text \((\d+) pages unread\)$/);
-    if (refs) return t("Referenced documents not found in the readable text ({n} pages unread)", { n: parseInt(refs[1]) });
+    const refs = issue.title?.match(/^Referenced documents not found in the readable text \((\d+) page\(s\) unread\)$/);
+    if (refs) return t("Referenced documents not found in the readable text ({n} page(s) unread)", { n: parseInt(refs[1]) });
     const dis = issue.title?.match(/^Documents disagree: (.+)$/);
     if (dis) return t("Documents disagree: {what}", { what: t(dis[1]) });
     return t(issue.title);

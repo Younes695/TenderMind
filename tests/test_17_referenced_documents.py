@@ -8,9 +8,10 @@ from app.pipeline import gaps as GP
 from app.pipeline.contracts import DocumentArtifact, SourceText
 
 
-def _doc(name, pages=1, status="COMPLETE"):
+def _doc(name, pages=1, status="COMPLETE", failed_pages=()):
     ext = "." + name.rsplit(".", 1)[-1].lower()
-    return DocumentArtifact(name, "", ext, status=status, page_count=pages, total_text_chars=1000)
+    return DocumentArtifact(name, "", ext, status=status, page_count=pages, total_text_chars=1000,
+                            failed_pages=list(failed_pages))
 
 
 def _absent(docs, sources):
@@ -30,11 +31,11 @@ def test_appendix_with_its_own_cover_page_inside_the_pdf_is_not_missing():
 
 def test_cover_page_without_text_is_reported_as_not_found_with_the_unread_pages():
     # The cover is a scan that produced no text: the body pages carry no label.
-    docs = [_doc(SOW, pages=40)]
+    docs = [_doc(SOW, pages=40, status="PARTIAL", failed_pages=[39, 39, 12]), _doc("Annex.xls", status="FAILED")]
     body = SourceText(SOW, 40, "1. Loads\nDead loads shall be computed from the unit weights below.")
     gap = _absent(docs, [MENTION, body])["APPENDIX VII"]
     assert gap.description == "APPENDIX VII referenced but not found in the readable text of the package"
-    assert gap.note == "38 page(s) of the package have no readable text"
+    assert gap.note == "3 page(s) of the package could not be read"  # same pages the extraction gaps list
     assert gap.evidence == [f"{SOW}#p3"]
 
 
@@ -139,6 +140,49 @@ def test_a_list_of_attachments_in_a_word_file_is_not_the_attachments():
     assert {"ANNEXURE I", "ANNEXURE II", "ANNEXURE III"} <= set(_absent([_doc("ITB.doc")], src))
 
 
+def test_a_long_list_below_a_header_is_still_a_list():
+    header = "\n".join(f"HEADER LINE {i}" for i in range(16))
+    page = SourceText(SOW, 3, header + "\nAPPENDIX I\nTO MAIN SOW/TS\nAPPENDIX II\nTO MAIN SOW/TS\n"
+                                       "APPENDIX III\nTO MAIN SOW/TS\n")
+    assert {"APPENDIX I", "APPENDIX II", "APPENDIX III"} <= set(_absent([_doc(SOW, pages=3)], [page]))
+
+
+def test_a_short_list_of_two_attachments_is_still_a_list():
+    src = [SourceText("ITB.doc", 1, "ATTACHMENTS\nANNEXURE-I KEY PERSONNEL\nANNEXURE-II DELIVERY SCHEDULE\n")]
+    assert {"ANNEXURE I", "ANNEXURE II"} <= set(_absent([_doc("ITB.doc")], src))
+
+
+def test_an_instruction_in_capitals_is_not_a_cover_formula():
+    page = SourceText(SOW, 9, "SECTION 4\nSUBMITTALS\nThe bidder shall note:\nDESCRIPTION\n"
+                              "APPENDIX VII\nTO BE COMPLETED AND SIGNED BY THE BIDDER\n")
+    assert "APPENDIX VII" in _absent([_doc(SOW, pages=9)], [page])
+
+
+def test_not_applicable_on_a_later_line_does_not_leak_to_the_entry_above():
+    src = [SourceText(SOW, 2, "ANNEXURE I  KEY PERSONNEL\nANNEXURE II  DELIVERY SCHEDULE\n"
+                              "Price adjustment : NOT APPLICABLE\nANNEXURE III  SUBCONTRACTING PLAN\n")]
+    assert {"ANNEXURE I", "ANNEXURE II", "ANNEXURE III"} <= set(_absent([_doc(SOW, pages=2)], src))
+
+
+def test_plural_words_are_not_references():
+    src = [SourceText(SOW, 1, "BIDDING FORMS\nLIST OF ANNEXURES\nSCHEDULE OF EXHIBITS\nAPPENDICES\n")]
+    assert _absent([_doc(SOW)], src) == {}
+
+
+def test_lower_case_file_names_are_read():
+    docs = [_doc("annex xvi transformer losses.xlsx"), _doc("ITB.doc")]
+    src = [SourceText("ITB.doc", 1, "Use the format of Annexure XVI.")]
+    assert "ANNEXURE XVI" not in _absent(docs, src)
+
+
+def test_a_long_digit_run_after_a_reference_does_not_hang():
+    import time
+    src = [SourceText(SOW, 1, "See Appendix A" + "1" * 60 + "x and Form B" + "2" * 60 + ".")]
+    t0 = time.perf_counter()
+    GP.analyze_package_gaps([_doc(SOW)], src)
+    assert time.perf_counter() - t0 < 1.0
+
+
 def test_identifiers_are_case_sensitive_and_words_are_not_ids():
     src = [SourceText(SOW, 1, "Appendix shall be read with the Annexure to the contract. The bids exhibit a "
                               "wide spread. Annex a list of the equipment to the offer. Samples shall exhibit "
@@ -159,7 +203,7 @@ def test_grouped_issue_says_not_found_and_how_many_pages_were_unread(tmp_path, m
     from app.models import Tender, TenderAnalysis
     init_db()
     tid = f"T17-{uuid.uuid4().hex[:6]}"
-    note = "12 page(s) of the package have no readable text"
+    note = "12 page(s) of the package could not be read"
     db = SessionLocal()
     try:
         db.add(Tender(id=tid, title="t"))
@@ -174,7 +218,7 @@ def test_grouped_issue_says_not_found_and_how_many_pages_were_unread(tmp_path, m
         db.commit()
         items = [c for c in build_candidates(db, tid) if c["kind"] == "referenced-form-absent"]
         assert len(items) == 1
-        assert items[0]["title"] == "Referenced documents not found in the readable text (12 pages unread)"
+        assert items[0]["title"] == "Referenced documents not found in the readable text (12 page(s) unread)"
         assert items[0]["detail"] == "SOW.pdf: ANNEXURE XIV, APPENDIX IX"
     finally:
         db.close()

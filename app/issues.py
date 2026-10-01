@@ -121,7 +121,7 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                 # Not proof of absence: pages without readable text may hold some of them.
                 title = "Referenced documents not found in the readable text"
                 out.append({"category": "missing", "kind": "referenced-form-absent",
-                            "title": f"{title} ({unread} pages unread)" if unread else title,
+                            "title": f"{title} ({unread} page(s) unread)" if unread else title,
                             "detail": "\n".join(lines),
                             "source_document": None, "page": None, "priority": "MEDIUM",
                             "dedupe_key": _key("refs-absent", sorted(names))})

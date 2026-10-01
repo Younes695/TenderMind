@@ -9,28 +9,31 @@ requirement" is ever produced here.
 from __future__ import annotations
 
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.pipeline.contracts import DocumentArtifact, SourceText
 
 _ROMAN = r"(?=[IVXLCM])M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})"
-_ID = _ROMAN + r"(?:[.\-]\d{1,3})*|\d{1,5}(?:[.\-]\d{1,3})*[A-Z]?|[A-Z](?:[.\-]?\d{1,3})*"  # I-1 is not I
+# I-1 is not I. Sub-number separators are explicit, so a long digit run cannot backtrack exponentially.
+_ID = (_ROMAN + r"(?:[.\-]\d{1,3})*|\d{1,5}(?:[.\-]\d{1,3})*[A-Z]?|[A-Z](?:\d{1,3})?(?:[.\-]\d{1,3})*")
 _REF_ID = re.compile(r"^(FORM|EXHIBIT|ANNEX|ANNEXURE|APPENDIX) (" + _ID + r")$")
 _DASHES = "\\-\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
 _GAP = r"[ \t]*(?:\n[ \t]*){0,2}"  # TOC lines put 'APPENDIX', the id and the title on separate lines
-# The word is matched case-insensitively, the identifier case-sensitively ('Appendix shall' is no reference).
-_REF = re.compile(r"\b(?P<word>(?i:FORM|EXHIBIT|ANNEXURE|ANNEX|APPENDIX))" + _GAP
-                  + r"(?:[" + _DASHES + r"]" + _GAP + r")?(?P<id>" + _ID + r")(?![A-Za-z0-9+])")
+_SEP = r"(?:[ \t]+(?:\n[ \t]*){0,2}|[ \t]*(?:\n[ \t]*){1,2})"  # at least one space or line break
+# The word is matched case-insensitively, the identifier case-sensitively ('Appendix shall' is no reference);
+# a separator is required ('LIST OF ANNEXURES' is no ANNEXURE S).
+_REF = re.compile(r"\b(?P<word>(?i:FORM|EXHIBIT|ANNEXURE|ANNEX|APPENDIX))(?:" + _GAP + r"[" + _DASHES + r"]"
+                  + _GAP + r"|" + _SEP + r")(?P<id>" + _ID + r")(?![A-Za-z0-9+])")
 _PROSE_WORDS = {"FORM", "EXHIBIT"}  # 'rectangular form R+jX', 'the bids exhibit a spread'
 _NOT_APPLICABLE = re.compile(r"\bNOT\s+APPLICABLE\b|\(\s*N/A\s*\)", re.IGNORECASE)
+_NOT_APPLICABLE_ONLY = re.compile(r"[\s(" + _DASHES + r"]*(?:NOT\s+APPLICABLE|N/A)[\s)]*", re.IGNORECASE)
 _STOPWORDS = {"the", "and", "for", "of", "to", "in", "with", "as", "shall", "be", "is", "are", "per", "see",
               "refer", "this", "that", "which", "will", "by", "or", "on", "at", "from", "under", "a", "an"}
 _CONNECTORS = _STOPWORDS | {"specified", "including", "following", "&"}
 _TOP_UNITS = 3     # a heading must open the page / sheet: at most this many text units before it
 _LIST_REFS = 3     # a page opening this many different references on their own lines is a list / contents page
-_READABLE_CHARS = 30  # fewer non-space characters than this: the page has no readable text
+_LIST_TOP_REFS, _LIST_TOP_UNITS = 2, 15  # ... or two of them within its first 15 units (a short list)
 
 RefKey = Tuple[str, str]
 
@@ -67,12 +70,13 @@ def _unit_rest(text: str, end: int) -> str:
     return text[end:m.start() if m else len(text)].strip()
 
 
-def _next_unit(text: str, end: int) -> str:
+def _next_units(text: str, end: int, n: int = 1) -> List[str]:
     m = re.compile(r"[\n|]").search(text, end)
-    for u in re.split(r"[\n|]", text[m.end():] if m else ""):
-        if u.strip():
-            return u.strip()
-    return ""
+    return [u.strip() for u in re.split(r"[\n|]", text[m.end():] if m else "") if u.strip()][:n]
+
+
+def _next_unit(text: str, end: int) -> str:
+    return (_next_units(text, end) or [""])[0]
 
 
 def _is_title(s: str) -> bool:
@@ -107,15 +111,24 @@ def _section_evidence(text: str, m) -> bool:
         return False
     if len(before) < _TOP_UNITS:
         return True
+    # '<REF> / TO MAIN SOW' - but not 'APPENDIX VII TO BE COMPLETED AND SIGNED'
     to_main = rest if rest else nxt
-    return to_main == "TO" or to_main.startswith("TO ")
+    if to_main == "TO":
+        after = (_next_units(text, m.end(), 3)[1:2] if not rest else _next_units(text, m.end(), 1)) or [""]
+        target = after[0].split()[:1]
+    elif to_main.startswith("TO "):
+        target = to_main[3:].split()[:1]
+    else:
+        return False
+    return bool(target) and target[0].lower() not in _STOPWORDS
 
 
 def _referenced_documents(documents: List[DocumentArtifact], sources: List[SourceText]):
     """-> (mentions {key: (display, [evidence])}, present keys, not-applicable keys)."""
     present: Set[RefKey] = set()
-    for d in documents:  # 'ITB_Annexure_II.xlsx': '_' is a word character, so \b would not see the word
-        present.update(k for k, _d, _m in _refs_in(d.filename.replace("_", " ")))
+    for d in documents:  # 'ITB_Annexure_II.xlsx': '_' is a word character, so \b would not see the word;
+        # a file name is no prose, so 'annex xvi losses.xlsx' is read upper-cased
+        present.update(k for k, _d, _m in _refs_in(d.filename.replace("_", " ").upper()))
     mentions: Dict[RefKey, Tuple[str, List[str]]] = {}
     not_applicable: Set[RefKey] = set()
     for s in sources:
@@ -124,10 +137,16 @@ def _referenced_documents(documents: List[DocumentArtifact], sources: List[Sourc
         for key, display, _m in found:
             mentions.setdefault(key, (display, []))[1].append(f"{s.source_document}#p{s.page_number}")
         leading = [(k, m) for k, _d, m in found if not text[_unit_start(text, m.start()):m.start()].strip()]
-        if len({k for k, _m in leading}) >= _LIST_REFS:  # contents page or list of attachments
+        top = {k for k, m in leading if len(_units_before(text, _unit_start(text, m.start()))) < _LIST_TOP_UNITS}
+        if len({k for k, _m in leading}) >= _LIST_REFS or len(top) >= _LIST_TOP_REFS:
+            # contents page or list of attachments: no evidence, but it can mark an entry NOT APPLICABLE -
+            # on the entry's own title, or on a line of its own right after it, never a later line
             for i, (key, m) in enumerate(leading):
-                entry_end = leading[i + 1][1].start() if i + 1 < len(leading) else m.end() + 200
-                if _NOT_APPLICABLE.search(text[m.end():entry_end]):
+                entry_end = leading[i + 1][1].start() if i + 1 < len(leading) else len(text)
+                rest = _unit_rest(text, m.end())
+                units = [u.strip() for u in re.split(r"[\n|]", text[m.end():entry_end]) if u.strip()][:3]
+                title = rest or (units[0] if units else "")
+                if _NOT_APPLICABLE.search(title) or any(_NOT_APPLICABLE_ONLY.fullmatch(u) for u in units[:2]):
                     not_applicable.add(key)
             continue
         for key, m in leading:
@@ -136,11 +155,10 @@ def _referenced_documents(documents: List[DocumentArtifact], sources: List[Sourc
     return mentions, present, not_applicable
 
 
-def _unread_pages(documents: List[DocumentArtifact], sources: List[SourceText]) -> int:
-    readable = Counter(s.source_document for s in sources
-                       if len(re.sub(r"\s+", "", s.text or "")) >= _READABLE_CHARS)
-    return sum(max(0, (d.page_count or 0) - readable[d.filename])
-               for d in documents if not d.missing and d.status != "UNSUPPORTED")
+def _unread_pages(documents: List[DocumentArtifact]) -> int:
+    """The same pages the partial / failed extraction gaps report: one number for the user."""
+    return sum(len(set(d.failed_pages or [])) or ((d.page_count or 1) if d.status == "FAILED" else 0)
+               for d in documents if not d.missing)
 
 
 @dataclass
@@ -199,8 +217,8 @@ def analyze_package_gaps(documents: List[DocumentArtifact],
     mentions, present, not_applicable = _referenced_documents(documents, sources)
     absent = sorted((display, ev) for key, (display, ev) in mentions.items()
                     if key not in present and key not in not_applicable)
-    unread = _unread_pages(documents, sources) if absent else 0
-    note = f"{unread} page(s) of the package have no readable text" if unread else ""
+    unread = _unread_pages(documents) if absent else 0
+    note = f"{unread} page(s) of the package could not be read" if unread else ""
     for display, ev in absent:
         add("referenced-form-absent",
             f"{display} referenced but not found in the readable text of the package", ev[:3], note)
