@@ -19,6 +19,7 @@ from app.pipeline.candidate_compression import compress_candidates
 from app.pipeline.candidate_discovery import discover_from_sources
 from app.pipeline.config import load_config
 from app.pipeline.contracts import (
+    DocumentArtifact,
     ProcessingStageResult,
     RequirementCandidate,
     SourceText,
@@ -32,6 +33,16 @@ from app.pipeline.jobs import (
 )
 from app.pipeline.postprocessing import post_process
 from app.pipeline.provenance import validate_provenance
+
+
+def document_artifacts(extras: Dict[str, Any]) -> List[DocumentArtifact]:
+    """The per-document entries of adapt_doc_results as the gap analysis reads them."""
+    return [DocumentArtifact(filename=e.get("filename", ""), full_path="", extension="",
+                             status=str(e.get("extraction_status", "COMPLETE")),
+                             page_count=int(e.get("page_count", 0) or 0),
+                             total_text_chars=int(e.get("text_length", 0) or 0),
+                             error=e.get("error"), failed_pages=list(e.get("failed_pages") or []))
+            for e in extras.get("documents", [])]
 
 
 def adapt_doc_results(doc_results: Dict[str, Any]) -> Tuple[List[SourceText], Dict[str, Any]]:
@@ -58,6 +69,8 @@ def adapt_doc_results(doc_results: Dict[str, Any]) -> Tuple[List[SourceText], Di
                  "text_length": d.get("total_text_chars", 0)}
         if d.get("error"):
             entry["error"] = str(d["error"])[:200]
+        if d.get("failed_pages"):
+            entry["failed_pages"] = list(d["failed_pages"])
         doc_entries.append(entry)
         if status == "UNSUPPORTED":
             unsupported += 1

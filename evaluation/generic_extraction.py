@@ -238,9 +238,12 @@ def extract_evidence_generic(doc_results: Dict[str, Any]) -> List[Dict[str, Any]
 
 # --- Module 6: Schema Validation ---
 def _doc_status(v: Dict[str, Any]) -> str:
-    """Keep UNSUPPORTED distinct from FAILED (a .dwg is not an extraction error)."""
-    if str(v.get("status", "")).upper() == "UNSUPPORTED":
-        return "UNSUPPORTED"
+    """Keep UNSUPPORTED distinct from FAILED (a .dwg is not an extraction error), and
+    keep the extractor's FAILED / PARTIAL: it knows a page was not read, which a
+    character count cannot tell (a folder of unread scans with page numbers was COMPLETE)."""
+    st = str(v.get("status", "")).upper()
+    if st in ("UNSUPPORTED", "FAILED", "PARTIAL"):
+        return st
     chars = v.get("total_text_chars", 0)
     return "COMPLETE" if chars > 100 else "PARTIAL" if chars > 0 else "FAILED"
 

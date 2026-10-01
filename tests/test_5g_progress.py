@@ -136,6 +136,7 @@ def test_scanned_pages_ocr_in_parallel_keep_order_and_report(tmp_path, monkeypat
         return {"source_page_number": page_number, "text": f"OCR text {page_number}", "ocr_applied": True}
 
     monkeypatch.setattr(tlo, "ocr_page_with_tesseract", fake_ocr)
+    monkeypatch.setattr(tlo, "tesseract_available", lambda: True)  # the fake engine stands in for it
     monkeypatch.setenv("TENDERMIND_OCR_WORKERS", "4")
     seen = []
     t0 = _t.time()

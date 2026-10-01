@@ -21,6 +21,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 CACHE_VERSION = 1
 
+# A file read with failures is read again on the next run, in case the error was
+# passing. After this many reads failing with the same readers installed, the
+# stored read is reused: one page Tesseract always crashes on made every retry
+# OCR a 1,530-page volume again in full.
+FAILED_READS_BEFORE_REUSE = 2
+
 
 def cache_dir(tender_id: str) -> Path:
     from app.database import get_storage_root
@@ -40,6 +46,12 @@ def _extraction_path(tender_id: str, digest: str) -> Path:
 
 
 def load_extraction(tender_id: str, path: Path, filename: str) -> Optional[List[Tuple[str, Dict[str, Any]]]]:
+    """A file with a failed document or an unreadable page is read again, so a
+    passing OCR or conversion error is not kept for good - until the same failure
+    came back FAILED_READS_BEFORE_REUSE times with the same readers installed. A
+    file with a failure or an unsupported part is also read again when the readers
+    changed (Tesseract, LibreOffice, 7-Zip or ODA installed, or the reader rules)."""
+    from app.pipeline.file_extractors import extraction_tools
     try:
         p = _extraction_path(tender_id, file_digest(path))
         if not p.is_file():
@@ -47,24 +59,55 @@ def load_extraction(tender_id: str, path: Path, filename: str) -> Optional[List[
         data = json.loads(p.read_text(encoding="utf-8"))
         if data.get("filename") != filename:
             return None
-        return [(e["name"], e["result"]) for e in data["entries"]]
+        entries = [(e["name"], e["result"]) for e in data["entries"]]
+        failures, unsupported = _shortfalls(entries)
+        if (failures or unsupported) and data.get("tools") != extraction_tools():
+            return None
+        if failures and data.get("failed_reads", 0) < FAILED_READS_BEFORE_REUSE:
+            return None
+        return entries
     except Exception:
         return None
 
 
+def _shortfalls(entries: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Any], bool]:
+    """(what failed: [name, failed pages or 'FAILED'] per entry, any UNSUPPORTED part)."""
+    from app.pipeline.file_extractors import entry_has_failures
+    failures = [[n, r.get("failed_pages") or str(r.get("status"))]
+                for n, r in entries if entry_has_failures(r)]
+    return failures, any(str(r.get("status")) == "UNSUPPORTED" for _n, r in entries)
+
+
 def save_extraction(tender_id: str, path: Path, filename: str,
                     entries: List[Tuple[str, Dict[str, Any]]]) -> None:
-    """Only complete extractions are kept; a FAILED file is retried next time."""
+    """Every extraction is written, failures included: this file is also the
+    text store that sections, materials, certifications, conflicts and RFQs read
+    (an archive with one broken file kept none of its other files' text).
+    A read with a failure or an unsupported part also records the readers it had;
+    one with failures records what failed and how many reads in a row failed the
+    same way with them, which load_extraction uses to stop retrying."""
+    from app.pipeline.file_extractors import extraction_tools
     try:
-        if any(str(r.get("status")) == "FAILED" for _n, r in entries):
-            return
         d = cache_dir(tender_id)
         d.mkdir(parents=True, exist_ok=True)
         p = _extraction_path(tender_id, file_digest(path))
+        record: Dict[str, Any] = {"filename": filename,
+                                  "entries": [{"name": n, "result": r} for n, r in entries]}
+        failures, unsupported = _shortfalls(entries)
+        if failures or unsupported:
+            record["tools"] = extraction_tools()
+        if failures:
+            try:
+                prev = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+            except Exception:
+                prev = {}
+            # A different failure (another page lost to a passing error) starts again at 1.
+            same = (prev.get("filename") == filename and prev.get("tools") == record["tools"]
+                    and prev.get("failed") == failures)
+            record["failed"] = failures
+            record["failed_reads"] = (int(prev.get("failed_reads") or 0) if same else 0) + 1
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"filename": filename,
-                                   "entries": [{"name": n, "result": r} for n, r in entries]},
-                                  ensure_ascii=False, default=str), encoding="utf-8")
+        tmp.write_text(json.dumps(record, ensure_ascii=False, default=str), encoding="utf-8")
         tmp.replace(p)  # atomic: a crash mid-write never leaves a half file
     except Exception:
         pass

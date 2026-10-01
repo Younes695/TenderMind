@@ -231,6 +231,7 @@ def run_intelligence(
     risks = derive_risk_signals(gaps, ambiguities, boq_conflicts, commercial, final_reqs)
     doc_status = {"total": len(documents),
                   "complete": sum(1 for d in documents if d.status == "COMPLETE"),
+                  "partial": sum(1 for d in documents if d.status == "PARTIAL"),
                   "failed": sum(1 for d in documents if d.status == "FAILED"),
                   "unsupported": sum(1 for d in documents if d.status == "UNSUPPORTED")}
     synthesis = synthesize(final_reqs, list(extras.get("deadlines", [])), commercial,

@@ -22,16 +22,19 @@ from sqlalchemy.orm import Session
 
 from app.models import Requirement, TenderAnalysis, TenderIssue
 from app.pipeline.ambiguity import TBD_MARKER
+from app.pipeline.gaps import evidence_page
 
 _GAP_TITLES = {
     "missing-file": "File listed but missing",
     "unsupported-type": "File type could not be read",
     "failed-extraction": "File could not be read",
+    "partial-extraction": "Some pages could not be read",
     "empty-ocr": "File produced no readable text",
     "referenced-form-absent": "Referenced document not in the package",
     "empty-analysis": "Tender has no documents",
 }
-_HIGH_GAPS = {"missing-file", "failed-extraction", "unsupported-type", "referenced-form-absent", "empty-analysis"}
+_HIGH_GAPS = {"missing-file", "failed-extraction", "partial-extraction", "unsupported-type",
+              "referenced-form-absent", "empty-analysis"}
 
 
 _MODEL_DOUBTS = {"unclear-applicability", "undefined-term"}
@@ -70,21 +73,33 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
         df = a.derived_features or {}
         seen_docs = set()
         refs_absent = []
+        unread_docs, unread_pages = set(), set()  # already reported as gaps: not asked again below
         for g in df.get("gaps") or []:
             kind = g.get("kind") or "gap"
             if kind == "referenced-form-absent":
                 refs_absent.append(g)  # grouped below: one item, not one per reference
                 continue
             ev = g.get("evidence") or []
-            doc = ev[0].split("#")[0] if ev else None
+            doc = evidence_page(ev[0])[0] if ev else None
+            if kind == "failed-extraction" and doc:
+                unread_docs.add(doc)
+            elif kind == "partial-extraction":
+                for e in ev:
+                    unread_pages.add(evidence_page(e))
             if kind in ("missing-file", "failed-extraction", "unsupported-type", "empty-ocr") and doc:
                 seen_docs.add(doc)
+            if kind in ("failed-extraction", "partial-extraction") and doc:
+                # Keyed by file and pages, not the description: it quotes the reader's
+                # error (temp paths), which changes on every read of the same file.
+                key = _key("gap", kind, doc, *sorted({p for _d, p in map(evidence_page, ev) if p}, key=int))
+            else:
+                key = _key("gap", kind, g.get("description"))
             out.append({"category": "missing", "kind": kind,
                         "title": _GAP_TITLES.get(kind, "Package gap"),
                         "detail": g.get("description"), "source_document": doc,
                         "page": ", ".join(ev[:3]) if kind == "referenced-form-absent" else None,
                         "priority": "HIGH" if kind in _HIGH_GAPS else "MEDIUM",
-                        "dedupe_key": _key("gap", kind, g.get("description"))})
+                        "dedupe_key": key})
         if refs_absent:
             from app.pipeline.gaps import normalize_form_ref  # also cleans analyses stored before the fix
             by_doc: Dict[str, set] = defaultdict(set)
@@ -92,7 +107,7 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                 n = normalize_form_ref(str(g.get("description") or "").split(" referenced")[0])
                 if n:
                     ev = g.get("evidence") or []
-                    by_doc[ev[0].split("#")[0] if ev else "?"].add(n)
+                    by_doc[evidence_page(ev[0])[0] if ev else "?"].add(n)
             names = {n for refs in by_doc.values() for n in refs}
             unread = next((int(m.group(1)) for g in refs_absent
                            for m in [re.match(r"(\d+) page", str(g.get("note") or ""))] if m), 0)
@@ -143,6 +158,8 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                             "dedupe_key": _key("amb2", kind, s.get("requirement_id"), quote)})
         by_doc = defaultdict(list)
         for p in df.get("page_quality") or []:
+            if p.get("document") in unread_docs or (p.get("document"), str(p.get("page"))) in unread_pages:
+                continue
             by_doc[p.get("document")].append(p)
         for doc, pages in sorted(by_doc.items(), key=lambda kv: str(kv[0])):
             nums = sorted({int(p["page"]) for p in pages if str(p.get("page") or "").isdigit()})
@@ -268,6 +285,8 @@ _SUPERSEDED = {  # Stage 5I: per-item kinds now grouped — drop their open, unt
     "evidence-contradicted": "",
     "client-history": "",  # Stage 8: refreshed when more tenders with the client arrive
     "ineligible": "",  # Stage 6: disappears once the manager overrides or the tender becomes eligible
+    # A file read again (a retry, OCR installed) with other pages unread, or read in full.
+    "failed-extraction": "", "partial-extraction": "",
 }
 
 

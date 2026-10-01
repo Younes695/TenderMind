@@ -361,8 +361,12 @@ def _process_tender(tender_id: str, job_id: str):
                 _last_commit[0] = _time.time()
 
         def _on_extract(phase, done, total):
-            if phase == "pages":
-                _set_progress(10 + 30 * (_pages_before + min(done, total)) / _all_pages)
+            # A file's reports move the bar only across that file's share (its page
+            # estimate). A zip is estimated at 1 page, and its inner PDFs' pages sent
+            # the bar to 99% at once; archives now report size-weighted fractions.
+            if phase in ("pages", "fraction") and total:
+                share = _estimates[_idx]
+                _set_progress(10 + 30 * (_pages_before + share * min(done, total) / total) / _all_pages)
 
         for _idx, f in enumerate(job_inventory if job_inventory else []):
             if _idx:
@@ -520,19 +524,14 @@ def _process_tender(tender_id: str, job_id: str):
                 from app.pipeline import two_stage_runner as _tsr
                 from app.pipeline import intelligence_runner as _ir
                 from app.pipeline.jobs import pipeline_version_metadata as _pvm
-                from app.pipeline.contracts import DocumentArtifact as _Doc
                 _sources, _extras = _tsr.adapt_doc_results(doc_results)
-                _docs = [_Doc(filename=e.get("filename", ""), full_path="", extension="",
-                              status=str(e.get("extraction_status", "COMPLETE")),
-                              page_count=int(e.get("page_count", 0) or 0),
-                              total_text_chars=int(e.get("text_length", 0) or 0),
-                              error=e.get("error")) for e in _extras.get("documents", [])]
+                _docs = _tsr.document_artifacts(_extras)
                 _tables = []
                 try:
                     from app.pipeline.structured_data import read_structured
                     for _fn in sorted(doc_results.keys()):
                         if str(_fn).lower().endswith(".xlsx"):
-                            _p = tender_path / str(_fn).split("#")[0]
+                            _p = tender_path / str(_fn)  # a '#' is part of the name ('BOQ #2.xlsx')
                             if _p.is_file():
                                 _tables.extend(read_structured(_p))
                 except Exception:
@@ -691,6 +690,11 @@ def _process_tender(tender_id: str, job_id: str):
             # If we had documents but all failed, FAILED; if no documents, COMPLETED with empty analysis is more honest
             if documents_total > 0:
                 job.status = "FAILED"
+                # The workspace shows only last_error for a FAILED job: say why nothing was read.
+                why = "; ".join(f"{n}: {r.get('error') or 'no readable content'}"
+                                for n, r in list(doc_results.items())[:3] if str(r.get("status")) == "FAILED")
+                job.last_error = (f"No document could be read. {why}"
+                                  + (f" | {job.last_error}" if job.last_error else ""))[:500]
             else:
                 job.status = "COMPLETED"
         elif documents_unsupported > 0 and documents_processed == 0:
