@@ -24,6 +24,8 @@ export default function IssueCard({ issue, withAnswer = false, showTender = fals
     if (match) return t("{n} scanned page(s) could not be read reliably", { n: parseInt(match[1]) });
     const unk = issue.title?.match(/^(\d+) requirements could not be classified$/);
     if (unk) return t("{n} requirements could not be classified", { n: parseInt(unk[1]) });
+    const refs = issue.title?.match(/^Referenced documents not found in the readable text \((\d+) page\(s\) unread\)$/);
+    if (refs) return t("Referenced documents not found in the readable text ({n} page(s) unread)", { n: parseInt(refs[1]) });
     const dis = issue.title?.match(/^Documents disagree: (.+)$/);
     if (dis) return t("Documents disagree: {what}", { what: t(dis[1]) });
     return t(issue.title);
@@ -59,7 +61,7 @@ export default function IssueCard({ issue, withAnswer = false, showTender = fals
         </div>
       </div>
       {issue.kind === "referenced-form-absent" && (
-        <p className="mt-2 text-[13px] text-[#475467]">{t("These forms / annexes / appendices are mentioned in the files below, but no uploaded file carries their name. Many are sections inside the same file or standards — upload only the ones that are really missing, then mark this resolved.")}</p>
+        <p className="mt-2 text-[13px] text-[#475467]">{t("These forms / annexes / appendices are mentioned in the files below, but we found neither a file nor a section with their name in the text we could read. Pages that could not be read (scans, images) may still hold some of them — check those first, ask for or upload only what is really missing, then mark this resolved.")}</p>
       )}
       {issue.detail && <p className="mt-2 whitespace-pre-line text-[14px] text-[#344054]" dir="auto">
         {issue.kind === "conflict" ? issue.detail.replace(/^Which value applies\?/, t("Which value applies?")) : issue.detail}</p>}

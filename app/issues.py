@@ -13,6 +13,7 @@ adds only new items and never reopens one a person resolved.
 from __future__ import annotations
 
 import hashlib
+import re
 import uuid
 from collections import defaultdict
 from typing import Any, Dict, List
@@ -108,6 +109,8 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                     ev = g.get("evidence") or []
                     by_doc[evidence_page(ev[0])[0] if ev else "?"].add(n)
             names = {n for refs in by_doc.values() for n in refs}
+            unread = next((int(m.group(1)) for g in refs_absent
+                           for m in [re.match(r"(\d+) page", str(g.get("note") or ""))] if m), 0)
             if names:
                 # Language-neutral detail (file: references); the explanation is
                 # translated in the UI for this kind.
@@ -115,8 +118,10 @@ def build_candidates(db: Session, tender_id: str) -> List[Dict[str, Any]]:
                 for doc, refs in sorted(by_doc.items()):
                     r = sorted(refs, key=_natural)
                     lines.append(f"{doc}: {', '.join(r[:30])}" + (f" (+{len(r) - 30})" if len(r) > 30 else ""))
+                # Not proof of absence: pages without readable text may hold some of them.
+                title = "Referenced documents not found in the readable text"
                 out.append({"category": "missing", "kind": "referenced-form-absent",
-                            "title": "Referenced documents not in the package",
+                            "title": f"{title} ({unread} page(s) unread)" if unread else title,
                             "detail": "\n".join(lines),
                             "source_document": None, "page": None, "priority": "MEDIUM",
                             "dedupe_key": _key("refs-absent", sorted(names))})
