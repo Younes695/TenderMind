@@ -81,6 +81,7 @@ class DocumentArtifact:
     extraction_method: str = ""
     error: Optional[str] = None
     missing: bool = False
+    failed_pages: List[int] = field(default_factory=list)  # pages that could not be read
 
 
 @dataclass

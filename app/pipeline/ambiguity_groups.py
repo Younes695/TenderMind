@@ -22,6 +22,7 @@ from typing import Any, Dict, List
 
 from app.pipeline.ambiguity import Ambiguity
 from app.pipeline.candidate_compression import jaccard, normalize_text
+from app.pipeline.gaps import evidence_page
 
 _WS = re.compile(r"\s+")
 NEAR_DUP_THRESHOLD = 0.9
@@ -52,15 +53,15 @@ def _same_page(pages: List[int]) -> bool:
 def _page_of(evidence: List[str]) -> List[int]:
     pages = []
     for e in evidence or []:
-        m = re.search(r"#p(\d+)", str(e))
-        if m:
-            pages.append(int(m.group(1)))
+        page = evidence_page(e)[1]  # the trailing page mark, as _doc_of reads it
+        if page:
+            pages.append(int(page))
     return pages
 
 
 def _doc_of(evidence: List[str]) -> str:
     if evidence:
-        return str(evidence[0]).split("#")[0]
+        return evidence_page(evidence[0])[0]  # 'Addendum #1.pdf#p3' -> 'Addendum #1.pdf'
     return ""
 
 

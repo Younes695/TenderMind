@@ -30,10 +30,17 @@ def normalize_form_ref(raw: str):
 @dataclass
 class Gap:
     gap_id: str
-    kind: str  # missing-file | unsupported-type | failed-extraction | empty-ocr |
-               # referenced-form-absent | empty-analysis
+    kind: str  # missing-file | unsupported-type | failed-extraction | partial-extraction |
+               # empty-ocr | referenced-form-absent | empty-analysis
     description: str
     evidence: List[str] = field(default_factory=list)
+
+
+def evidence_page(ev: Any):
+    """'vol1.pdf#p7' -> ('vol1.pdf', '7'); a plain name -> (name, None). Only a
+    page suffix is cut, so a file name with '#' in it ('Addendum #1.pdf') stays whole."""
+    name, sep, page = str(ev).rpartition("#p")
+    return (name, page) if sep and page.isdigit() else (str(ev), None)
 
 
 def analyze_package_gaps(documents: List[DocumentArtifact],
@@ -54,9 +61,20 @@ def analyze_package_gaps(documents: List[DocumentArtifact],
             add("unsupported-type", f"{d.filename} has no supported extractor", [d.filename])
         elif d.status == "FAILED":
             add("failed-extraction", f"{d.filename} failed: {d.error or 'unknown'}", [d.filename])
+        elif d.failed_pages:
+            pages = sorted(set(d.failed_pages))
+            shown = ", ".join(str(p) for p in pages[:20]) + (" …" if len(pages) > 20 else "")
+            add("partial-extraction",
+                f"{d.filename}: {len(pages)} page(s) could not be read (pages {shown}); "
+                f"what is on them beyond any text layer they carry is not part of the analysis. "
+                f"{d.error or ''}".strip(),
+                [f"{d.filename}#p{p}" for p in pages])
     texts = {s.source_document: s for s in sources}
     for d in documents:
-        if d.status == "COMPLETE" and d.total_text_chars == 0:
+        # _entry never marks a zero-text document COMPLETE; this is PARTIAL
+        # with pages read but nothing in them (a blank scan, a table-only file).
+        if (d.status in ("COMPLETE", "PARTIAL") and d.page_count and d.total_text_chars == 0
+                and not d.failed_pages):
             add("empty-ocr", f"{d.filename} extracted zero text (empty OCR/scan?)", [d.filename])
     # referenced forms absent: form refs in text with no matching document
     known = " ".join(d.filename for d in documents).lower()

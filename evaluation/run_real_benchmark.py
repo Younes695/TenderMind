@@ -187,6 +187,18 @@ def log_inventory(inventory):
 
 # --- Document Intelligence ---
 
+def _diag(msg):
+    """Diagnostic line that can never fail. These prints sit inside the extractors'
+    try blocks: on a Windows console (cp1252) an Arabic file name raised
+    UnicodeEncodeError there, and the whole Word document was lost."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        print(msg.encode("ascii", "backslashreplace").decode("ascii"))
+    except Exception:
+        pass
+
+
 def _report_page(done, total):
     """Live per-page progress for the processing job (no-op outside the app)."""
     try:
@@ -232,6 +244,7 @@ def extract_pdf_text(pdf_path, ocr_needed_hint=None):
     pages = []
     if not HAS_FITZ:
         return [{"page_number": 1, "text": "", "method": "NO_FITZ", "ocr_applied": False, "confidence": 0.0, "error": "fitz not available"}]
+    from app.pipeline.file_extractors import page_content_unread
     try:
         doc = fitz.open(str(pdf_path))
         for i, page in enumerate(doc):
@@ -241,10 +254,21 @@ def extract_pdf_text(pdf_path, ocr_needed_hint=None):
             ocr_applied = False
             confidence = 0.95 if clean_len > 100 and garbled < 0.1 else (0.5 if clean_len > 0 else 0.0)
             method = "fitz_direct" if confidence > 0.7 else "fitz_low_confidence_or_scanned"
-            if clean_len < 50:
+            # The pages the OCR route would send to OCR (under 100 characters, or a
+            # garbled layer) get the same verdict here, where OCR is not run.
+            try:
+                unread = (clean_len < 100 or garbled > 0.3) and page_content_unread(page, text, garbled)
+            except Exception:
+                unread = True  # cannot tell: say so, and keep reading the next pages
+            if unread:
                 method = "scanned_no_text_ocr_needed"
                 confidence = 0.0
-            pages.append({
+            elif clean_len < 50:
+                # Read in full: its short text layer is all the page holds (a cover, a
+                # divider, a blank back page). Named apart from the scanned marker, which
+                # page_failed() still counts as unread in caches written before.
+                method = "fitz_short_text"
+            page_entry = {
                 "page_number": i+1,
                 "text": text,
                 "text_normalized": text.replace("�"," ").strip(),
@@ -253,11 +277,15 @@ def extract_pdf_text(pdf_path, ocr_needed_hint=None):
                 "extraction_confidence": confidence,
                 "garbled_ratio": garbled,
                 "bbox": list(page.rect) if hasattr(page, "rect") else [0,0,612,792]
-            })
+            }
+            if unread:
+                page_entry["error"] = "page content (image or drawing) was not OCR'd"
+            pages.append(page_entry)
             _report_page(i + 1, len(doc))
         doc.close()
     except Exception as e:
-        pages.append({"page_number": 1, "text": "", "method": f"fitz_error: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e)})
+        # The pages already read stay; this marks where reading stopped.
+        pages.append({"page_number": len(pages) + 1, "text": "", "method": f"fitz_error: {e}", "ocr_applied": False, "extraction_confidence": 0.0, "error": str(e)})
     return pages
 
 def _find_soffice_executable() -> Path | None:
@@ -305,7 +333,7 @@ def _extract_doc_via_libreoffice(doc_path: Path, soffice: Path, timeout: int = 3
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             # Log failure reason for fallback
-            print(f"DOC_EXTRACTOR=libreoffice_failed soffice={soffice} rc={result.returncode} stderr={result.stderr[:300]}")
+            _diag(f"DOC_EXTRACTOR=libreoffice_failed soffice={soffice} rc={result.returncode} stderr={result.stderr[:300]}")
             return None
         # Output file is same basename with .txt
         out_txt = tmpdir / (doc_path.stem + ".txt")
@@ -313,25 +341,25 @@ def _extract_doc_via_libreoffice(doc_path: Path, soffice: Path, timeout: int = 3
             # LibreOffice may produce with different name (e.g., with spaces)
             candidates = list(tmpdir.glob("*.txt"))
             if not candidates:
-                print(f"DOC_EXTRACTOR=libreoffice_no_output tmpdir={tmpdir} doc={doc_path.name}")
+                _diag(f"DOC_EXTRACTOR=libreoffice_no_output tmpdir={tmpdir} doc={doc_path.name}")
                 return None
             out_txt = candidates[0]
         text = out_txt.read_text(encoding="utf-8", errors="ignore")
         if not text or len(text.strip()) < 50:
-            print(f"DOC_EXTRACTOR=libreoffice_empty len={len(text.strip()) if text else 0} doc={doc_path.name}")
+            _diag(f"DOC_EXTRACTOR=libreoffice_empty len={len(text.strip()) if text else 0} doc={doc_path.name}")
             return None
         # Check for binary/garbled (should be mostly printable)
         printable_ratio = sum(1 for c in text if c.isprintable() or c in "\n\r\t") / max(len(text), 1)
         if printable_ratio < 0.7:
-            print(f"DOC_EXTRACTOR=libreoffice_garbled ratio={printable_ratio:.2f} doc={doc_path.name}")
+            _diag(f"DOC_EXTRACTOR=libreoffice_garbled ratio={printable_ratio:.2f} doc={doc_path.name}")
             return None
-        print(f"DOC_EXTRACTOR=libreoffice success soffice={soffice} doc={doc_path.name} len={len(text)}")
+        _diag(f"DOC_EXTRACTOR=libreoffice success soffice={soffice} doc={doc_path.name} len={len(text)}")
         return text
     except subprocess.TimeoutExpired:
-        print(f"DOC_EXTRACTOR=libreoffice_timeout doc={doc_path.name} timeout={timeout}s")
+        _diag(f"DOC_EXTRACTOR=libreoffice_timeout doc={doc_path.name} timeout={timeout}s")
         return None
     except Exception as e:
-        print(f"DOC_EXTRACTOR=libreoffice_exception doc={doc_path.name} error={type(e).__name__}: {e}")
+        _diag(f"DOC_EXTRACTOR=libreoffice_exception doc={doc_path.name} error={type(e).__name__}: {e}")
         return None
     finally:
         if tmpdir and tmpdir.exists():
@@ -366,9 +394,9 @@ def extract_docx_text(doc_path):
                     pages.append({"page_number": 1, "text": libre_text, "method": "libreoffice_headless_txt", "ocr_applied": False, "extraction_confidence": 0.85, "DOC_EXTRACTOR": "libreoffice", "soffice": str(soffice)})
                     return pages
                 else:
-                    print(f"DOC_EXTRACTOR=libreoffice_fallback_needed doc={Path(doc_path).name} soffice={soffice}")
+                    _diag(f"DOC_EXTRACTOR=libreoffice_fallback_needed doc={Path(doc_path).name} soffice={soffice}")
             else:
-                print(f"DOC_EXTRACTOR=libreoffice_not_found doc={Path(doc_path).name} — fallback to olefile")
+                _diag(f"DOC_EXTRACTOR=libreoffice_not_found doc={Path(doc_path).name} — fallback to olefile")
             # 2. Fallback: try docx on .doc (will fail for old binary, but keep for completeness)
             try:
                 doc = docx.Document(str(doc_path))
@@ -397,11 +425,11 @@ def extract_docx_text(doc_path):
                         pages.append({"page_number": 1, "text": full, "method": "olefile_worddocument", "ocr_applied": False, "extraction_confidence": 0.6 if len(full.strip())>200 else 0.4, "DOC_EXTRACTOR": "olefile_fallback"})
                         return pages
             except Exception as e:
-                print(f"DOC_EXTRACTOR=olefile_failed doc={Path(doc_path).name} error={e}")
+                _diag(f"DOC_EXTRACTOR=olefile_failed doc={Path(doc_path).name} error={e}")
             # Final fallback: report as before
-            pages.append({"page_number": 1, "text": "", "method": f"doc_old_binary_failed: olefile fallback produced no usable text", "ocr_applied": False, "extraction_confidence": 0.0, "DOC_EXTRACTOR": "olefile_fallback_empty", "note": "Old .doc binary requires OLE piece-table parser — LibreOffice not available or produced no text; reported as limitation per benchmark rule 9"})
+            pages.append({"page_number": 1, "text": "", "method": f"doc_old_binary_failed: olefile fallback produced no usable text", "ocr_applied": False, "extraction_confidence": 0.0, "DOC_EXTRACTOR": "olefile_fallback_empty", "note": "Old .doc binary requires OLE piece-table parser — LibreOffice not available or produced no text; reported as limitation per benchmark rule 9", "error": "old .doc file could not be read (LibreOffice not available or produced no text)"})
         else:
-            pages.append({"page_number": 1, "text": "", "method": "unknown_doc_ext"})
+            pages.append({"page_number": 1, "text": "", "method": "unknown_doc_ext", "error": f"not a Word file extension ({ext or 'none'})"})
     except Exception as e:
         pages.append({"page_number": 1, "text": "", "method": f"docx_error: {e}", "error": str(e)})
     return pages
@@ -429,7 +457,7 @@ def extract_xls_text(xls_path):
                             break
                 pages.append({"page_number": 1, "sheet": ws.title, "text": text, "method": "openpyxl", "extraction_confidence": 0.9})
         else:
-            pages.append({"page_number": 1, "text": "", "method": f"no_handler for {ext}"})
+            pages.append({"page_number": 1, "text": "", "method": f"no_handler for {ext}", "error": f"no spreadsheet reader for {ext or 'no extension'}"})
     except Exception as e:
         pages.append({"page_number": 1, "text": "", "method": f"xls_error: {e}", "error": str(e)})
     return pages

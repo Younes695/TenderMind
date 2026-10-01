@@ -168,7 +168,8 @@ function TenderWorkspace() {
 
   // Uploaded files (DB rows) by stored title, so analysis rows can be removed.
   const docIdByTitle = new Map((tenderDocs || []).map((d) => [d.title, d.id]));
-  const baseName = (name) => String(name || "").split("#")[0];
+  // Only a trailing page mark is cut: a '#' can be part of the file name ("Addendum #1.pdf").
+  const baseName = (name) => String(name || "").replace(/#p\d+$/, "");
 
   const removeDocument = async (title) => {
     const docId = docIdByTitle.get(baseName(title));

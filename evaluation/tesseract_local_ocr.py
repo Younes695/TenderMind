@@ -18,7 +18,7 @@ import shutil
 import time
 import warnings
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import fitz
 import pytesseract
@@ -167,7 +167,45 @@ def ocr_workers() -> int:
     return max(1, min(6, (os.cpu_count() or 2) - 2))
 
 
-def _ocr_scanned_page(pdf_path: Path, i: int, garbled: float, native_len: int) -> Dict[str, Any]:
+def tesseract_available() -> bool:
+    cmd = str(pytesseract.pytesseract.tesseract_cmd or "")
+    return bool(cmd) and (Path(cmd).is_file() or shutil.which(cmd) is not None)
+
+
+def _unread_page(pdf_path: Path, i: int, garbled: float, native_text: str, unread: bool,
+                 method: str, why: str) -> Dict[str, Any]:
+    """OCR did not read this page. Its text layer is kept when usable (it used to
+    be dropped, so a short page lost the text it had). The page counts as unread
+    ("error") when page_content_unread() said so: an image the text layer may not
+    cover, a broken text layer, or drawings with no text. A short page whose text
+    is all it holds, or a blank page, was read."""
+    usable = bool((native_text or "").strip()) and garbled <= 0.3
+    page = {
+        "source_filename": str(pdf_path),
+        "source_page_number": i + 1,
+        "text": native_text if usable else "",
+        "confidence": None,
+        "ocr_applied": unread and not usable,  # kept text is the native layer, not OCR
+        "method": method,
+        "ocr_error": why[:500],
+        "garbled_ratio": garbled,
+    }
+    if unread:
+        page["error"] = why[:500]
+    return page
+
+
+def _unread_verdict(page, text: str, garbled: float) -> bool:
+    """page_content_unread, and 'unread' when it cannot tell (a page MuPDF chokes on)."""
+    from app.pipeline.file_extractors import page_content_unread
+    try:
+        return page_content_unread(page, text, garbled)
+    except Exception:
+        return True
+
+
+def _ocr_scanned_page(pdf_path: Path, i: int, garbled: float, native_len: int,
+                      native_text: str = "", unread: Optional[bool] = None) -> Dict[str, Any]:
     try:
         ocr_res = ocr_page_with_tesseract(pdf_path, i + 1)
         ocr_res["garbled_ratio"] = garbled
@@ -175,16 +213,14 @@ def _ocr_scanned_page(pdf_path: Path, i: int, garbled: float, native_len: int) -
         ocr_res["is_scanned"] = True
         return ocr_res
     except Exception as e:
-        return {
-            "source_filename": str(pdf_path),
-            "source_page_number": i + 1,
-            "text": "",
-            "confidence": None,
-            "ocr_applied": True,
-            "method": f"{METHOD_TESS}_failed_{type(e).__name__}",
-            "error": str(e)[:500],
-            "garbled_ratio": garbled,
-        }
+        if unread is None:  # decided only now: most pages OCR fine and never need it
+            try:
+                with fitz.open(str(pdf_path)) as d:
+                    unread = _unread_verdict(d[i], native_text, garbled)
+            except Exception:
+                unread = True
+        return _unread_page(pdf_path, i, garbled, native_text, unread,
+                            f"{METHOD_TESS}_failed_{type(e).__name__}", str(e))
 
 
 def extract_pdf_with_tesseract_routing(pdf_path: Path) -> List[Dict[str, Any]]:
@@ -198,6 +234,7 @@ def extract_pdf_with_tesseract_routing(pdf_path: Path) -> List[Dict[str, Any]]:
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    ocr_ok = tesseract_available()
     doc = fitz.open(str(pdf_path))
     total = len(doc)
     pages: List[Any] = [None] * total
@@ -209,7 +246,8 @@ def extract_pdf_with_tesseract_routing(pdf_path: Path) -> List[Dict[str, Any]]:
         if "�" in text:
             garbled = max(garbled, text.count("�") / max(len(text), 1))
         if is_scanned_or_garbled(text, garbled):
-            scanned.append((i, garbled, l))
+            # Whether the page holds unread content matters only if OCR does not read it.
+            scanned.append((i, garbled, l, text, None if ocr_ok else _unread_verdict(page, text, garbled)))
             continue
         pages[i] = {
             "source_filename": str(pdf_path),
@@ -224,15 +262,23 @@ def extract_pdf_with_tesseract_routing(pdf_path: Path) -> List[Dict[str, Any]]:
     done = total - len(scanned)
     if done:
         _report_page(done, total)
+    if scanned and not ocr_ok:
+        # Rendering a page for an OCR engine that is not there only burns time:
+        # the Turaif tender spent ~5 of its 5.5 extraction minutes on this.
+        for i, g, l, txt, unread in scanned:
+            pages[i] = _unread_page(pdf_path, i, g, txt, unread, f"{METHOD_TESS}_unavailable",
+                                    "OCR not available: Tesseract is not installed on this server")
+        _report_page(total, total)
+        return pages
     workers = min(ocr_workers(), len(scanned)) or 1
     if workers == 1:
-        for i, garbled, l in scanned:
-            pages[i] = _ocr_scanned_page(pdf_path, i, garbled, l)
+        for i, garbled, l, txt, unread in scanned:
+            pages[i] = _ocr_scanned_page(pdf_path, i, garbled, l, txt, unread)
             done += 1
             _report_page(done, total)
     else:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(_ocr_scanned_page, pdf_path, i, g, l): i for i, g, l in scanned}
+            futs = {ex.submit(_ocr_scanned_page, pdf_path, i, g, l, txt, u): i for i, g, l, txt, u in scanned}
             # Collected on this thread so the job's progress listener sees each page.
             for fut in as_completed(futs):
                 pages[futs[fut]] = fut.result()
