@@ -22,7 +22,7 @@ export default {
   "Evaluate": "تقييم",
   "step matches its requirements against these documents.": "تطابق الخطوة متطلباتها مع هذه المستندات.",
   "Upload documents": "رفع المستندات",
-  "PDF, Word, Excel, scanned images, ZIP/RAR archives, TXT • up to 5 GB per file": "PDF وWord وExcel والصور الممسوحة ضوئياً وأرشيفات ZIP/RAR وTXT • حتى 5 غيغابايت لكل ملف",
+  "PDF, Word, Excel, scanned images, ZIP/RAR archives, TXT • up to 2 GB per file": "PDF وWord وExcel والصور الممسوحة ضوئياً وأرشيفات ZIP/RAR وTXT • حتى 2 غيغابايت لكل ملف",
   "Loading documents...": "جارٍ تحميل المستندات...",
   "No company documents yet. Without them every qualification requirement stays": "لا توجد مستندات شركة بعد. بدونها، كل متطلب تأهيل يبقى",
   "MISSING EVIDENCE": "مفقودة الأدلة",

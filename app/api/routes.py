@@ -14,6 +14,7 @@ from datetime import datetime
 import uuid
 from typing import List, Optional
 import re
+import threading
 from pathlib import Path
 
 router = APIRouter(dependencies=[Depends(require_auth), Depends(enforce_tender_access)])
@@ -104,8 +105,89 @@ def list_documents(tender_id: str, db: Session = Depends(get_db)):
         })
     return {"tender_id": tender_id, "documents": out, "count": len(out)}
 
-DEFAULT_MAX_UPLOAD_MB = 5 * 1024  # 5 GB per file
+DEFAULT_MAX_UPLOAD_MB = 2 * 1024  # 2 GB per file: the bundled Caddy front accepts 2 GB request bodies
+DEFAULT_MAX_ACCOUNT_GB = 25       # all of one account's uploads; DB and uploads share one /data volume
 _UPLOAD_CHUNK = 8 * 1024 * 1024
+
+
+def _account_quota_bytes() -> int:
+    try:
+        gb = int(os.environ.get("TENDERMIND_MAX_ACCOUNT_GB", str(DEFAULT_MAX_ACCOUNT_GB)))
+    except ValueError:
+        gb = DEFAULT_MAX_ACCOUNT_GB
+    return max(1, gb) * 1024 ** 3
+
+
+def _account_room_bytes(db: Session, user: dict) -> Optional[int]:
+    """Bytes this account may still upload; None = no account quota (local
+    development, or the env admin who runs the server)."""
+    if user.get("auth_disabled") or is_admin(user):
+        return None
+    from sqlalchemy import func
+    email = user["email"]
+    used = (db.query(func.coalesce(func.sum(TenderDocument.file_size), 0))
+            .join(Tender, TenderDocument.tender_id == Tender.id)
+            .filter(Tender.owner_email == email).scalar() or 0)
+    for (path,) in db.query(CompanyDocument.source_path).filter(CompanyDocument.owner_email == email):
+        try:
+            used += os.path.getsize(path)
+        except (OSError, TypeError):
+            pass
+    # Derived data counts too: extracted text and AI answers kept per tender
+    # (app/pipeline/checkpoint.py) can outgrow the uploads they came from.
+    from app.pipeline.checkpoint import cache_dir
+    for (tid,) in db.query(Tender.id).filter(Tender.owner_email == email):
+        try:
+            with os.scandir(cache_dir(tid)) as entries:
+                used += sum(e.stat().st_size for e in entries if e.is_file())
+        except OSError:
+            pass
+    return max(0, _account_quota_bytes() - int(used))
+
+
+_ACCOUNT_LOCKS: dict = {}  # email -> [lock, holders + waiters]; an entry lives only while in use
+_ACCOUNT_LOCKS_GUARD = threading.Lock()
+
+
+class _AccountUpload:
+    """One upload at a time per account (quota check through commit), so two
+    concurrent uploads cannot both spend the same remaining room; and every file
+    this batch created is removed if the batch fails, so a failed batch leaves no
+    unaccounted bytes on disk."""
+
+    def __init__(self, db: Session, user: dict):
+        self.db, self.user, self.written, self._key = db, user, [], None
+
+    def __enter__(self):
+        if not (self.user.get("auth_disabled") or is_admin(self.user)):
+            key = self.user["email"]
+            with _ACCOUNT_LOCKS_GUARD:
+                entry = _ACCOUNT_LOCKS.setdefault(key, [threading.Lock(), 0])
+                entry[1] += 1
+            entry[0].acquire()
+            self._key = key
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is not None:
+                try:
+                    self.db.rollback()
+                finally:  # even if the rollback itself fails
+                    for p in self.written:
+                        try:
+                            Path(p).unlink()
+                        except OSError:
+                            pass
+        finally:
+            if self._key is not None:
+                with _ACCOUNT_LOCKS_GUARD:
+                    entry = _ACCOUNT_LOCKS[self._key]
+                    entry[0].release()
+                    entry[1] -= 1
+                    if entry[1] == 0:
+                        del _ACCOUNT_LOCKS[self._key]
+        return False
 
 
 def _max_upload_bytes(plan: Optional[str] = None) -> int:
@@ -132,24 +214,34 @@ def _fmt_limit(n_bytes: int) -> str:
     return f"{mb / 1024:g} GB" if mb >= 1024 else f"{mb} MB"
 
 
-def _stream_to_disk(upload_file: UploadFile, dest_path: Path, display_name: str) -> int:
+def _stream_to_disk(upload_file: UploadFile, dest_path: Path, display_name: str,
+                    room: Optional[int] = None) -> int:
     """Copy an upload to dest_path in 8 MB chunks; never holds the file in memory.
 
-    Enforces the size cap while copying and rejects empty files; on any
-    rejection or error the partial file is removed. Returns bytes written.
+    Enforces the per-file cap and the account's remaining storage (room, None =
+    no account quota) while copying and rejects empty files; on any rejection
+    or error the partial file is removed. Returns bytes written.
     """
-    limit = _max_upload_bytes()
+    per_file = _max_upload_bytes()
     written = 0
     try:
-        with open(dest_path, "wb") as out:
+        out = open(dest_path, "xb")  # never over an existing file: a name clash must not destroy it
+    except FileExistsError:
+        raise HTTPException(status_code=409, detail=f"Another file took this name - upload it again: {display_name}")
+    try:
+        with out:
             while True:
                 chunk = upload_file.file.read(_UPLOAD_CHUNK)
                 if not chunk:
                     break
                 written += len(chunk)
-                if written > limit:
+                if written > per_file:
                     raise HTTPException(status_code=413,
-                                        detail=f"File too large (max {_fmt_limit(limit)} per file): {display_name}")
+                                        detail=f"File too large (max {_fmt_limit(per_file)} per file): {display_name}")
+                if room is not None and written > room:
+                    raise HTTPException(status_code=413,
+                                        detail=f"Account storage is full (max {_fmt_limit(_account_quota_bytes())} "
+                                               f"per account) - remove documents to make room: {display_name}")
                 out.write(chunk)
         if written == 0:
             raise HTTPException(status_code=400, detail=f"Empty file not accepted: {display_name}")
@@ -163,11 +255,19 @@ def _stream_to_disk(upload_file: UploadFile, dest_path: Path, display_name: str)
 
 
 @router.post("/tenders/{tender_id}/documents")
-def upload_documents(tender_id: str, files: List[UploadFile] = File(...), db: Session = Depends(get_db)):
+def upload_documents(tender_id: str, files: List[UploadFile] = File(...), db: Session = Depends(get_db),
+                     user: dict = Depends(require_auth)):
+    with _AccountUpload(db, user) as batch:
+        return _store_tender_documents(tender_id, files, db, user, batch.written)
+
+
+def _store_tender_documents(tender_id: str, files: List[UploadFile], db: Session, user: dict,
+                            written: list) -> dict:
     # Verify tender exists
     tender = db.query(Tender).filter(Tender.id == tender_id).first()
     if not tender:
         raise HTTPException(status_code=404, detail=f"Tender {tender_id} not found")
+    room = _account_room_bytes(db, user)  # storage this account has left (None = no quota)
     # Validate files presence
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -269,7 +369,10 @@ def upload_documents(tender_id: str, files: List[UploadFile] = File(...), db: Se
 
         # Stream to disk in chunks, enforcing the size cap as we go
         try:
-            size = _stream_to_disk(upload_file, dest_path, safe_filename)
+            size = _stream_to_disk(upload_file, dest_path, safe_filename, room)
+            written.append(dest_path)
+            if room is not None:
+                room -= size
             # Verify file was written and inside root
             if not dest_path.exists() or dest_path.stat().st_size != size:
                 raise HTTPException(status_code=500, detail=f"Failed to persist file {final_filename}")
@@ -359,6 +462,18 @@ def _remove_stored_file(doc: TenderDocument) -> None:
         pass
 
 
+def _remove_extraction_cache(tender_id: str, doc: TenderDocument) -> None:
+    """Delete the text extracted from this file (keyed by its content hash):
+    uploading and deleting must not leave derived text growing outside the quota."""
+    try:
+        from app.pipeline.checkpoint import _extraction_path, file_digest
+        p = Path(doc.source_path or "")
+        if p.is_file() and get_storage_root().resolve() in p.resolve().parents:
+            _extraction_path(tender_id, file_digest(p)).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _delete_documents(db: Session, tender_id: str, doc_id: Optional[str] = None) -> dict:
     tender = db.query(Tender).filter(Tender.id == tender_id).first()
     if not tender:
@@ -374,11 +489,18 @@ def _delete_documents(db: Session, tender_id: str, doc_id: Optional[str] = None)
         raise HTTPException(status_code=404, detail=f"Document {doc_id} not found")
     removed = []
     for d in docs:
+        _remove_extraction_cache(tender_id, d)
         _remove_stored_file(d)
         removed.append({"id": d.id, "title": d.title})
         db.delete(d)
     db.commit()
     remaining = db.query(TenderDocument).filter(TenderDocument.tender_id == tender_id).count()
+    if remaining == 0:
+        # No document left: nothing can use the AI answer cache either. Derived
+        # data must not outlive the uploads the storage quota counts.
+        from app.pipeline.checkpoint import cache_dir
+        import shutil
+        shutil.rmtree(cache_dir(tender_id), ignore_errors=True)
     has_analysis = db.query(TenderAnalysis).filter(TenderAnalysis.tender_id == tender_id).first() is not None
     return {"tender_id": tender_id, "removed": removed, "removed_count": len(removed),
             "remaining_count": remaining,
@@ -644,10 +766,17 @@ def list_company_documents(db: Session = Depends(get_db), user: dict = Depends(r
 @router.post("/company-documents")
 def upload_company_documents(files: List[UploadFile] = File(...), db: Session = Depends(get_db),
                              user: dict = Depends(require_auth)):
-    from app.engines.tender_bridge import COMPANY_ID, ensure_company
+    from app.engines.tender_bridge import ensure_company
     ensure_company(db)
     root = (get_storage_root() / "_company").resolve()
     root.mkdir(parents=True, exist_ok=True)
+    with _AccountUpload(db, user) as batch:
+        return _store_company_documents(files, db, user, root, batch.written)
+
+
+def _store_company_documents(files: List[UploadFile], db: Session, user: dict, root: Path, written: list) -> dict:
+    from app.engines.tender_bridge import COMPANY_ID
+    room = _account_room_bytes(db, user)  # storage this account has left (None = no quota)
     created = []
     for f in files:
         name = re.sub(r"[\x00-\x1f\x7f<>\"'&/\\]", "", Path(f.filename or "").name).strip()
@@ -656,10 +785,13 @@ def upload_company_documents(files: List[UploadFile] = File(...), db: Session = 
         ext = Path(name).suffix.lower()
         if ext not in _COMPANY_EXTS:
             raise HTTPException(status_code=400, detail=f"Unsupported company document type: {ext or 'none'}")
-        doc_id = f"CDOC-{uuid.uuid4().hex[:8].upper()}"
+        doc_id = f"CDOC-{uuid.uuid4().hex.upper()}"  # 128 bits: all accounts share this directory
         # Stored under a generated name: the user filename never touches the path.
         dest = root / f"{doc_id}{ext}"
-        _stream_to_disk(f, dest, name)
+        size = _stream_to_disk(f, dest, name, room)
+        written.append(dest)
+        if room is not None:
+            room -= size
         db.add(CompanyDocument(id=doc_id, company_id=COMPANY_ID, document_type=ext.lstrip(".").upper(),
                                title=name, source_path=str(dest), page="", section="",
                                owner_email=owner_for_new_rows(user)))

@@ -26,7 +26,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TENDERMIND_STORAGE_ROOT=/data/uploads \
     TENDERMIND_TWO_STAGE_LLM=1 \
     TENDERMIND_WORKERS_ENABLED=1 \
-    TENDERMIND_MAX_AI_WORKERS=2
+    TENDERMIND_MAX_AI_WORKERS=2 \
+    FORWARDED_ALLOW_IPS=127.0.0.1,::1,172.30.87.0/24
+
+# Only the proxy network pinned in docker-compose.yml (Caddy, and the gateway a
+# proxy on this host connects through) is trusted for X-Forwarded-For; uvicorn
+# reads FORWARDED_ALLOW_IPS. The client address is then the last one that is not
+# a trusted proxy, i.e. the one the proxy itself saw: a value the client puts in
+# the header cannot become its address, so the login and sign-up limits cannot
+# be dodged. It was "*" (trust everything): with a proxy that appends to the
+# header, like nginx's default, the client chose its own address. Trusting all
+# private ranges instead would still let a LAN client forge it.
 
 WORKDIR /app
 COPY requirements.txt ./
@@ -50,4 +60,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # One worker: SQLite + in-process background jobs (see docs/RELEASE_READINESS.md).
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", \
-     "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--workers", "1", "--proxy-headers"]

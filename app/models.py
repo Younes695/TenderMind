@@ -364,6 +364,7 @@ class EligibilityResult(Base):
     tender_id = Column(String, ForeignKey("tenders.id"), primary_key=True)
     status = Column(String, nullable=False)           # ELIGIBLE | INELIGIBLE | SKIPPED
     checks = Column(JSON, default=list)
+    capability_source = Column(String, nullable=True)  # whose CompanyCapability the checks used (NULL = unknown, pre-fix)
     override_by = Column(String, nullable=True)       # the account that continued
     override_name = Column(String, nullable=True)     # the person named (shared company login)
     override_reason = Column(Text, nullable=True)

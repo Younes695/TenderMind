@@ -31,7 +31,8 @@ __pycache__/
 *$py.class
 .venv/
 venv/
-env/
+# `env` without the slash also covers a plain file named env (local secrets)
+env
 .Python
 *.egg-info/
 dist/

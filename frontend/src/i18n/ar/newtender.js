@@ -22,7 +22,7 @@ export default {
   "Browse Files": "استعرض الملفات",
   "Select files, then upload": "اختر الملفات ثم رفعها",
   "Create tender before uploading": "أنشئ المناقصة قبل الرفع",
-  "Up to 5 GB per file": "حتى 5 جيجابايت لكل ملف",
+  "Up to 2 GB per file": "حتى 2 جيجابايت لكل ملف",
   "Your tender documents are handled as confidential business information.": "يتم التعامل مع مستندات المناقصة كمعلومات سرية.",
   "Files • {n}": "الملفات • {n}",
   "Clear all": "مسح الكل",

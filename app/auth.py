@@ -199,6 +199,8 @@ def _principal(request: Request) -> Optional[dict]:
 
 
 def require_auth(request: Request):
+    # Checked again here even when app.main._AuthBeforeBody already did before the
+    # body: a slow upload must not finish on a session revoked in the meantime.
     principal = _principal(request)
     if principal is None:
         if request.session:
@@ -244,6 +246,47 @@ def providers():
             "microsoft": _provider_config("microsoft") is not None}
 
 
+# New accounts per address per hour: sign-up is open and unverified, and each
+# account gets its own storage quota, so accounts must not be free to mint.
+_SIGNUP_MAX_PER_IP = 5
+_signup_hits: dict = {}
+
+
+_SIGNUP_MAX_KEYS = 10_000
+
+
+def _reserve_signup(ip: str) -> Optional[float]:
+    """Atomically take one of this address's sign-up slots for the next hour
+    (None = none left). Concurrent requests cannot all pass one check; a
+    reservation is given back if the account is not created."""
+    import time
+    now = time.time()
+    with _login_lock:
+        if ip not in _signup_hits and len(_signup_hits) >= _SIGNUP_MAX_KEYS:
+            # Bound memory by dropping only expired allowances; if every entry is
+            # still live, refuse the new address rather than reset a live limit.
+            for k in [k for k, v in _signup_hits.items() if not v or now - v[-1] >= 3600]:
+                del _signup_hits[k]
+            if len(_signup_hits) >= _SIGNUP_MAX_KEYS:
+                return None
+        hits = [t for t in _signup_hits.get(ip, []) if now - t < 3600]
+        if len(hits) >= _SIGNUP_MAX_PER_IP:
+            _signup_hits[ip] = hits
+            return None
+        hits.append(now)
+        _signup_hits[ip] = hits
+        return now
+
+
+def _release_signup(ip: str, token: float) -> None:
+    with _login_lock:
+        hits = _signup_hits.get(ip)
+        if hits and token in hits:
+            hits.remove(token)
+        if not hits:
+            _signup_hits.pop(ip, None)
+
+
 @auth_router.post("/signup")
 def signup(payload: dict, request: Request):
     if not signup_enabled():
@@ -257,21 +300,31 @@ def signup(payload: dict, request: Request):
     problem = password_problem(password)
     if problem:
         raise HTTPException(status_code=400, detail=problem)
-    db = _db()
-    try:
-        existing = _find_user(db, email)
-        if existing is not None or _is_reserved(email):
-            raise HTTPException(status_code=409, detail="An account with this email already exists — log in instead")
-        uid = f"USR-{uuid.uuid4().hex[:12].upper()}"
-        db.add(User(id=uid, email=email, name=name, password_hash=hash_password(password),
-                    provider="password", session_version=0, last_login_at=datetime.utcnow()))
-        kind = str(payload.get("account_type") or "company").strip().lower()
-        if kind in ("company", "individual"):
-            from app.models import CompanyProfile
-            db.merge(CompanyProfile(id=email, account_type=kind, name=name if kind == "individual" else None))
-        db.commit()
+    ip = _client_ip(request)
+    slot = _reserve_signup(ip)
+    if slot is None:
+        raise HTTPException(status_code=429, detail="Too many new accounts from this address — try again later")
+    created = False
+    try:  # the reservation's whole lifetime: any failure (even opening/closing the DB) gives it back
+        db = _db()
+        try:
+            existing = _find_user(db, email)
+            if existing is not None or _is_reserved(email):
+                raise HTTPException(status_code=409, detail="An account with this email already exists — log in instead")
+            uid = f"USR-{uuid.uuid4().hex[:12].upper()}"
+            db.add(User(id=uid, email=email, name=name, password_hash=hash_password(password),
+                        provider="password", session_version=0, last_login_at=datetime.utcnow()))
+            kind = str(payload.get("account_type") or "company").strip().lower()
+            if kind in ("company", "individual"):
+                from app.models import CompanyProfile
+                db.merge(CompanyProfile(id=email, account_type=kind, name=name if kind == "individual" else None))
+            db.commit()
+            created = True
+        finally:
+            db.close()
     finally:
-        db.close()
+        if not created:
+            _release_signup(ip, slot)  # only accounts actually created use up the allowance
     return _start_session(request, email, name, uid=uid, version=0)
 
 
@@ -513,6 +566,7 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
 
     from sqlalchemy import update
     from app.models import User
+    ip, slot, committed = _client_ip(request), None, False
     db = _db()
     try:
         user = _find_user(db, email)
@@ -522,6 +576,9 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
         if user is None:
             if not signup_enabled():
                 return _login_error("signup_disabled")
+            slot = _reserve_signup(ip)  # a new account through a provider counts too
+            if slot is None:
+                return _login_error("too_many_signups")
             user = User(id=f"USR-{uuid.uuid4().hex[:12].upper()}", email=email,
                         name=(claims.get("name") or "")[:120] or None, provider=provider,
                         provider_subject=subject, session_version=0, last_login_at=now)
@@ -544,10 +601,15 @@ def oauth_callback(provider: str, request: Request, code: Optional[str] = None,
         else:
             user.last_login_at = now
         db.commit()
+        committed = True
         db.refresh(user)
         uid, version, name = user.id, user.session_version, user.name
     finally:
-        db.close()
+        try:
+            db.close()
+        finally:  # a new account's reservation comes back whatever failed
+            if slot is not None and not committed:
+                _release_signup(ip, slot)
     _start_session(request, email, name, uid=uid, version=version)
     return RedirectResponse(pending.get("next") or "/dashboard", status_code=302)
 

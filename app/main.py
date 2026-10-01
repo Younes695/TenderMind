@@ -21,13 +21,32 @@ from app.database import init_db
 from app.api.routes import router
 from app.auth import (
     auth_router,
+    auth_enabled,
     validate_auth_config,
+    _principal,
     _session_secret,
     cookie_secure,
 )
 
 import os
 from pathlib import Path
+
+def _clear_leaked_eligibility():
+    """Eligibility checks of owned tenders computed against the env admin's
+    capabilities (before capability_for was fixed) are cleared once."""
+    from app.database import SessionLocal
+    from app.eligibility import clear_foreign_capability_results
+    db = SessionLocal()
+    try:
+        changed = clear_foreign_capability_results(db)
+        if changed:
+            print(f"Eligibility: cleared {len(changed)} result(s) computed with another account's capabilities")
+    except Exception as e:  # never keeps the server down
+        db.rollback()
+        print(f"Eligibility cleanup failed ({type(e).__name__}: {e})")
+    finally:
+        db.close()
+
 
 def _ensure_seed():
     init_db()
@@ -56,6 +75,7 @@ def _ensure_seed():
     # Stage 5H: a job cut off by a restart continues by itself (files and AI
     # answers already done come back from checkpoints), and a watchdog resumes
     # any job whose worker dies without recording a result.
+    _clear_leaked_eligibility()
     from app.processing import resume_interrupted, start_watchdog
     resume_interrupted(reason="the server stopped")
     if _os.environ.get("TENDERMIND_WATCHDOG", "1").strip() != "0":
@@ -114,6 +134,39 @@ _SECURITY_HEADERS = {
                                 "img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; "
                                 "base-uri 'self'; form-action 'self'"),
 }
+
+
+class _AuthBeforeBody:
+    """FastAPI reads a request body - multipart uploads included - before it runs
+    route dependencies such as require_auth, so an anonymous client could push a
+    whole upload into temporary storage before getting its 401. This refuses
+    unauthenticated API calls from the headers alone, before the body is read.
+    Public endpoints are under /api/auth/. require_auth still checks again after
+    the body (a session can be revoked while a slow upload is arriving)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        if (path.startswith("/api/") and not path.startswith("/api/auth/")
+                and scope.get("method") != "OPTIONS" and auth_enabled()):
+            from starlette.concurrency import run_in_threadpool
+            from starlette.requests import Request
+            from fastapi.responses import JSONResponse
+            request = Request(scope)
+            principal = await run_in_threadpool(_principal, request)
+            if principal is None:
+                if request.session:
+                    request.session.clear()  # a revoked or legacy cookie is dropped
+                await JSONResponse({"detail": "Authentication required"}, status_code=401)(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
+# Innermost of the custom middleware: inside SessionMiddleware (it reads the
+# cookie) and inside CORS (its 401 still gets CORS headers).
+app.add_middleware(_AuthBeforeBody)
 
 
 @app.middleware("http")
