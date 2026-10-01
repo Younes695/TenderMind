@@ -18,6 +18,7 @@ in, CAD drawings and AutoCAD ".bak" backups.
 """
 from __future__ import annotations
 
+import functools
 import os
 import re
 import shutil
@@ -167,19 +168,136 @@ def oda_converter() -> Optional[str]:
 
 
 # ------------------------------------------------------------------ extractors
+# Methods that marked an unreadable page before every such page carried an
+# "error" key. Extraction caches written by older versions still contain them.
+_LEGACY_FAILED_METHODS = ("unknown_doc_ext", "no_handler for", "doc_old_binary_failed",
+                          "scanned_no_text_ocr_needed")
+
+
+def page_failed(page: Dict[str, Any]) -> bool:
+    """The extractor could not read this page (as opposed to a page with little text)."""
+    return bool(page.get("error")) or str(page.get("method", "")).startswith(_LEGACY_FAILED_METHODS)
+
+
+def entry_has_failures(entry: Dict[str, Any]) -> bool:
+    return str(entry.get("status")) == "FAILED" or any(page_failed(p) for p in entry.get("pages") or [])
+
+
+# Bumped when a change to the readers can turn a failed read into a good one, so
+# extraction caches that stopped retrying a failure read the file again.
+READER_RULES_VERSION = 1
+
+
+@functools.lru_cache(maxsize=1)
+def _probe_tools() -> Tuple[Tuple[str, str], ...]:
+    rar = unrar_tool()
+    tools = {"rules": str(READER_RULES_VERSION), "unrar": rar[0] if rar else "",
+             "dwg": "oda" if oda_converter() else ""}
+    try:
+        from evaluation.tesseract_local_ocr import tesseract_available
+        tools["ocr"] = "tesseract" if tesseract_available() else ""
+    except Exception:
+        tools["ocr"] = ""
+    try:
+        from evaluation.run_real_benchmark import _find_soffice_executable
+        tools["office"] = "libreoffice" if _find_soffice_executable() is not None else ""
+    except Exception:
+        tools["office"] = ""
+    return tuple(sorted(tools.items()))
+
+
+def extraction_tools() -> Dict[str, str]:
+    """The optional readers this server has, probed once per process (~0.2 s of
+    PATH lookups). A read that failed with the same readers fails the same way
+    again; installing one (Tesseract, LibreOffice, 7-Zip, ODA) is what makes
+    reading the file again worth it."""
+    return dict(_probe_tools())
+
+
+# A page is a scan when images cover this much of it: a logo, a stamp, a signature
+# or a header banner covers far less (measured: a 40 pt logo is 0.3 %).
+SCAN_COVERAGE = 0.3
+# Vector content is a drawing (a CAD sheet, outlined text) when it has this many
+# paths spread over this much of the page; a frame, a rule, a background
+# rectangle or a vector logo does not.
+DRAWING_PATHS = 50
+DRAWING_SPREAD = 0.1
+
+
+def page_content_unread(page: Any, text: str, garbled: float) -> bool:
+    """Does reading this PDF page without OCR leave something out? Both PDF routes
+    ask it for the same pages (under 100 characters, or a garbled text layer) when
+    OCR did not read them, so they agree. Yes: a scan (images over SCAN_COVERAGE of
+    the page, inline images included), a broken text layer, or a vector drawing
+    (DRAWING_PATHS spread over DRAWING_SPREAD of the page, title block or not).
+    No: a short text-only page, a blank page, or one with only a logo, a stamp, a
+    frame or a rule on it."""
+    import fitz
+    if (text or "").strip() and garbled > 0.3:
+        return True
+    area = abs(page.rect) or 1.0
+    image, paths, spread = 0.0, 0, None
+    for kind, bbox in page.get_bboxlog():
+        r = fitz.Rect(bbox) & page.rect
+        if r.is_empty:
+            continue
+        if kind in ("fill-image", "fill-imgmask"):
+            image += abs(r)
+        elif kind in ("fill-path", "stroke-path", "fill-shade"):
+            paths += 1
+            spread = fitz.Rect(r) if spread is None else spread | r
+    if image >= SCAN_COVERAGE * area:
+        return True
+    return paths >= DRAWING_PATHS and spread is not None and abs(spread) >= DRAWING_SPREAD * area
+
+
 def _entry(pages: List[Dict[str, Any]], status: Optional[str] = None, error: Optional[str] = None) -> Dict[str, Any]:
-    chars = sum(len(p.get("text", "")) for p in pages)
+    """Status from the pages: FAILED when nothing could be read, PARTIAL when some
+    pages could not be read (listed in failed_pages) or the text is very short,
+    COMPLETE otherwise. A document with one unreadable page used to be COMPLETE,
+    and one whose every page failed OCR was PARTIAL. Every page flagged but real
+    text kept (over 50 characters, the bar for COMPLETE) is PARTIAL, not FAILED:
+    readers skip a FAILED document, text and all. Page numbers alone are not that."""
+    chars = sum(len(p.get("text") or "") for p in pages)
+    failed = [p.get("page_number") or p.get("source_page_number") or i + 1
+              for i, p in enumerate(pages) if page_failed(p)]
+    kept_text = sum(len((p.get("text") or "").strip()) for p in pages) > 50
     if status is None:
-        if chars > 50:
+        if not pages or (len(failed) == len(pages) and not kept_text):
+            status = "FAILED"
+        elif failed:
+            status = "PARTIAL"
+        elif chars > 50:
             status = "COMPLETE"
-        elif not pages or any(str(p.get("method", "")).startswith("scanned") for p in pages):
-            status = "FAILED"  # scanned pages that OCR could not read
         else:
             status = "PARTIAL"
+    if error is None and failed:
+        first = next((str(p["error"]) for p in pages if p.get("error")), "page could not be read")
+        error = first if len(failed) == len(pages) else f"{len(failed)} of {len(pages)} pages could not be read: {first}"
+    if error is None and status == "FAILED" and not pages:
+        error = "no readable content"
     e = {"pages": pages, "page_count": len(pages), "total_text_chars": chars, "status": status}
+    if failed:
+        e["failed_pages"] = failed
     if error:
-        e["error"] = error
+        e["error"] = str(error)[:200]
     return e
+
+
+# The Office extractors pick their reader by the file's extension. Backups
+# (.bak, no extension) and misnamed files (an .xlsx saved as .xls - the Turaif
+# tender has one) were not read at all; they get a copy with the real extension.
+_OFFICE_SUFFIX = {"doc": {"docx": ".docx", "ole": ".doc"}, "xls": {"xlsx": ".xlsx", "ole": ".xls"}}
+
+
+def _office_pages(path: Path, kind: str, extractor: Callable) -> List[Dict[str, Any]]:
+    suffix = _OFFICE_SUFFIX[kind].get(sniff(path))
+    if not suffix or path.suffix.lower() == suffix:
+        return extractor(str(path))
+    with tempfile.TemporaryDirectory(prefix="tm_office_") as tmp:
+        copy = Path(tmp) / f"document{suffix}"
+        shutil.copyfile(path, copy)
+        return extractor(str(copy))
 
 
 def extract_image(path: Path) -> List[Dict[str, Any]]:
@@ -313,10 +431,10 @@ def extract_any(path: Path, name: str, pdf_extractor: Callable, depth: int = 0,
             return [(name, _entry(pdf_extractor(path, pdf_hint)))]
         if kind == "doc":
             from evaluation.run_real_benchmark import extract_docx_text
-            return [(name, _entry(extract_docx_text(str(path))))]
+            return [(name, _entry(_office_pages(path, kind, extract_docx_text)))]
         if kind == "xls":
             from evaluation.run_real_benchmark import extract_xls_text
-            return [(name, _entry(extract_xls_text(str(path))))]
+            return [(name, _entry(_office_pages(path, kind, extract_xls_text)))]
         if kind == "text":
             text = path.read_text(encoding="utf-8", errors="ignore")
             return [(name, _entry([{"page_number": 1, "text": text, "method": "txt", "ocr_applied": False}]))]
@@ -337,9 +455,15 @@ def extract_any(path: Path, name: str, pdf_extractor: Callable, depth: int = 0,
                 inner = sorted(p for p in dest.rglob("*") if p.is_file())
                 if not inner:
                     return [(name, _entry([], "FAILED", "archive is empty"))]
-                for p in inner:
+                from app.pipeline.progress import SCALE, report, share
+                sizes = [p.stat().st_size for p in inner]
+                whole, start = max(1, sum(sizes)), 0
+                for p, size in zip(inner, sizes):
                     rel = p.relative_to(dest).as_posix()
-                    out.extend(extract_any(p, f"{name}/{rel}", pdf_extractor, depth + 1))
+                    with share(start / whole, size / whole):  # progress weighted by file size
+                        out.extend(extract_any(p, f"{name}/{rel}", pdf_extractor, depth + 1))
+                    start += size
+                    report("fraction", round(start / whole * SCALE), SCALE)  # files without page reports too
             return out
         return [(name, _entry([], "UNSUPPORTED", f"file type not recognised ({path.suffix or 'no extension'})"))]
     except Exception as e:  # one bad file never stops the others

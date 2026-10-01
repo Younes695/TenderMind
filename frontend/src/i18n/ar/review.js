@@ -68,6 +68,7 @@ export default {
   "File listed but missing": "الملف مدرج لكن مفقود",
   "File type could not be read": "لم يتم قراءة نوع الملف",
   "File could not be read": "لم يتم قراءة الملف",
+  "Some pages could not be read": "تعذّرت قراءة بعض الصفحات",
   "File produced no readable text": "الملف لم ينتج نصاً قابلاً للقراءة",
   "Referenced document not in the package": "المستند المشار إليه ليس في الحزمة",
   "Tender has no documents": "المناقصة لا تحتوي على مستندات",

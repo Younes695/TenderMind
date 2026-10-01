@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 from app.pipeline.ambiguity import Ambiguity
 from app.pipeline.commercial_schedule import CommercialFacts
 from app.pipeline.contracts import ValidatedRequirement
-from app.pipeline.gaps import Gap
+from app.pipeline.gaps import Gap, evidence_page
 from app.pipeline.reconciliation_mvp import Conflict
 
 
@@ -51,10 +51,10 @@ def derive_risk_signals(gaps: List[Gap], ambiguities: List[Ambiguity],
         add("missing-security", "no explicit bid-security terms found in extracted material",
             ["commercial:bid_security=null"])
     for g in gaps:
-        if g.kind in ("failed-extraction", "unsupported-type", "missing-file"):
-            add("failed-extraction" if g.kind == "failed-extraction" else "unsupported-docs",
+        if g.kind in ("failed-extraction", "partial-extraction", "unsupported-type", "missing-file"):
+            add("failed-extraction" if g.kind in ("failed-extraction", "partial-extraction") else "unsupported-docs",
                 f"package completeness issue: {g.description}", g.evidence,
-                (g.evidence[0] if g.evidence else ""))
+                (evidence_page(g.evidence[0])[0] if g.evidence else ""))
     for c in conflicts:
         add("unresolved-conflict", f"conflicting sources preserved for review: {c.reason}",
             c.evidence)

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFi
 from app.auth import require_auth
 from app.access import (enforce_tender_access, owner_filter, owner_for_new_rows, owns,
                         tender_owner_or_404, is_admin, DEMO_COMPANY_ID)
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.database import get_db, get_storage_root
 from app.models import Tender, Requirement, Evidence, EvidenceMatch, Risk, MissingEvidence, Decision, DecisionAudit, Company, CompanyDocument, TenderDocument, TenderAnalysis, ProcessingJob
